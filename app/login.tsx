@@ -5,7 +5,7 @@ import { GlassCard } from '../components/ui/GlassCard';
 import { Button } from '../components/ui/Button';
 import { Orb } from '../components/ui/Orb';
 import { Heading, Subheading, Paragraph, Label } from '../components/ui/Typography';
-import { Chrome, ShieldCheck, Zap, Library } from 'lucide-react-native';
+import { Globe, ShieldCheck, Zap, Library } from 'lucide-react-native';
 import { supabase } from '../utils/supabase';
 
 export default function LoginScreen() {

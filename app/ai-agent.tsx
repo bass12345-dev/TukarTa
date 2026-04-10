@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { Send, Music, Sparkles, ChevronLeft, Bot, Mic } from 'lucide-react-native';
+import { Send, Music, Sparkles, ChevronLeft, Bot, Mic, Zap } from 'lucide-react-native';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Orb } from '../components/ui/Orb';
 import { Heading, Paragraph, Label, Mono } from '../components/ui/Typography';
