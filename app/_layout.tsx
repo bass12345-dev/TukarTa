@@ -5,7 +5,9 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
+import "../global.css";
 
+import { useColorScheme as useNativeWindColorScheme } from 'nativewind';
 import { useColorScheme } from '@/components/useColorScheme';
 
 export {
@@ -47,6 +49,11 @@ export default function RootLayout() {
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
+  const { setColorScheme } = useNativeWindColorScheme();
+
+  useEffect(() => {
+    setColorScheme(colorScheme ?? 'light');
+  }, [colorScheme]);
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
