@@ -1,92 +1,221 @@
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter, Stack } from 'expo-router';
 import React from 'react';
-import { View, Text, ScrollView, Image } from 'react-native';
-import { useRouter } from 'expo-router';
-import { GlassCard } from '../components/ui/GlassCard';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Button } from '../components/ui/Button';
+import { GlassCard } from '../components/ui/GlassCard';
 import { Orb } from '../components/ui/Orb';
-import { Heading, Subheading, Paragraph, Label } from '../components/ui/Typography';
-import { Globe, ShieldCheck, Zap, Library } from 'lucide-react-native';
-import { supabase } from '../utils/supabase';
+import { Heading, Paragraph } from '../components/ui/Typography';
+import { Camera, Music, Search, Zap } from 'lucide-react-native';
 
 export default function LoginScreen() {
   const router = useRouter();
 
-  const handleGoogleLogin = async () => {
-    // In a real implementation with Supabase:
-    // const { data, error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
-    // For now, we simulate success and move to onboarding
+  const handleGoogleLogin = () => {
     router.replace('/onboarding/upload');
   };
 
   return (
-    <ScrollView className="flex-1 bg-brand-bg" contentContainerStyle={{ paddingBottom: 60 }}>
-      {/* Hero Section */}
-      <View className="px-6 pt-20 pb-10 items-center">
-        <Orb size={64} variant="cyan" className="mb-6">
-          <Text className="text-white text-2xl font-bold">T</Text>
-        </Orb>
-        <Heading className="text-center mb-2">Join the Future of Gigging</Heading>
-        <Paragraph className="text-center">
-          The all-in-one assistant for the modern Filipino musician.
-        </Paragraph>
-      </View>
-
-      {/* Feature Cards */}
-      <View className="px-6 gap-6 mb-10">
-        <ValueProp 
-          icon={<Zap size={24} color="#00D4FF" />}
-          title="Instant Song Extraction"
-          description="Snap a photo of your setlist. AI does the rest."
-        />
-        <ValueProp 
-          icon={<Library size={24} color="#8B5CF6" />}
-          title="Shared Knowledge"
-          description="Find bandmates who already know your repertoire."
-        />
-        <ValueProp 
-          icon={<ShieldCheck size={24} color="#10B981" />}
-          title="Stage Ready"
-          description="Access synced lyrics and chords, even offline."
-        />
-      </View>
-
-      {/* Auth Section */}
-      <View className="px-6 items-center">
-        <GlassCard className="w-full items-center py-8">
-          <Label className="mb-6">Get Started</Label>
-          <Button 
-            title="Continue with Google" 
-            variant="glass" 
-            onPress={handleGoogleLogin}
-            className="flex-row gap-4"
-          />
-          <Paragraph className="mt-6 text-xs text-center opacity-60">
-            By continuing, you agree to TukarTa's Terms of Service and Privacy Policy.
-          </Paragraph>
-        </GlassCard>
-      </View>
-
-      {/* Design System Link (Internal/Dev) */}
-      <Button 
-        title="View Design System" 
-        variant="ghost" 
-        onPress={() => router.push('/design-system')}
-        className="mt-8"
+    <View style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <LinearGradient
+        colors={['#0d2d45', '#071420']}
+        start={{ x: 0.5, y: 1 }}
+        end={{ x: 0.5, y: 0.35 }}
+        style={StyleSheet.absoluteFill}
       />
-    </ScrollView>
+      
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.artSection}>
+          <View style={styles.previewGrid}>
+            <View style={styles.previewRow}>
+              <PreviewCard 
+                orbVariant="cyan" 
+                icon={<Music size={14} color="#00D4FF" />} 
+                title="AI Setlists" 
+                subtitle="Smart generation" 
+              />
+              <PreviewCard 
+                orbVariant="purple" 
+                icon={<Camera size={14} color="#8B5CF6" />} 
+                title="Screenshot" 
+                subtitle="Import songs" 
+              />
+            </View>
+            <View style={styles.previewRow}>
+              <PreviewCard 
+                orbVariant="green" 
+                icon={<Search size={14} color="#10B981" />} 
+                title="Find Players" 
+                subtitle="By songs known" 
+              />
+              <PreviewCard 
+                orbVariant="gold" 
+                icon={<Zap size={14} color="#F59E0B" />} 
+                title="Stage Mode" 
+                subtitle="Live chords" 
+              />
+            </View>
+          </View>
+
+          <View style={styles.headingContainer}>
+            <Heading style={styles.heading}>
+              Welcome to{' '}
+              <View style={styles.logoRow}>
+                <Text style={styles.logoTukar}>Tukar</Text>
+                <Text style={styles.logoTa}>Ta</Text>
+              </View>
+            </Heading>
+            <Paragraph style={styles.subtitle}>
+              Build smarter setlists. Find musicians who already know your songs.
+            </Paragraph>
+          </View>
+        </View>
+
+        <View style={styles.authSection}>
+          <TouchableOpacity style={styles.googleBtn} activeOpacity={0.8} onPress={handleGoogleLogin}>
+            <View style={styles.googleIconPlaceholder}>
+               <View style={styles.googleG} />
+            </View>
+            <Text style={styles.googleBtnText}>Continue with Google</Text>
+          </TouchableOpacity>
+          <Text style={styles.footerText}>
+            By continuing you agree to our Terms & Privacy Policy
+          </Text>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
-function ValueProp({ icon, title, description }: { icon: React.ReactNode, title: string, description: string }) {
+function PreviewCard({ orbVariant, icon, title, subtitle }: any) {
   return (
-    <GlassCard className="flex-row items-center gap-4">
-      <View className="w-12 h-12 rounded-2xl bg-brand-surface items-center justify-center border border-white/5">
+    <GlassCard style={styles.previewCard} intensity={45}>
+      <Orb variant={orbVariant} size={30}>
         {icon}
-      </View>
-      <View className="flex-1">
-        <Text className="text-brand-text font-sans font-bold text-base">{title}</Text>
-        <Text className="text-brand-text-sec font-sans text-sm">{description}</Text>
+      </Orb>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.cardTitle}>{title}</Text>
+        <Text style={styles.cardSubtitle}>{subtitle}</Text>
       </View>
     </GlassCard>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#071420',
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingTop: 10,
+    paddingBottom: 40,
+  },
+  artSection: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  previewGrid: {
+    width: '100%',
+    gap: 12,
+    marginBottom: 40,
+  },
+  previewRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  previewCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+  },
+  cardTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#F0F4FF',
+    fontFamily: 'DM Sans Bold',
+  },
+  cardSubtitle: {
+    fontSize: 9,
+    color: 'rgba(200, 215, 235, 0.4)',
+    fontFamily: 'DM Sans',
+  },
+  headingContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  heading: {
+    fontSize: 28,
+    textAlign: 'center',
+    marginBottom: 12,
+    color: '#F0F4FF',
+    fontFamily: 'DM Sans Bold',
+  },
+  logoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 4,
+  },
+  logoTukar: {
+    color: '#00D4FF',
+    fontFamily: 'DM Sans Medium',
+  },
+  logoTa: {
+    color: '#F0F4FF',
+    fontFamily: 'DM Sans Bold',
+  },
+  subtitle: {
+    textAlign: 'center',
+    lineHeight: 22,
+    color: 'rgba(200, 215, 235, 0.6)',
+    fontFamily: 'DM Sans',
+  },
+  authSection: {
+    paddingHorizontal: 24,
+    gap: 16,
+  },
+  googleBtn: {
+    backgroundColor: '#FFF',
+    height: 52,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    shadowColor: '#00D4FF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  googleIconPlaceholder: {
+    width: 20,
+    height: 20,
+  },
+  googleG: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#4285F4',
+    borderRightColor: 'transparent',
+    transform: [{ rotate: '-45deg' }],
+  },
+  googleBtnText: {
+    color: '#1A1A1A',
+    fontSize: 15,
+    fontWeight: '600',
+    fontFamily: 'DM Sans Bold',
+  },
+  footerText: {
+    textAlign: 'center',
+    fontSize: 11,
+    color: 'rgba(150, 175, 200, 0.35)',
+    fontFamily: 'DM Sans',
+  },
+});

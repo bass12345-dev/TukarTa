@@ -7,6 +7,7 @@ import { cn } from '../../utils/cn';
 interface GlassCardProps extends ViewProps {
   intensity?: number;
   tint?: 'light' | 'dark' | 'default';
+  noPadding?: boolean;
 }
 
 export const GlassCard: React.FC<GlassCardProps> = ({ 
@@ -14,6 +15,7 @@ export const GlassCard: React.FC<GlassCardProps> = ({
   className, 
   intensity = 20, 
   tint,
+  noPadding = false,
   ...props 
 }) => {
   const colorScheme = useColorScheme();
@@ -22,13 +24,14 @@ export const GlassCard: React.FC<GlassCardProps> = ({
   return (
     <View 
       className={cn(
-        "overflow-hidden border border-brand-glass-border rounded-r-lg bg-brand-glass",
+        "overflow-hidden border border-brand-glass-border bg-brand-glass",
         className
       )}
+      style={[{ borderRadius: intensity > 20 ? 20 : 14 }]}
       {...props}
     >
       <BlurView intensity={intensity} tint={activeTint} style={StyleSheet.absoluteFill} />
-      <View className="p-4">{children}</View>
+      <View className={noPadding ? "" : "p-4"}>{children}</View>
     </View>
   );
 };

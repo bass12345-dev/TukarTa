@@ -10,6 +10,17 @@ import "../global.css";
 import { useColorScheme as useNativeWindColorScheme } from 'nativewind';
 import { useColorScheme } from '@/components/useColorScheme';
 
+import { 
+  DMSans_300Light,
+  DMSans_400Regular, 
+  DMSans_500Medium, 
+  DMSans_700Bold 
+} from '@expo-google-fonts/dm-sans';
+import { 
+  JetBrainsMono_400Regular, 
+  JetBrainsMono_700Bold 
+} from '@expo-google-fonts/jetbrains-mono';
+
 export {
   // Catch any errors thrown by the Layout component.
   ErrorBoundary,
@@ -25,6 +36,12 @@ SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
+    'DM Sans': DMSans_400Regular,
+    'DM Sans Light': DMSans_300Light,
+    'DM Sans Medium': DMSans_500Medium,
+    'DM Sans Bold': DMSans_700Bold,
+    'JetBrains Mono': JetBrainsMono_400Regular,
+    'JetBrains Mono Bold': JetBrainsMono_700Bold,
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
     ...FontAwesome.font,
   });

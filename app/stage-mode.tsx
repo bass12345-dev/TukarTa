@@ -1,102 +1,232 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StatusBar } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { ChevronLeft, Maximize2, Minimize2, MoreHorizontal, Music, Settings } from 'lucide-react-native';
+import { ChevronLeft, Play, X, Settings, List, Music, Maximize2, SkipForward, SkipBack } from 'lucide-react-native';
 import { GlassCard } from '../components/ui/GlassCard';
-import { Heading, Subheading, Paragraph, Mono } from '../components/ui/Typography';
+import { Orb } from '../components/ui/Orb';
 import { Pill } from '../components/ui/Pill';
 
 export default function StageModeScreen() {
   const router = useRouter();
-  const [fontSize, setFontSize] = useState(18);
-  const [key, setKey] = useState('Am');
+  const [isPlaying, setIsPlaying] = useState(false);
 
   return (
-    <View className="flex-1 bg-[#050d14]">
-      <StatusBar barStyle="light-content" />
-      <Stack.Screen 
-        options={{ 
-          headerShown: false,
-        }} 
-      />
-      
-      {/* Stage Header */}
-      <View className="px-6 pt-12 pb-4 flex-row items-center justify-between border-b border-white/5">
-        <TouchableOpacity onPress={() => router.back()}>
-          <View className="w-10 h-10 rounded-full bg-white/5 items-center justify-center">
-            <ChevronLeft size={24} color="#F0F4FF" />
-          </View>
-        </TouchableOpacity>
-        
-        <View className="items-center">
-           <Text className="text-brand-cyan font-mono text-[10px] tracking-widest uppercase">Now Playing</Text>
-           <Text className="text-white font-sans font-bold text-lg">Ang Huling El Bimbo</Text>
-        </View>
+    <View style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
 
-        <TouchableOpacity>
-           <View className="w-10 h-10 rounded-full bg-white/5 items-center justify-center">
-            <Settings size={20} color="#F0F4FF" />
+      {/* Top Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
+          <X size={24} color="rgba(255,255,255,0.4)" />
+        </TouchableOpacity>
+        <View style={styles.songHeader}>
+          <Text style={styles.nowPlaying}>01 · HOTEL CALIFORNIA</Text>
+          <View style={styles.progressBar}>
+             <View style={[styles.progressLine, { width: '35%' }]} />
           </View>
+        </View>
+        <TouchableOpacity style={styles.iconBtn}>
+          <Settings size={20} color="rgba(255,255,255,0.4)" />
         </TouchableOpacity>
       </View>
 
-      {/* Control Bar */}
-      <View className="px-6 py-4 flex-row gap-4">
-        <GlassCard className="flex-1 flex-row items-center justify-between py-2 px-4 border-brand-purple/20">
-          <Text className="text-brand-text-sec text-xs uppercase font-bold">Key</Text>
-          <Text className="text-brand-purple font-mono font-bold text-lg">{key}</Text>
-        </GlassCard>
-        <GlassCard className="flex-1 flex-row items-center justify-between py-2 px-4 border-brand-cyan/20">
-          <Text className="text-brand-text-sec text-xs uppercase font-bold">BPM</Text>
-          <Text className="text-brand-cyan font-mono font-bold text-lg">120</Text>
-        </GlassCard>
-      </View>
+      {/* Stage Content */}
+      <ScrollView contentContainerStyle={styles.stageContent} scrollEnabled={false}>
+         <View style={styles.lyricsArea}>
+            <Text style={styles.lyricPast}>On a dark desert highway</Text>
+            <Text style={styles.lyricCurrent}>Cool wind in my hair</Text>
+            <Text style={styles.lyricNext}>Warm smell of colitas</Text>
+            <Text style={styles.lyricNext}>Rising up through the air</Text>
+         </View>
 
-      {/* Lyrics Content */}
-      <ScrollView className="flex-1 px-6 pt-4">
-        <View className="mb-10">
-          <Mono className="text-brand-purple mb-2">[Intro]</Mono>
-          <Text style={{ fontSize, color: '#F0F4FF', lineHeight: fontSize * 1.6 }} className="font-sans">
-            G - A - C - G
-          </Text>
-        </View>
-
-        <View className="mb-10">
-          <Mono className="text-brand-purple mb-2">[Verse 1]</Mono>
-          <Text style={{ fontSize, color: '#F0F4FF', lineHeight: fontSize * 1.6 }} className="font-sans">
-            Kamukha mo si Paraluman nung tayo ay bata pa{"\n"}
-            At ang galing-galing mong sumayaw, mapa-Boogie man o Cha-Cha{"\n"}
-            Ngunit ang paborito ay ang pagsayaw mo ng El Bimbo{"\n"}
-            Nakaka-indak, nakaka-aliw, nakaka-tindig-balahibo
-          </Text>
-        </View>
-
-        <View className="mb-10">
-           <Mono className="text-brand-purple mb-2">[Chorus]</Mono>
-           <Text style={{ fontSize, color: '#F0F4FF', lineHeight: fontSize * 1.6 }} className="font-sans font-bold">
-             Magkahawak ang ating kamay at walang kamalay-malay{"\n"}
-             Na tinuturuan mo ang puso ko na umibig ng tunay
-           </Text>
-        </View>
-
-        <View className="h-40" />
+         {/* Floating Chord Orb */}
+         <View style={styles.chordContainer}>
+            <Orb variant="cyan" size={120} style={styles.chordOrb}>
+               <Text style={styles.chordText}>Bm</Text>
+               <Text style={styles.chordSubtext}>Barre</Text>
+            </Orb>
+            <View style={styles.nextChordRow}>
+               <Text style={styles.nextLabel}>NEXT</Text>
+               <Orb variant="purple" size={44}>
+                  <Text style={styles.nextChordText}>F#</Text>
+               </Orb>
+            </View>
+         </View>
       </ScrollView>
 
-      {/* Font Controls Overlay */}
-      <View className="absolute bottom-10 right-6 gap-3">
-        <TouchableOpacity 
-          onPress={() => setFontSize(s => Math.min(s + 2, 32))}
-          className="w-14 h-14 rounded-full bg-brand-cyan items-center justify-center shadow-lg"
-        >
-          <Text className="text-white text-xl font-bold">A+</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          onPress={() => setFontSize(s => Math.max(s - 2, 12))}
-          className="w-14 h-14 rounded-full bg-brand-glass border border-white/10 items-center justify-center"
-        >
-          <Text className="text-white text-xl font-bold">A-</Text>
-        </TouchableOpacity>
+      {/* Control Bar */}
+      <View style={styles.controlsLayer}>
+         <View style={styles.pillRow}>
+            <Pill label="Metronome: 122 BPM" variant="cyan" />
+            <Pill label="Acoustic Vibes Mix" variant="purple" />
+         </View>
+
+         <View style={styles.mainControls}>
+            <TouchableOpacity style={styles.ctrlBtnSec}>
+               <SkipBack size={24} color="#FFF" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.playBtn}
+              onPress={() => setIsPlaying(!isPlaying)}
+            >
+               {isPlaying ? <Music size={32} color="#00D4FF" /> : <Play size={32} color="#00D4FF" />}
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.ctrlBtnSec}>
+               <SkipForward size={24} color="#FFF" />
+            </TouchableOpacity>
+         </View>
       </View>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#071420',
+  },
+  header: {
+    paddingTop: 60,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  iconBtn: {
+    padding: 8,
+  },
+  songHeader: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  nowPlaying: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#00D4FF',
+    letterSpacing: 1.5,
+    marginBottom: 8,
+    fontFamily: 'JetBrains Mono',
+  },
+  progressBar: {
+    height: 2,
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  progressLine: {
+    height: '100%',
+    backgroundColor: '#00D4FF',
+  },
+  stageContent: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+  },
+  lyricsArea: {
+    marginBottom: 40,
+  },
+  lyricPast: {
+    fontSize: 20,
+    color: 'rgba(255,255,255,0.1)',
+    fontFamily: 'DM Sans',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  lyricCurrent: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#FFF',
+    fontFamily: 'DM Sans',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  lyricNext: {
+    fontSize: 20,
+    color: 'rgba(255,255,255,0.3)',
+    fontFamily: 'DM Sans',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  chordContainer: {
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  chordOrb: {
+    shadowColor: '#00D4FF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 30,
+    elevation: 10,
+  },
+  chordText: {
+    fontSize: 38,
+    fontWeight: '700',
+    color: '#FFF',
+    fontFamily: 'DM Sans',
+  },
+  chordSubtext: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.4)',
+    fontFamily: 'DM Sans',
+  },
+  nextChordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 32,
+  },
+  nextLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.25)',
+    letterSpacing: 1,
+    fontFamily: 'DM Sans',
+  },
+  nextChordText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFF',
+    fontFamily: 'DM Sans',
+  },
+  controlsLayer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+    alignItems: 'center',
+  },
+  pillRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 24,
+  },
+  mainControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 40,
+  },
+  ctrlBtnSec: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playBtn: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    backgroundColor: 'rgba(0, 212, 255, 0.1)',
+    borderWidth: 2,
+    borderColor: 'rgba(0, 212, 255, 0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#00D4FF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 5,
+  },
+});

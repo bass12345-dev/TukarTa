@@ -1,44 +1,44 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, Animated, StyleSheet, Dimensions } from 'react-native';
-import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { GlassCard } from '../components/ui/GlassCard';
+import { useRouter, Stack } from 'expo-router';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Dimensions, StyleSheet, Text, View } from 'react-native';
 import { Button } from '../components/ui/Button';
+import { Mascot } from '../components/ui/Mascot';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 export default function SplashScreen() {
   const router = useRouter();
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
-  const glowAnim = useRef(new Animated.Value(0.4)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     // Entrance animations
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 1200,
+        duration: 1000,
         useNativeDriver: true,
       }),
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 1000,
+        duration: 800,
         useNativeDriver: true,
       }),
     ]).start();
 
-    // Infinite breathing glow animation
+    // Pulse for the button
     Animated.loop(
       Animated.sequence([
-        Animated.timing(glowAnim, {
-          toValue: 1,
-          duration: 2000,
+        Animated.timing(pulseAnim, {
+          toValue: 1.05,
+          duration: 1250,
           useNativeDriver: true,
         }),
-        Animated.timing(glowAnim, {
-          toValue: 0.4,
-          duration: 2000,
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1250,
           useNativeDriver: true,
         }),
       ])
@@ -50,60 +50,44 @@ export default function SplashScreen() {
   };
 
   return (
-    <View className="flex-1 bg-brand-bg items-center justify-center px-6">
-      {/* Background Gradient Orbs */}
-      <View style={[styles.orb, { top: -100, left: -50, backgroundColor: '#00D4FF20' }]} />
-      <View style={[styles.orb, { bottom: -100, right: -50, backgroundColor: '#8B5CF620', width: 300, height: 300 }]} />
+    <View style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
+      
+      {/* Background Gradient */}
+      <LinearGradient
+        colors={['#0d2d45', '#071420']}
+        start={{ x: 0.5, y: 1 }}
+        end={{ x: 0.5, y: 0.35 }}
+        style={StyleSheet.absoluteFill}
+      />
 
       <Animated.View 
-        style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}
-        className="items-center"
+        style={[
+          styles.content,
+          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
+        ]}
       >
-        {/* Animated Mascot Wrapper */}
-        <View className="relative w-40 h-40 items-center justify-center mb-8">
-          <Animated.View 
-            style={{ 
-              opacity: glowAnim,
-              transform: [{ scale: glowAnim.interpolate({ inputRange: [0.4, 1], outputRange: [1, 1.25] }) }] 
-            }}
-            className="absolute w-32 h-32 rounded-full bg-brand-cyan/20 blur-xl"
-          />
-          <View className="w-24 h-24 rounded-3xl bg-brand-cyan items-center justify-center rotate-12 border-4 border-white/20">
-            <Text className="text-white text-5xl font-bold -rotate-12">T</Text>
-          </View>
-          {/* Audio Wave Decor */}
-          <View className="flex-row gap-1 absolute bottom-6">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <View 
-                key={i} 
-                style={{ height: 10 + Math.random() * 15 }} 
-                className="w-1 bg-white/40 rounded-full" 
-              />
-            ))}
-          </View>
+        <Mascot size={180} />
+
+        <View style={styles.logoContainer}>
+          <Text style={[styles.logoText, styles.logoTextLight]}>Tukar</Text>
+          <Text style={[styles.logoText, styles.logoTextBold]}>Ta</Text>
         </View>
 
-        <Text className="text-white font-sans font-bold text-4xl mb-2 text-center">
-          TukarTa
-        </Text>
-        <Text className="text-brand-cyan font-mono text-sm tracking-widest mb-10 text-center">
-          SETLIST AI · MANILA
+        <Text style={styles.tagline}>
+          The AI co-pilot for musicians and bands
         </Text>
 
-        <GlassCard className="w-full max-w-sm mb-12">
-          <Text className="text-brand-text-sec font-sans text-center leading-6">
-            Transform your song library into smart setlists using AI.
-          </Text>
-        </GlassCard>
+        <Animated.View style={[styles.buttonWrapper, { transform: [{ scale: pulseAnim }] }]}>
+          <Button 
+            title="Get Started" 
+            variant="cyan" 
+            onPress={handleGetStarted}
+            style={styles.button}
+          />
+        </Animated.View>
 
-        <Button 
-          title="Get Started" 
-          variant="primary" 
-          onPress={handleGetStarted}
-          className="w-full max-w-sm"
-        />
-        
-        <Text className="text-brand-text-dim font-sans text-xs mt-6">
+        <Text style={styles.footerText}>
           v1.0.0 — GEC PROJECT
         </Text>
       </Animated.View>
@@ -112,11 +96,54 @@ export default function SplashScreen() {
 }
 
 const styles = StyleSheet.create({
-  orb: {
+  container: {
+    flex: 1,
+    backgroundColor: '#071420',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  content: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+  },
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginTop: 24,
+    marginBottom: 12,
+  },
+  logoText: {
+    fontSize: 34,
+  },
+  logoTextLight: {
+    fontFamily: 'DM Sans Medium',
+    color: '#00D4FF', 
+  },
+  logoTextBold: {
+    fontFamily: 'DM Sans Bold',
+    color: '#F0F4FF',
+  },
+  tagline: {
+    fontSize: 14,
+    color: 'rgba(200, 215, 235, 0.6)',
+    textAlign: 'center',
+    maxWidth: 220,
+    lineHeight: 22,
+    fontFamily: 'DM Sans',
+  },
+  buttonWrapper: {
+    marginTop: 60,
+    width: 200,
+  },
+  button: {
+    width: '100%',
+  },
+  footerText: {
     position: 'absolute',
-    width: 250,
-    height: 250,
-    borderRadius: 999,
-    filter: 'blur(60px)',
+    bottom: -100, // Relative to content center
+    fontSize: 10,
+    color: 'rgba(150, 175, 200, 0.35)',
+    fontFamily: 'JetBrains Mono Bold',
   }
 });

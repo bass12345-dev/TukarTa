@@ -1,72 +1,165 @@
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter, Stack } from 'expo-router';
+import { Music, Star as StarIcon } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Check, Star, Zap, Trash2, ArrowRight } from 'lucide-react-native';
-import { GlassCard } from '../../components/ui/GlassCard';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button } from '../../components/ui/Button';
+import { GlassCard } from '../../components/ui/GlassCard';
 import { Orb } from '../../components/ui/Orb';
 import { Pill } from '../../components/ui/Pill';
-import { Heading, Paragraph, Label } from '../../components/ui/Typography';
 
 const MOCK_EXTRACTED_SONGS = [
-  { id: '1', title: 'Ang Huling El Bimbo', artist: 'Eraserheads', confidence: 5, live: true },
-  { id: '2', title: 'Narda', artist: 'Kamikazee', confidence: 5, live: true },
-  { id: '3', title: 'Kisapmata', artist: 'Rivermaya', confidence: 4, live: false },
-  { id: '4', title: 'Magasin', artist: 'Eraserheads', confidence: 3, live: false },
+  { id: '1', title: 'Hotel California', info: 'Eagles · Rock', stars: 5, status: 'LIVE', variant: 'cyan' },
+  { id: '2', title: 'Paraluman', info: 'Adie · OPM', stars: 4, status: 'LIVE', variant: 'purple' },
+  { id: '3', title: 'Kundiman', info: 'Parokya ni Edgar · OPM', stars: 5, status: 'LIVE', variant: 'gold' },
+  { id: '4', title: 'Sana', info: 'I Belong to the Zoo · OPM', stars: 3, status: 'LEARNING', variant: 'pink' },
+  { id: '5', title: 'Faithfully', info: 'Journey · Rock', stars: 4, status: 'LIVE', variant: 'cyan' },
+  { id: '6', title: 'Harana', info: 'Parokya ni Edgar · OPM', stars: 5, status: 'LIVE', variant: 'green' },
 ];
 
-export default function ReviewSongsOnboarding() {
+export default function ReviewSongsScreen() {
   const router = useRouter();
-  const [songs, setSongs] = useState(MOCK_EXTRACTED_SONGS);
-
-  const toggleLive = (id: string) => {
-    setSongs(s => s.map(item => item.id === id ? { ...item, live: !item.live } : item));
-  };
+  const [songs] = useState(MOCK_EXTRACTED_SONGS);
 
   return (
-    <View className="flex-1 bg-brand-bg">
-      <ScrollView className="flex-1 px-6 pt-12" contentContainerStyle={{ paddingBottom: 120 }}>
-        <Label className="text-brand-purple mb-2">Step 2 of 3</Label>
-        <Heading>Review Extracted Songs</Heading>
-        <Paragraph className="mt-2 mb-8">
-          We found {songs.length} songs. Mark the ones you can perform live right now.
-        </Paragraph>
-
-        <View className="gap-4">
-          {songs.map((song) => (
-            <GlassCard key={song.id} className="flex-row items-center gap-4">
-              <Orb size={40} variant={song.live ? "green" : "purple"}>
-                <Text className="text-white font-bold">{song.title[0]}</Text>
-              </Orb>
-              <View className="flex-1">
-                <Text className="text-brand-text font-sans font-bold text-base" numberOfLines={1}>
-                  {song.title}
-                </Text>
-                <Text className="text-brand-text-sec text-sm">{song.artist}</Text>
-              </View>
-              <TouchableOpacity 
-                onPress={() => toggleLive(song.id)}
-                className={`w-12 h-12 rounded-xl items-center justify-center border ${song.live ? 'bg-brand-green/20 border-brand-green/40' : 'bg-brand-surface border-white/5'}`}
-              >
-                <Zap size={20} color={song.live ? "#10B981" : "#94A3B8"} />
-              </TouchableOpacity>
-            </GlassCard>
-          ))}
+    <View style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <View style={styles.header}>
+        <View style={styles.badgeRow}>
+          <Pill label={`✓ AI extracted ${songs.length} songs`} variant="green" />
+          <Pill label="Step 2 of 3" variant="cyan" />
         </View>
+        <Text style={styles.title}>Confirm your songs</Text>
+        <Text style={styles.subtitle}>
+          Rate confidence. Only "Live" songs appear to bands.
+        </Text>
+      </View>
 
-        <TouchableOpacity className="mt-6 flex-row items-center justify-center gap-2">
-           <Text className="text-brand-cyan font-sans font-semibold">+ Add song manually</Text>
-        </TouchableOpacity>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+        {songs.map((song) => (
+          <View key={song.id} style={styles.songRow}>
+            <Orb variant={song.variant as any} size={34}>
+              <Music size={14} color={getVariantColor(song.variant)} />
+            </Orb>
+            <View style={styles.songInfo}>
+              <Text style={styles.songTitle}>{song.title}</Text>
+              <Text style={styles.songArtist}>{song.info}</Text>
+            </View>
+            <View style={styles.songMeta}>
+              <View style={styles.stars}>
+                <Text style={styles.starText}>{'★'.repeat(song.stars)}<Text style={styles.starOff}>{'★'.repeat(5 - song.stars)}</Text></Text>
+              </View>
+              <Pill 
+                label={song.status} 
+                variant={song.status === 'LIVE' ? 'green' : 'gold'} 
+                style={styles.statusPill} 
+              />
+            </View>
+          </View>
+        ))}
       </ScrollView>
 
-      {/* Floating Action Container */}
-      <View className="absolute bottom-0 left-0 right-0 p-6 bg-brand-bg/80 border-t border-brand-glass-border">
+      <View style={styles.footer}>
         <Button 
-          title="Looks Good — Save Library" 
-          variant="primary" 
-          onPress={() => router.replace('/(tabs)')}
+          title="Save to my profile →" 
+          variant="cyan" 
+          onPress={() => router.replace('/(tabs)')} 
         />
       </View>
     </View>
   );
 }
+
+function getVariantColor(variant: string) {
+  switch (variant) {
+    case 'cyan': return '#00D4FF';
+    case 'purple': return '#8B5CF6';
+    case 'gold': return '#F59E0B';
+    case 'green': return '#10B981';
+    case 'pink': return '#EC4899';
+    default: return '#00D4FF';
+  }
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: 'var(--color-bg)',
+  },
+  header: {
+    paddingTop: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  title: {
+    fontSize: 21,
+    fontWeight: '700',
+    color: 'var(--color-text)',
+    fontFamily: 'DM Sans Bold',
+    marginBottom: 3,
+  },
+  subtitle: {
+    fontSize: 13,
+    color: 'var(--color-text-sec)',
+    fontFamily: 'DM Sans',
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 40,
+  },
+  songRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 13,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--color-glass-border)',
+    gap: 12,
+  },
+  songInfo: {
+    flex: 1,
+  },
+  songTitle: {
+    fontSize: 14.5,
+    fontWeight: '600',
+    color: 'var(--color-text)',
+    fontFamily: 'DM Sans Bold',
+  },
+  songArtist: {
+    fontSize: 11.5,
+    color: 'var(--color-text-sec)',
+    fontFamily: 'DM Sans',
+  },
+  songMeta: {
+    alignItems: 'flex-end',
+    gap: 5,
+  },
+  stars: {
+    flexDirection: 'row',
+  },
+  starText: {
+    fontSize: 11,
+    color: '#F59E0B',
+  },
+  starOff: {
+    color: 'rgba(255, 255, 255, 0.12)',
+  },
+  statusPill: {
+    paddingVertical: 2,
+    paddingHorizontal: 7,
+    borderRadius: 4,
+  },
+  footer: {
+    padding: 20,
+    paddingBottom: 32,
+    borderTopWidth: 1,
+    borderTopColor: 'var(--color-glass-border)',
+  },
+});
