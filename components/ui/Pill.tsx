@@ -3,8 +3,9 @@ import { View, Text, ViewProps } from 'react-native';
 import { cn } from '../../utils/cn';
 
 interface PillProps extends ViewProps {
-  variant?: 'cyan' | 'purple' | 'green' | 'gold' | 'pink';
+  variant?: 'cyan' | 'purple' | 'green' | 'gold' | 'pink' | 'outline' | 'gray';
   label: string;
+  dotColor?: string;
 }
 
 const variantStyles = {
@@ -13,11 +14,14 @@ const variantStyles = {
   green: "bg-brand-green-dim text-brand-green border-brand-green/20",
   gold: "bg-brand-gold-dim text-brand-gold border-brand-gold/20",
   pink: "bg-brand-pink/10 text-brand-pink border-brand-pink/20",
+  outline: "bg-transparent text-white/50 border-white/10",
+  gray: "bg-white/5 text-white/40 border-white/5",
 };
 
 export const Pill: React.FC<PillProps> = ({ 
   label, 
   variant = 'cyan', 
+  dotColor,
   className,
   ...props 
 }) => {
@@ -30,6 +34,7 @@ export const Pill: React.FC<PillProps> = ({
       )}
       {...props}
     >
+      {dotColor && <View className="w-[6px] h-[6px] rounded-full" style={{ backgroundColor: dotColor }} />}
       <Text className={cn("font-sans font-semibold text-[11px]", variantStyles[variant].split(' ').find(c => c.startsWith('text-')))}>
         {label}
       </Text>

@@ -73,7 +73,7 @@ export default function RootLayout() {
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const { setColorScheme } = useNativeWindColorScheme();
-  const { session, isLoading } = useAuth();
+  const { session, isLoading, onboardingCompleted } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
@@ -85,15 +85,21 @@ function RootLayoutNav() {
     if (isLoading) return;
 
     const inAuthGroup = segments[0] === '(tabs)';
+    const inOnboarding = segments[0] === 'onboarding';
     
     if (!session && inAuthGroup) {
       // Redirect to login if not authenticated and trying to access tabs
       router.replace('/login');
-    } else if (session && (segments[0] === 'login' || segments[0] === 'signup' || segments[0] === undefined)) {
-      // Redirect to home if authenticated and trying to access login/signup/home
-      router.replace('/(tabs)');
+    } else if (session) {
+      if (!onboardingCompleted && !inOnboarding) {
+        // Redirect to onboarding if authenticated but not finished setup
+        router.replace('/onboarding');
+      } else if (onboardingCompleted && (inOnboarding || segments[0] === 'login' || segments[0] === 'signup' || segments[0] === undefined)) {
+        // Redirect to home if already on login/signup/onboarding but authenticated+onboarded
+        router.replace('/(tabs)');
+      }
     }
-  }, [session, isLoading, segments]);
+  }, [session, isLoading, segments, onboardingCompleted]);
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
