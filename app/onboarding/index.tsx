@@ -49,7 +49,25 @@ export default function OnboardingScreen() {
     setFormData(prev => ({ ...prev, ...fields }));
   };
 
+  const canContinue = () => {
+    switch (currentStep) {
+      case 'role':
+        return formData.selectedRoles.length > 0;
+      case 'profile':
+        return formData.stageName.trim().length > 0;
+      case 'location':
+        return formData.location.length > 0;
+      case 'genres':
+        return formData.selectedGenres.length > 0;
+      case 'songs':
+        return true; // Skip is allowed
+      default:
+        return true;
+    }
+  };
+
   const handleNext = async () => {
+    if (!canContinue()) return;
     const currentIndex = STEPS.indexOf(currentStep);
     if (currentIndex < STEPS.length - 1) {
       setCurrentStep(STEPS[currentIndex + 1]);
@@ -153,12 +171,19 @@ export default function OnboardingScreen() {
             </TouchableOpacity>
           )}
           <TouchableOpacity 
-            style={[styles.btnNext, currentIndex === 0 && { width: '100%' }]} 
+            style={[
+              styles.btnNext, 
+              currentIndex === 0 && { width: '100%' },
+              !canContinue() && styles.btnDisabled
+            ]} 
             onPress={handleNext}
-            disabled={isSaving}
+            disabled={isSaving || !canContinue()}
           >
-            <LinearGradient colors={['#00D4FF', '#00A8E8']} style={styles.btnNextGradient}>
-              <Text style={styles.btnNextText}>
+            <LinearGradient 
+              colors={canContinue() ? ['#00D4FF', '#00A8E8'] : ['#1E293B', '#0F172A']} 
+              style={styles.btnNextGradient}
+            >
+              <Text style={[styles.btnNextText, !canContinue() && { color: 'rgba(255, 255, 255, 0.2)' }]}>
                 {isSaving ? 'Saving...' : currentStep === 'songs' ? 'Complete Profile' : 'Continue →'}
               </Text>
             </LinearGradient>
@@ -180,6 +205,7 @@ const styles = StyleSheet.create({
   footerInner: { flexDirection: 'row', gap: 12 },
   btnBack: { width: 56, height: 56, borderRadius: 16, backgroundColor: 'rgba(255, 255, 255, 0.05)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' },
   btnNext: { flex: 1, height: 56 },
+  btnDisabled: { opacity: 0.6 },
   btnNextGradient: { flex: 1, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   btnNextText: { color: '#FFF', fontSize: 16, fontFamily: 'DM Sans Bold' },
 });

@@ -47,7 +47,7 @@ export const ProfileStep: React.FC<StepProps> = ({ data, updateData }) => {
 
       <View style={styles.formContainer}>
         <TextField
-          label="Stage name / Display name"
+          label="Stage name / Display name (Required)"
           placeholder="Marco Rivera"
           value={data.stageName}
           onChangeText={(val) => updateData({ stageName: val })}
