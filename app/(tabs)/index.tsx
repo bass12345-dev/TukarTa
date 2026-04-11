@@ -1,7 +1,8 @@
 import React from 'react';
 import { ScrollView, View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
-import { MessageSquare, Search, Music, Users, Star } from 'lucide-react-native';
+import { MessageSquare, Search, Music, Users, LogOut } from 'lucide-react-native';
+import { useAuth } from '../../context/auth';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Orb } from '../../components/ui/Orb';
 import { Pill } from '../../components/ui/Pill';
@@ -11,6 +12,18 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 export default function DashboardScreen() {
   const router = useRouter();
+  const { user, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+
+  const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Musician';
+  const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
 
   return (
     <View style={styles.container}>
@@ -19,10 +32,19 @@ export default function DashboardScreen() {
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>Good evening 🎸</Text>
-            <Text style={styles.profileName}>Marco Rivera</Text>
+            <Text style={styles.profileName}>{displayName}</Text>
           </View>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>MR</Text>
+          <View style={styles.headerActions}>
+            <TouchableOpacity 
+              onPress={handleSignOut} 
+              style={styles.logoutBtn}
+              activeOpacity={0.7}
+            >
+              <LogOut size={20} color="var(--color-text-sec)" />
+            </TouchableOpacity>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initials}</Text>
+            </View>
           </View>
         </View>
 
@@ -161,6 +183,21 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: 'var(--color-text)',
     fontFamily: 'DM Sans Bold',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  logoutBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   avatar: {
     width: 48,

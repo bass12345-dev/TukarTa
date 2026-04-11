@@ -20,6 +20,8 @@ import {
   JetBrainsMono_400Regular, 
   JetBrainsMono_700Bold 
 } from '@expo-google-fonts/jetbrains-mono';
+import { AuthProvider, useAuth } from '../context/auth';
+import { useRouter, useSegments } from 'expo-router';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -61,16 +63,37 @@ export default function RootLayout() {
     return null;
   }
 
-  return <RootLayoutNav />;
+  return (
+    <AuthProvider>
+      <RootLayoutNav />
+    </AuthProvider>
+  );
 }
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const { setColorScheme } = useNativeWindColorScheme();
+  const { session, isLoading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
 
   useEffect(() => {
     setColorScheme(colorScheme ?? 'light');
   }, [colorScheme]);
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    const inAuthGroup = segments[0] === '(tabs)';
+    
+    if (!session && inAuthGroup) {
+      // Redirect to login if not authenticated and trying to access tabs
+      router.replace('/login');
+    } else if (session && (segments[0] === 'login' || segments[0] === undefined)) {
+      // Redirect to home if authenticated and trying to access login or home
+      router.replace('/(tabs)');
+    }
+  }, [session, isLoading, segments]);
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

@@ -1,7 +1,8 @@
 {
   "expo": {
     "name": "TukarTa",
-    "slug": "TukarTa",
+    "slug": "tukarta",
+    "owner": "basildev",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -17,6 +18,7 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.basildev.tukarta",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -36,6 +38,11 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d7e6c435-08e1-4777-91b1-d1dc0fd5db62"
+      }
     }
   }
 }

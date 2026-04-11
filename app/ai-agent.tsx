@@ -1,263 +1,448 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import React, { useRef, useState } from 'react';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { Send, Music, Sparkles, Bot, Mic, Zap, ChevronLeft } from 'lucide-react-native';
-import { GlassCard } from '../components/ui/GlassCard';
-import { Orb } from '../components/ui/Orb';
-import { Pill } from '../components/ui/Pill';
+import { ChevronLeft, Send, Sparkles, Zap, Music2 } from 'lucide-react-native';
 
-const INITIAL_MESSAGES = [
-  { id: '1', role: 'assistant', text: "Hello Marco! I'm your Setlist AI assistant. I've analyzed your band's repertoire. Ready to build a setlist for tomorrow's gig?" },
+// ─── Types ────────────────────────────────────────────────────────────────────
+type Segment = { text: string; highlight?: boolean };
+type Message = {
+  id: string;
+  role: 'assistant' | 'user';
+  segments: Segment[];
+  badge?: string;
+};
+
+// ─── Rich text helper ─────────────────────────────────────────────────────────
+function rich(parts: (string | { h: string })[]): Segment[] {
+  return parts.map((p) =>
+    typeof p === 'string' ? { text: p } : { text: p.h, highlight: true }
+  );
+}
+
+// ─── Initial conversation ──────────────────────────────────────────────────────
+const INITIAL_MESSAGES: Message[] = [
+  {
+    id: '1',
+    role: 'assistant',
+    segments: rich([
+      'Hey Marco 🎸 I\'m working on your setlist for ',
+      { h: 'Handuraw Café' },
+      '. What would you like to change?',
+    ]),
+  },
+  {
+    id: '2',
+    role: 'user',
+    segments: rich(['Make it more OPM heavy. We want to connect with the local crowd tonight.']),
+  },
+  {
+    id: '3',
+    role: 'assistant',
+    segments: rich([
+      'Got it. Adding more OPM songs that ',
+      { h: 'everyone in the band knows' },
+      '. Moving Kundiman to slot 2, Paraluman to slot 3. Hotel California stays as opener.',
+    ]),
+    badge: 'Updated: 7 OPM · 4 international ✓',
+  },
+  {
+    id: '4',
+    role: 'user',
+    segments: rich(['Remove the slow songs in the middle.']),
+  },
+  {
+    id: '5',
+    role: 'assistant',
+    segments: rich([
+      'Removed Tadhana and More Than Words. Replaced with ',
+      { h: 'Narda' },
+      ' and ',
+      { h: 'Harana' },
+      ' — both known by all 4 members, higher energy.',
+    ]),
+    badge: 'Duration: 91 min ✓',
+  },
 ];
 
+const SUGGESTIONS = [
+  { label: 'Draft 90min Setlist', icon: Sparkles, color: '#00D4FF' },
+  { label: 'Optimize for Energy', icon: Zap, color: '#F59E0B' },
+  { label: 'Check Song Availability', icon: Music2, color: '#8B5CF6' },
+];
+
+// ─── Rich text renderer ───────────────────────────────────────────────────────
+function RichText({ segments, isUser }: { segments: Segment[]; isUser: boolean }) {
+  return (
+    <Text style={[styles.msgText, isUser && styles.msgTextUser]}>
+      {segments.map((seg, i) =>
+        seg.highlight ? (
+          <Text key={i} style={styles.highlight}>{seg.text}</Text>
+        ) : (
+          <Text key={i}>{seg.text}</Text>
+        )
+      )}
+    </Text>
+  );
+}
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 export default function AIAgentScreen() {
   const router = useRouter();
-  const [messages, setMessages] = useState(INITIAL_MESSAGES);
+  const scrollRef = useRef<ScrollView>(null);
+  const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
   const [input, setInput] = useState('');
 
   const handleSend = () => {
     if (!input.trim()) return;
-    const newMsg = { id: Date.now().toString(), role: 'user', text: input };
-    setMessages([...messages, newMsg]);
+    const userMsg: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      segments: [{ text: input.trim() }],
+    };
+    setMessages((prev) => [...prev, userMsg]);
     setInput('');
-    
+
     setTimeout(() => {
-       const reply = { id: (Date.now()+1).toString(), role: 'assistant', text: "I've drafted a 90-minute setlist focusing on your highest confidence OPM rock covers. Would you like to see it?" };
-       setMessages(prev => [...prev, reply]);
-    }, 1000);
+      const aiReply: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        segments: rich([
+          'I\'ve updated the setlist based on your request. Check out the new arrangement — ',
+          { h: '8 OPM songs' },
+          ' now lead the set.',
+        ]),
+        badge: 'Setlist ready ✓',
+      };
+      setMessages((prev) => [...prev, aiReply]);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    }, 900);
+
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   };
 
   return (
     <View style={styles.container}>
-      <Stack.Screen 
-        options={{ 
-          headerShown: false
-        }} 
-      />
+      <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Header */}
+      {/* ── Header ── */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-           <ChevronLeft size={24} color="var(--color-text)" />
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
+          <ChevronLeft size={20} color="rgba(255,255,255,0.7)" />
+          <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
-        <Orb variant="purple" size={36}>
-          <Bot size={18} color="#8B5CF6" />
-        </Orb>
-        <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle}>Setlist AI Agent</Text>
-          <Text style={styles.headerStatus}>Online · Typically responds instantly</Text>
+
+        <View style={styles.headerCenter}>
+          {/* AI avatar bubble */}
+          <View style={styles.agentAvatar}>
+            <Text style={styles.agentAvatarIcon}>✦</Text>
+          </View>
+          <View style={styles.headerInfo}>
+            <Text style={styles.headerTitle}>✦ AI Setlist Agent</Text>
+            <View style={styles.statusRow}>
+              <View style={styles.onlineDot} />
+              <Text style={styles.headerStatus}>Online · Acoustic Vibes Mix</Text>
+            </View>
+          </View>
         </View>
       </View>
 
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
+        keyboardVerticalOffset={0}
       >
-        <ScrollView style={styles.chatArea} contentContainerStyle={styles.chatContent}>
-          {messages.map((msg) => (
-            <View 
-              key={msg.id} 
-              style={[
-                styles.messageRow, 
-                msg.role === 'user' ? styles.userRow : styles.assistantRow
-              ]}
-            >
-              <View style={msg.role === 'user' ? styles.userMsgContainer : styles.assistantMsgContainer}>
-                <GlassCard 
-                  style={styles.messageCard}
-                  intensity={msg.role === 'user' ? 30 : 15}
-                >
-                  <Text style={styles.messageText}>{msg.text}</Text>
-                </GlassCard>
-                <Text style={styles.msgLabel}>
-                  {msg.role === 'assistant' ? 'Setlist AI' : 'You'}
-                </Text>
+        {/* ── Chat ── */}
+        <ScrollView
+          ref={scrollRef}
+          style={styles.chatArea}
+          contentContainerStyle={styles.chatContent}
+          showsVerticalScrollIndicator={false}
+          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
+        >
+          {messages.map((msg) => {
+            const isUser = msg.role === 'user';
+            return (
+              <View
+                key={msg.id}
+                style={[styles.msgRow, isUser ? styles.msgRowUser : styles.msgRowAI]}
+              >
+                <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAI]}>
+                  <RichText segments={msg.segments} isUser={isUser} />
+                  {msg.badge && (
+                    <Text style={styles.badgeText}>{msg.badge}</Text>
+                  )}
+                </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
         </ScrollView>
 
-        {/* Suggestion Bubbles */}
-        <View style={styles.suggestionArea}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.suggestionScroll}>
-             <SuggestionChip label="Draft 90min Setlist" icon={<Sparkles size={12} color="#00D4FF" />} />
-             <SuggestionChip label="Optimize for Energy" icon={<Zap size={12} color="#F59E0B" />} />
-             <SuggestionChip label="Check Availability" icon={<Music size={12} color="#8B5CF6" />} />
+        {/* ── Suggestion chips ── */}
+        <View style={styles.suggestionsWrap}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.suggestionsScroll}
+          >
+            {SUGGESTIONS.map((s) => {
+              const Icon = s.icon;
+              return (
+                <TouchableOpacity
+                  key={s.label}
+                  style={styles.suggestionChip}
+                  activeOpacity={0.7}
+                  onPress={() => setInput(s.label)}
+                >
+                  <Icon size={12} color={s.color} />
+                  <Text style={styles.suggestionText}>{s.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         </View>
 
-        {/* Input Bar */}
+        {/* ── Input bar ── */}
         <View style={styles.inputBar}>
-           <View style={styles.inputInner}>
-              <TouchableOpacity style={styles.micBtn}>
-                 <Mic size={20} color="var(--color-text-dim)" />
-              </TouchableOpacity>
-              <TextInput 
-                placeholder="Ask the AI agent..." 
-                placeholderTextColor="rgba(150, 175, 200, 0.35)"
-                style={styles.textInput}
-                value={input}
-                onChangeText={setInput}
-                onSubmitEditing={handleSend}
-              />
-              <TouchableOpacity 
-                onPress={handleSend}
-                style={[styles.sendBtn, !input.trim() && { opacity: 0.5 }]}
-              >
-                 <Send size={18} color="white" />
-              </TouchableOpacity>
-           </View>
+          <View style={styles.inputRow}>
+            <TextInput
+              placeholder="Ask the AI to change your setlist..."
+              placeholderTextColor="rgba(255,255,255,0.28)"
+              style={styles.textInput}
+              value={input}
+              onChangeText={setInput}
+              onSubmitEditing={handleSend}
+              returnKeyType="send"
+              multiline={false}
+            />
+            <TouchableOpacity
+              onPress={handleSend}
+              style={[styles.sendBtn, !input.trim() && styles.sendBtnDisabled]}
+              activeOpacity={0.8}
+            >
+              <Send size={17} color="#071420" strokeWidth={2.5} />
+            </TouchableOpacity>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </View>
   );
 }
 
-function SuggestionChip({ label, icon }: any) {
-  return (
-    <TouchableOpacity style={styles.chip}>
-       {icon}
-       <Text style={styles.chipText}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
-
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'var(--color-bg)',
+    backgroundColor: '#0A0F1E',
   },
+
+  /* Header */
   header: {
-    paddingTop: 60,
+    paddingTop: Platform.OS === 'ios' ? 56 : 32,
     paddingHorizontal: 20,
-    paddingBottom: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: 'var(--color-glass-border)',
+    borderBottomColor: 'rgba(255,255,255,0.07)',
     gap: 12,
   },
   backBtn: {
-    marginRight: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+  },
+  backText: {
+    fontSize: 14,
+    color: '#00D4FF',
+    fontFamily: 'DM Sans',
+  },
+  headerCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  agentAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(139,92,246,0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(139,92,246,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  agentAvatarIcon: {
+    fontSize: 18,
+    color: '#8B5CF6',
   },
   headerInfo: {
-    flex: 1,
+    gap: 3,
   },
   headerTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: 'var(--color-text)',
-    fontFamily: 'DM Sans',
+    color: '#FFFFFF',
+    fontFamily: 'DM Sans Bold',
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  onlineDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
   },
   headerStatus: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#10B981',
     fontFamily: 'DM Sans',
   },
+
+  /* Chat */
   chatArea: {
     flex: 1,
   },
   chatContent: {
-    padding: 20,
-    paddingBottom: 40,
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 12,
+    gap: 12,
   },
-  messageRow: {
-    marginBottom: 24,
+  msgRow: {
     flexDirection: 'row',
   },
-  assistantRow: {
+  msgRowAI: {
     justifyContent: 'flex-start',
   },
-  userRow: {
+  msgRowUser: {
     justifyContent: 'flex-end',
   },
-  assistantMsgContainer: {
-    maxWidth: '85%',
-  },
-  userMsgContainer: {
-    maxWidth: '85%',
-    alignItems: 'flex-end',
-  },
-  messageCard: {
-    padding: 14,
-    backgroundColor: 'var(--color-glass)',
-  },
-  messageText: {
-    fontSize: 14.5,
-    lineHeight: 22,
-    color: 'var(--color-text)',
-    fontFamily: 'DM Sans',
-  },
-  msgLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: 'var(--color-text-dim)',
-    marginTop: 6,
-    marginLeft: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    fontFamily: 'DM Sans',
-  },
-  suggestionArea: {
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'var(--color-glass-border)',
-  },
-  suggestionScroll: {
-    paddingHorizontal: 20,
-    gap: 10,
-  },
-  chip: {
-    backgroundColor: 'var(--color-surface)',
-    borderWidth: 1,
-    borderColor: 'var(--color-glass-border)',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+
+  /* Bubbles */
+  bubble: {
+    maxWidth: '84%',
     borderRadius: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 13,
     gap: 8,
   },
-  chipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'var(--color-text)',
+  bubbleAI: {
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.09)',
+    borderTopLeftRadius: 6,
+  },
+  bubbleUser: {
+    backgroundColor: '#00D4FF',
+    borderTopRightRadius: 6,
+  },
+  msgText: {
+    fontSize: 14.5,
+    lineHeight: 22,
+    color: 'rgba(255,255,255,0.88)',
     fontFamily: 'DM Sans',
   },
-  inputBar: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    paddingBottom: Platform.OS === 'ios' ? 32 : 20,
-    backgroundColor: 'var(--color-bg)',
-    borderTopWidth: 1,
-    borderTopColor: 'var(--color-glass-border)',
+  msgTextUser: {
+    color: '#071420',
+    fontWeight: '600',
   },
-  inputInner: {
+  highlight: {
+    color: '#00D4FF',
+    fontWeight: '600',
+    fontFamily: 'DM Sans',
+  },
+  badgeText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#00D4FF',
+    fontFamily: 'DM Sans Bold',
+    marginTop: 2,
+  },
+
+  /* Suggestions */
+  suggestionsWrap: {
+    height: 48,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  suggestionsScroll: {
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    gap: 8,
+    height: 48,
+  },
+  suggestionChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'var(--color-surface)',
-    borderRadius: 28,
-    paddingHorizontal: 12,
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    height: 34,
+  },
+  suggestionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.6)',
+    fontFamily: 'DM Sans',
+  },
+
+  /* Input bar */
+  inputBar: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: '#0A0F1E',
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    paddingLeft: 20,
+    paddingRight: 6,
     height: 52,
     gap: 10,
-    borderWidth: 1,
-    borderColor: 'var(--color-glass-border)',
-  },
-  micBtn: {
-    padding: 4,
   },
   textInput: {
     flex: 1,
-    fontSize: 14.5,
-    color: 'var(--color-text)',
+    fontSize: 14,
+    color: '#FFFFFF',
     fontFamily: 'DM Sans',
+    ...Platform.select({ web: { outline: 'none' } as any }),
   },
   sendBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#00D4FF',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#00D4FF',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  sendBtnDisabled: {
+    opacity: 0.4,
   },
 });
