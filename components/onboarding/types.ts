@@ -8,6 +8,7 @@ export interface OnboardingData {
   location: string;
   selectedGenres: string[];
   selectedAvailability: string[];
+  avatarUri?: string;
 }
 
 export interface StepProps {

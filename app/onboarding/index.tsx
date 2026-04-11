@@ -41,7 +41,8 @@ export default function OnboardingScreen() {
     useStageName: false,
     location: 'Cebu City',
     selectedGenres: [],
-    selectedAvailability: []
+    selectedAvailability: [],
+    avatarUri: undefined
   });
 
   const updateFormData = (fields: Partial<OnboardingData>) => {

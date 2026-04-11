@@ -1,6 +1,6 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Camera, ChevronRight } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { GlassCard } from '../ui/GlassCard';
 import { TextField } from '../ui/TextField';
 import { Pill } from '../ui/Pill';
@@ -10,15 +10,34 @@ import { useAuth } from '../../context/auth';
 export const ProfileStep: React.FC<StepProps> = ({ data, updateData }) => {
   const { user } = useAuth();
   
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      updateData({ avatarUri: result.assets[0].uri });
+    }
+  };
+  
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Build your profile</Text>
       <Text style={styles.subtitle}>This is how bands and musicians see you in the marketplace.</Text>
       
       <View style={styles.avatarSection}>
-        <TouchableOpacity style={styles.avatarCircle}>
-          <Camera size={28} color="rgba(0, 212, 255, 0.4)" />
-          <Text style={styles.avatarText}>ADD PHOTO</Text>
+        <TouchableOpacity style={styles.avatarCircle} onPress={pickImage}>
+          {data.avatarUri ? (
+            <Image source={{ uri: data.avatarUri }} style={styles.avatarImage} />
+          ) : (
+            <>
+              <Camera size={28} color="rgba(0, 212, 255, 0.4)" />
+              <Text style={styles.avatarText}>ADD PHOTO</Text>
+            </>
+          )}
         </TouchableOpacity>
         <View style={styles.avatarContent}>
           <Text style={styles.avatarNote}>A profile photo helps bands recognize you. Pulled from Google by default.</Text>
@@ -52,7 +71,6 @@ export const ProfileStep: React.FC<StepProps> = ({ data, updateData }) => {
           placeholder="Acoustic singer-guitarist from Cebu. 8 years of live gigging..."
           multiline
           numberOfLines={3}
-          style={{ height: 100, textAlignVertical: 'top' }}
           value={data.bio}
           onChangeText={(val) => updateData({ bio: val })}
         />
@@ -89,6 +107,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', gap: 5,
   },
   avatarText: { fontSize: 9, fontWeight: '700', color: 'rgba(0, 212, 255, 0.5)', fontFamily: 'DM Sans Bold' },
+  avatarImage: { width: '100%', height: '100%', borderRadius: 50 },
   avatarContent: { flex: 1, gap: 8 },
   avatarNote: { fontSize: 12, color: 'rgba(255, 255, 255, 0.4)', fontFamily: 'DM Sans', lineHeight: 18 },
   formContainer: { gap: 20, marginTop: 10 },

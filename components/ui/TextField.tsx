@@ -26,6 +26,7 @@ export const TextField: React.FC<TextFieldProps> = ({
       {label && <Text style={styles.label}>{label}</Text>}
       <View style={[
         styles.inputWrapper,
+        props.multiline && styles.inputWrapperMultiline,
         error ? styles.inputError : null,
       ]}>
         {leftIcon && <View style={styles.iconContainer}>{leftIcon}</View>}
@@ -63,6 +64,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.1)',
     height: 54,
     paddingHorizontal: 16,
+    paddingVertical: Platform.OS === 'ios' ? 8 : 0,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -74,6 +76,12 @@ const styles = StyleSheet.create({
         elevation: 2,
       },
     }),
+  },
+  inputWrapperMultiline: {
+    height: undefined,
+    minHeight: 100,
+    alignItems: 'flex-start',
+    paddingTop: 12,
   },
   inputError: {
     borderColor: 'rgba(239, 68, 68, 0.5)',
@@ -89,6 +97,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'DM Sans',
     height: '100%',
+    textAlignVertical: 'top',
   },
   errorText: {
     fontSize: 12,
