@@ -36,7 +36,10 @@ export const SongStep: React.FC<StepProps & { onComplete: () => void }> = ({ onC
           </GlassCard>
         </TouchableOpacity>
 
-        <TouchableOpacity activeOpacity={0.8}>
+        <TouchableOpacity 
+          activeOpacity={0.8}
+          onPress={() => router.push('/onboarding/search')}
+        >
           <GlassCard 
             style={[styles.songOptionCard, { height: 75 }]}
             contentContainerStyle={styles.roleCardContent}

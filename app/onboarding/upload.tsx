@@ -27,54 +27,59 @@ export default function UploadScreen() {
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
+      <LinearGradient colors={['#071420', '#0d2d45']} style={StyleSheet.absoluteFill} />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <Pill label="Step 1 of 3" variant="cyan" style={{ alignSelf: 'flex-start', marginBottom: 12 }} />
-          <Text style={styles.title}>Import your songs</Text>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <Text style={styles.backButtonText}>← Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>Upload screenshots</Text>
           <Text style={styles.subtitle}>
-            Upload screenshots — Notes app, handwritten lists, old setlists. AI extracts everything instantly.
+            Drop in photos of your song list. Gemini AI reads handwriting, typed text, even blurry photos.
           </Text>
         </View>
 
         <TouchableOpacity 
-          style={[styles.uploadHero, image ? styles.heroActive : null]} 
+          style={styles.uploadHero} 
           activeOpacity={0.8}
           onPress={pickImage}
         >
-          {image ? (
-            <Image source={{ uri: image }} style={styles.previewImage} resizeMode="cover" />
-          ) : (
-            <>
-              <View style={styles.uploadRing}>
-                <Upload size={32} color="#00D4FF" />
-              </View>
-              <Text style={styles.uploadHeroTitle}>Tap to upload screenshots</Text>
-              <Text style={styles.uploadHeroSubtitle}>
-                Photos, Notes, handwritten lists{"\n"}Up to 5 images · PNG, JPG, HEIC
-              </Text>
-            </>
-          )}
+          <View style={styles.uploadRing}>
+            <Upload size={32} color="#00D4FF" />
+          </View>
+          <Text style={styles.uploadHeroTitle}>Tap to upload</Text>
+          <Text style={styles.uploadHeroSubtitle}>
+            PNG, JPG, HEIC · Up to 5 images
+          </Text>
         </TouchableOpacity>
 
         <View style={styles.thumbnailSection}>
           <View style={styles.thumbnailRow}>
-             <GlassCard style={styles.thumbnailCard} intensity={25}>
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: image ? 'rgba(16, 185, 129, 0.08)' : 'rgba(0, 212, 255, 0.08)' }]} />
-                <Check size={20} color={image ? "#10B981" : "rgba(150, 175, 200, 0.35)"} />
-                <Text style={styles.thumbnailText}>
-                  {image ? "screenshot_01.png" : "no_file.png"}{"\n"}
-                  <Text style={{ color: image ? '#10B981' : 'rgba(200, 215, 235, 0.4)' }}>
-                    {image ? 'Songs found' : 'Ready to scan'}
-                  </Text>
-                </Text>
-             </GlassCard>
+             <View style={[styles.thumbnailCard, image ? styles.thumbnailFilled : styles.thumbnailEmpty]}>
+                {image ? (
+                  <>
+                    <Check size={20} color="#10B981" />
+                    <Text style={styles.thumbnailText}>
+                      notes_setlist.png{"\n"}
+                      <Text style={{ color: '#10B981', fontSize: 11 }}>7 songs found</Text>
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <View style={styles.addCircle}>
+                      <Plus size={16} color="rgba(255, 255, 255, 0.4)" />
+                    </View>
+                    <Text style={styles.addText}>No file selected</Text>
+                  </>
+                )}
+             </View>
 
              <TouchableOpacity 
                 onPress={pickImage}
                 style={[styles.thumbnailCard, styles.thumbnailAdd]}
              >
                 <View style={styles.addCircle}>
-                  <Plus size={14} color="rgba(150, 175, 200, 0.35)" />
+                  <Plus size={16} color="rgba(255, 255, 255, 0.4)" />
                 </View>
                 <Text style={styles.addText}>Add more</Text>
              </TouchableOpacity>
@@ -90,9 +95,9 @@ export default function UploadScreen() {
             style={{ opacity: image ? 1 : 0.6 }}
           />
           <Button 
-            title="Skip for now" 
+            title="Search manually instead" 
             variant="ghost" 
-            onPress={() => router.replace('/(tabs)')} 
+            onPress={() => router.replace('/onboarding')} 
           />
         </View>
       </ScrollView>
@@ -103,7 +108,7 @@ export default function UploadScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'var(--color-bg)',
+    backgroundColor: '#071420',
   },
   scrollContent: {
     paddingHorizontal: 20,
@@ -111,62 +116,73 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   header: {
-    marginBottom: 14,
+    marginBottom: 24,
+  },
+  backButton: {
+    alignSelf: 'flex-start',
+    marginBottom: 16,
+  },
+  backButtonText: {
+    fontSize: 15,
+    color: '#00D4FF',
+    fontFamily: 'DM Sans',
   },
   title: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '700',
-    color: 'var(--color-text)',
+    color: '#FFF',
     fontFamily: 'DM Sans Bold',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   subtitle: {
-    fontSize: 13.5,
-    color: 'var(--color-text-sec)',
+    fontSize: 15,
+    color: 'rgba(255, 255, 255, 0.6)',
     lineHeight: 22,
     fontFamily: 'DM Sans',
   },
   uploadHero: {
-    backgroundColor: 'rgba(0, 180, 220, 0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 212, 255, 0.15)',
+    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(0, 212, 255, 0.25)',
     borderStyle: 'dashed',
-    borderRadius: 28,
+    borderRadius: 32,
     padding: 36,
     alignItems: 'center',
-    gap: 14,
-    marginVertical: 12,
-    height: 240,
+    gap: 16,
+    marginVertical: 16,
+    height: 280,
     justifyContent: 'center',
     overflow: 'hidden',
-  },
-  heroActive: {
-    borderStyle: 'solid',
-    padding: 0,
   },
   previewImage: {
     width: '100%',
     height: '100%',
   },
   uploadRing: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: 'rgba(0, 212, 255, 0.1)',
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: 'rgba(15, 23, 42, 0.8)',
     borderWidth: 1,
-    borderColor: 'rgba(0, 212, 255, 0.2)',
+    borderColor: 'rgba(0, 212, 255, 0.3)',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#00D4FF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 24,
+    elevation: 8,
+    marginBottom: 8,
   },
   uploadHeroTitle: {
-    fontSize: 15,
+    fontSize: 18,
     fontWeight: '700',
-    color: 'var(--color-text)',
+    color: '#FFF',
     fontFamily: 'DM Sans Bold',
   },
   uploadHeroSubtitle: {
-    fontSize: 12.5,
-    color: 'rgba(200, 215, 235, 0.45)',
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.5)',
     textAlign: 'center',
     fontFamily: 'DM Sans',
   },
@@ -175,42 +191,51 @@ const styles = StyleSheet.create({
   },
   thumbnailRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
   },
   thumbnailCard: {
     flex: 1,
-    height: 88,
+    height: 104,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
-    position: 'relative',
-    borderRadius: 14,
-    overflow: 'hidden',
+    gap: 8,
+    borderRadius: 16,
+    borderWidth: 1,
   },
-  thumbnailText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: 'var(--color-text-sec)',
-    textAlign: 'center',
-    fontFamily: 'DM Sans Bold',
+  thumbnailFilled: {
+    backgroundColor: '#1E293B',
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  thumbnailEmpty: {
+    backgroundColor: '#0F172A',
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderStyle: 'dashed',
   },
   thumbnailAdd: {
-    borderWidth: 1,
+    backgroundColor: '#162032',
+    borderColor: 'rgba(255, 255, 255, 0.05)',
     borderStyle: 'dashed',
-    borderColor: 'var(--color-glass-border)',
-    backgroundColor: 'transparent',
+  },
+  thumbnailText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'center',
+    fontFamily: 'DM Sans Bold',
+    lineHeight: 18,
   },
   addCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 4,
   },
   addText: {
-    fontSize: 10,
-    color: 'var(--color-text-dim)',
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.4)',
     fontFamily: 'DM Sans',
   },
   btnSection: {

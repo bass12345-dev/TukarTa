@@ -27,3 +27,11 @@ export const AVAILABILITY = [
   'Weddings & corporate events',
   'Church / worship team'
 ];
+
+export const MOCK_SONGS = [
+  { id: '1', title: 'Hotel California', artist: 'Eagles', genre: 'Classic Rock', duration: '6:30', hasLyrics: true, color: '#00D4FF' },
+  { id: '2', title: 'Hotel California (Live)', artist: 'Eagles', genre: 'Classic Rock', duration: '7:04', hasLyrics: true, color: '#8B5CF6' },
+  { id: '3', title: 'Paraluman', artist: 'Adie', genre: 'OPM', duration: '3:58', hasLyrics: true, color: '#34D399' },
+  { id: '4', title: 'Kundiman', artist: 'Parokya ni Edgar', genre: 'OPM', duration: '4:10', hasLyrics: false, color: '#F59E0B' },
+  { id: '5', title: 'Faithfully', artist: 'Journey', genre: 'Rock', duration: '4:26', hasLyrics: true, color: '#F472B6' },
+];
