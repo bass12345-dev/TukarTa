@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Check } from 'lucide-react-native';
 import { GlassCard } from '../ui/GlassCard';
 import { Pill } from '../ui/Pill';
 import { GENRES, AVAILABILITY } from './constants';
@@ -48,13 +49,20 @@ export const GenreStep: React.FC<StepProps> = ({ data, updateData }) => {
               <TouchableOpacity 
                 key={item} 
                 onPress={() => toggleAvailability(item)}
+                activeOpacity={0.8}
               >
                 <GlassCard 
-                  style={[styles.availCard, isActive && styles.availCardActive]}
-                  intensity={isActive ? 20 : 5}
+                  style={[styles.availCard, { height: 70 }, isActive && styles.availCardActive]}
+                  contentContainerStyle={styles.roleCardContent}
+                  intensity={isActive ? 30 : 12}
+                  noPadding
                 >
-                  <View style={[styles.tagDot, { backgroundColor: isActive ? '#00D4FF' : 'rgba(150, 175, 200, 0.3)' }]} />
-                  <Text style={styles.availText}>{item}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.availText}>{item}</Text>
+                  </View>
+                  <View style={[styles.checkbox, isActive && styles.checkboxActive]}>
+                    {isActive && <Check size={14} color="#FFF" strokeWidth={3} />}
+                  </View>
                 </GlassCard>
               </TouchableOpacity>
             );
@@ -70,10 +78,29 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 15, color: 'rgba(255, 255, 255, 0.5)', fontFamily: 'DM Sans', lineHeight: 22, marginBottom: 20 },
   tagGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 30 },
   genreTag: { paddingHorizontal: 20, height: 44 },
-  sectionTitle: { fontSize: 10, fontWeight: '700', color: 'rgba(150, 175, 200, 0.4)', fontFamily: 'DM Sans Bold', marginBottom: 12 },
-  availabilityList: { gap: 12 },
-  availCard: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12, borderRadius: 16 },
-  availCardActive: { borderColor: 'rgba(0, 212, 255, 0.3)' },
-  tagDot: { width: 8, height: 8, borderRadius: 4 },
-  availText: { color: '#FFF', fontSize: 14, fontFamily: 'DM Sans Medium' },
+  sectionTitle: { fontSize: 10, fontWeight: '700', color: 'rgba(150, 175, 200, 0.4)', fontFamily: 'DM Sans Bold', marginBottom: 16 },
+  availabilityList: { gap: 8 },
+  roleCardContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  availCard: { 
+    borderRadius: 24, 
+    borderWidth: 1.2, 
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    overflow: 'hidden'
+  },
+  availCardActive: { 
+    borderColor: '#00D4FF',
+    borderWidth: 1.5,
+    backgroundColor: 'rgba(0, 212, 255, 0.06)',
+  },
+  availText: { color: '#FFF', fontSize: 16, fontFamily: 'DM Sans Bold' },
+  checkbox: {
+    width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: 'rgba(255, 255, 255, 0.2)', 
+    alignItems: 'center', justifyContent: 'center',
+  },
+  checkboxActive: { backgroundColor: '#00D4FF', borderColor: '#00D4FF' },
 });
