@@ -10,6 +10,14 @@ ADD COLUMN IF NOT EXISTS rate_amount NUMERIC,
 ADD COLUMN IF NOT EXISTS rate_type TEXT, -- 'per_gig', 'per_hour'
 ADD COLUMN IF NOT EXISTS availability_tags TEXT[] DEFAULT '{}';
 
+-- 2.1 Add unique constraint to user_id (required for ON CONFLICT)
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'musician_profiles_user_id_key') THEN
+        ALTER TABLE public.musician_profiles ADD CONSTRAINT musician_profiles_user_id_key UNIQUE (user_id);
+    END IF;
+END $$;
+
 -- 3. Automatic Profile Creation Trigger
 -- This function will create rows in public.users and public.musician_profiles
 -- whenever a new user signs up via Supabase Auth.

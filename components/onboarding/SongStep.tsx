@@ -56,22 +56,19 @@ export const SongStep: React.FC<StepProps & { onComplete: () => void }> = ({ onC
           </GlassCard>
         </TouchableOpacity>
 
-        <TouchableOpacity activeOpacity={0.8} onPress={onComplete}>
-          <GlassCard 
-            style={[styles.songOptionCard, { height: 75 }]}
-            contentContainerStyle={styles.roleCardContent}
-            noPadding
-          >
-            <View style={[styles.songOptionIcon, { backgroundColor: 'rgba(150, 175, 200, 0.1)' }]}>
-              <SkipForward size={24} color="rgba(255, 255, 255, 0.4)" />
-            </View>
-            <View style={{ flex: 1, marginLeft: 16 }}>
-              <Text style={styles.songOptionTitle}>Skip for now</Text>
-              <Text style={styles.songOptionSub} numberOfLines={1}>Add songs later from your profile</Text>
-            </View>
-            <ChevronRight size={20} color="rgba(255, 255, 255, 0.3)" />
-          </GlassCard>
-        </TouchableOpacity>
+        <GlassCard 
+          style={[styles.songOptionCard, { height: 75, opacity: 0.7 }]}
+          contentContainerStyle={styles.roleCardContent}
+          noPadding
+        >
+          <View style={[styles.songOptionIcon, { backgroundColor: 'rgba(150, 175, 200, 0.1)' }]}>
+            <SkipForward size={24} color="rgba(255, 255, 255, 0.4)" />
+          </View>
+          <View style={{ flex: 1, marginLeft: 16 }}>
+            <Text style={styles.songOptionTitle}>Skip for now</Text>
+            <Text style={styles.songOptionSub} numberOfLines={1}>Add songs later from your profile</Text>
+          </View>
+        </GlassCard>
       </View>
 
       <View style={styles.attributionCard}>

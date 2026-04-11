@@ -1,4 +1,4 @@
-import { Mic2, Music, Drum, Keyboard, Info } from 'lucide-react-native';
+import { Drum, Info, Keyboard, Mic2, Music } from 'lucide-react-native';
 
 export const ROLES = [
   { id: 'singer', label: 'Singer / Vocalist', sub: 'Lead, backing, or both', icon: Mic2, color: '#00D4FF' },
@@ -10,6 +10,8 @@ export const ROLES = [
 ];
 
 export const CITIES = [
+  { name: 'Oroquieta City', region: 'Northern Mindanao', count: '100 musicians' },
+  { name: 'Ozamiz City', region: 'Northern Mindanao', count: '847 musicians' },
   { name: 'Cebu City', region: 'Central Visayas', count: '847 musicians' },
   { name: 'Metro Manila', region: 'NCR', count: '2,400 musicians' },
   { name: 'Davao City', region: 'Davao del Sur', count: '630 musicians' },

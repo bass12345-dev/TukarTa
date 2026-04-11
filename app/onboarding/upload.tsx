@@ -97,7 +97,7 @@ export default function UploadScreen() {
           <Button 
             title="Search manually instead" 
             variant="ghost" 
-            onPress={() => router.replace('/onboarding')} 
+            onPress={() => router.replace('/onboarding/search')} 
           />
         </View>
       </ScrollView>

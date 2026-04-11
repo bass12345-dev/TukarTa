@@ -28,7 +28,7 @@ export const LocationStep: React.FC<StepProps> = ({ data, updateData }) => {
 
       <View style={styles.searchBox}>
          <Search size={18} color="rgba(255, 255, 255, 0.4)" />
-         <Text style={styles.searchText}>{data.location || 'Search Cebu...'}</Text>
+         <Text style={styles.searchText}>{data.location || 'Search Oroquieta...'}</Text>
       </View>
 
       <Text style={styles.sectionTitle}>POPULAR CITIES IN THE PHILIPPINES</Text>

@@ -39,7 +39,7 @@ export default function OnboardingScreen() {
     rate: '',
     rateType: 'per_gig',
     useStageName: false,
-    location: 'Cebu City',
+    location: 'Oroquieta City',
     selectedGenres: [],
     selectedAvailability: [],
     avatarUri: undefined
