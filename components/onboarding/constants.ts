@@ -1,12 +1,12 @@
-import { Mic, Music, Piano, Briefcase } from 'lucide-react-native';
+import { Mic2, Music, Drum, Keyboard, Info } from 'lucide-react-native';
 
 export const ROLES = [
-  { id: 'singer', label: 'Singer / Vocalist', sub: 'Lead, backing, or both', icon: Mic },
-  { id: 'guitar', label: 'Guitarist', sub: 'Lead, rhythm, or acoustic', icon: Music },
-  { id: 'bass', label: 'Bassist', sub: 'Electric or upright bass', icon: Music },
-  { id: 'drums', label: 'Drummer', sub: 'Full kit or cajon', icon: Mic }, 
-  { id: 'keys', label: 'Keys / Piano', sub: 'Keyboard or piano', icon: Piano },
-  { id: 'session', label: 'Session Musician', sub: 'Available for hire', icon: Briefcase },
+  { id: 'singer', label: 'Singer / Vocalist', sub: 'Lead, backing, or both', icon: Mic2, color: '#00D4FF' },
+  { id: 'guitar', label: 'Guitarist', sub: 'Lead, rhythm, or acoustic', icon: Music, color: '#8B5CF6' },
+  { id: 'bass', label: 'Bassist', sub: 'Electric or upright bass', icon: Music, color: '#F59E0B' },
+  { id: 'drums', label: 'Drummer', sub: 'Full kit or cajon', icon: Drum, color: '#F472B6' }, 
+  { id: 'keys', label: 'Keys / Piano', sub: 'Keyboard or piano', icon: Keyboard, color: '#34D399' },
+  { id: 'session', label: 'Session Musician', sub: 'Available for hire', icon: Info, color: '#94A3B8' },
 ];
 
 export const CITIES = [

@@ -8,6 +8,7 @@ interface GlassCardProps extends ViewProps {
   intensity?: number;
   tint?: 'light' | 'dark' | 'default';
   noPadding?: boolean;
+  contentContainerStyle?: ViewProps['style'];
 }
 
 export const GlassCard: React.FC<GlassCardProps> = ({ 
@@ -16,6 +17,7 @@ export const GlassCard: React.FC<GlassCardProps> = ({
   intensity = 20, 
   tint,
   noPadding = false,
+  contentContainerStyle,
   ...props 
 }) => {
   const colorScheme = useColorScheme();
@@ -31,7 +33,12 @@ export const GlassCard: React.FC<GlassCardProps> = ({
       {...props}
     >
       <BlurView intensity={intensity} tint={activeTint} style={StyleSheet.absoluteFill} />
-      <View className={noPadding ? "" : "p-4"}>{children}</View>
+      <View 
+        className={noPadding ? "" : "p-4"} 
+        style={[{ flex: 1 }, contentContainerStyle]}
+      >
+        {children}
+      </View>
     </View>
   );
 };
