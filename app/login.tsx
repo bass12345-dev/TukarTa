@@ -102,10 +102,8 @@ function FeatureCard({ icon: Icon, title, subtitle, color, glowColor, borderColo
 export default function LoginScreen() {
   const router = useRouter();
   const [isLoggingIn, setIsLoggingIn] = React.useState(false);
-  const [isSignUp, setIsSignUp] = React.useState(false);
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
-  const [fullName, setFullName] = React.useState('');
 
   const handleGoogleLogin = async () => {
     try {
@@ -155,26 +153,11 @@ export default function LoginScreen() {
 
     try {
       setIsLoggingIn(true);
-      
-      if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              full_name: fullName,
-            },
-          },
-        });
-        if (error) throw error;
-        Alert.alert('Success', 'Check your email for a confirmation link!');
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
-      }
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) throw error;
     } catch (error: any) {
       Alert.alert('Authentication Error', error.message);
     } finally {
@@ -228,21 +211,10 @@ export default function LoginScreen() {
             <View style={[styles.topAccent, { backgroundColor: '#00D4FF' }]} />
 
             <View style={styles.authCardInner}>
-              <Text style={styles.authTitle}>{isSignUp ? 'Create Account' : 'Welcome Back'}</Text>
-              <Text style={styles.authSubtitle}>
-                {isSignUp ? 'Join the Cebuano musicians network' : 'Sign in to access your setlists'}
-              </Text>
+              <Text style={styles.authTitle}>Welcome Back</Text>
+              <Text style={styles.authSubtitle}>Sign in to access your setlists and network</Text>
 
               <View style={styles.form}>
-                {isSignUp && (
-                  <TextField
-                    label="Full Name"
-                    placeholder="Marco Rivera"
-                    value={fullName}
-                    onChangeText={setFullName}
-                    leftIcon={<User size={18} color="#FFF" />}
-                  />
-                )}
                 <TextField
                   label="Email Address"
                   placeholder="name@example.com"
@@ -261,7 +233,7 @@ export default function LoginScreen() {
                 />
 
                 <Button
-                  title={isSignUp ? 'Sign Up' : 'Sign In'}
+                  title={isLoggingIn ? 'Signing In...' : 'Sign In'}
                   onPress={handleEmailAuth}
                   disabled={isLoggingIn}
                 />
@@ -269,10 +241,10 @@ export default function LoginScreen() {
 
               <TouchableOpacity 
                 style={styles.toggleMode}
-                onPress={() => setIsSignUp(!isSignUp)}
+                onPress={() => router.push('/signup')}
               >
                 <Text style={styles.toggleText}>
-                  {isSignUp ? 'Already have an account? Log In' : "Don't have an account? Sign Up"}
+                  Don't have an account? Sign Up
                 </Text>
               </TouchableOpacity>
 

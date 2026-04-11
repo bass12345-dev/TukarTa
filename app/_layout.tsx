@@ -89,8 +89,8 @@ function RootLayoutNav() {
     if (!session && inAuthGroup) {
       // Redirect to login if not authenticated and trying to access tabs
       router.replace('/login');
-    } else if (session && (segments[0] === 'login' || segments[0] === undefined)) {
-      // Redirect to home if authenticated and trying to access login or home
+    } else if (session && (segments[0] === 'login' || segments[0] === 'signup' || segments[0] === undefined)) {
+      // Redirect to home if authenticated and trying to access login/signup/home
       router.replace('/(tabs)');
     }
   }, [session, isLoading, segments]);
