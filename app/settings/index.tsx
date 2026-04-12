@@ -63,7 +63,7 @@ export default function SettingsScreen() {
             label="Professional Subscription" 
             sublabel="Manage your plan"
             Icon={CreditCard} 
-            onPress={() => {}} 
+            onPress={() => router.push('/settings/subscription')} 
           />
         </View>
 
@@ -73,13 +73,13 @@ export default function SettingsScreen() {
             label="Notification Settings" 
             sublabel="Alerts, Gigs, and Messages"
             Icon={Bell} 
-            onPress={() => {}} 
+            onPress={() => router.push('/settings/notifications')} 
           />
           <SettingsItem 
             label="Security & Privacy" 
             sublabel="Password and 2FA"
             Icon={ShieldCheck} 
-            onPress={() => {}} 
+            onPress={() => router.push('/settings/security')} 
           />
         </View>
 
@@ -89,7 +89,7 @@ export default function SettingsScreen() {
             label="Help & Support" 
             sublabel="FAQs and Contact"
             Icon={HelpCircle} 
-            onPress={() => {}} 
+            onPress={() => router.push('/settings/support')} 
           />
         </View>
 
@@ -98,7 +98,7 @@ export default function SettingsScreen() {
           onPress={handleLogout}
           activeOpacity={0.8}
         >
-          <GlassCard style={styles.logoutCard} intensity={20}>
+          <GlassCard style={styles.logoutCardWrapper} intensity={20} contentContainerStyle={styles.logoutCardContent}>
             <LogOut size={20} color="#FF4B4B" />
             <Text style={styles.logoutText}>Log Out</Text>
           </GlassCard>
@@ -220,15 +220,17 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginTop: 10,
   },
-  logoutCard: {
+  logoutCardWrapper: {
     height: 64,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 75, 75, 0.2)',
+  },
+  logoutCardContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 75, 75, 0.2)',
   },
   logoutText: {
     color: '#FF4B4B',
