@@ -1,7 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, Stack } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
-import { Animated, Dimensions, StyleSheet, Text, View } from 'react-native';
+import { Animated, Dimensions, StyleSheet, Text, View, Image } from 'react-native';
 import { Button } from '../components/ui/Button';
 import { Mascot } from '../components/ui/Mascot';
 
@@ -67,12 +67,11 @@ export default function SplashScreen() {
           { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
         ]}
       >
-        <Mascot size={180} />
-
-        <View style={styles.logoContainer}>
-          <Text style={[styles.logoText, styles.logoTextLight]}>Tukar</Text>
-          <Text style={[styles.logoText, styles.logoTextBold]}>Ta</Text>
-        </View>
+        <Image 
+          source={require('../assets/images/icon.png')} 
+          style={styles.logoImage} 
+          resizeMode="contain" 
+        />
 
         <Text style={styles.tagline}>
           The AI co-pilot for musicians and bands
@@ -107,11 +106,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 40,
   },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginTop: 24,
-    marginBottom: 12,
+  logoImage: {
+    width: 220,
+    height: 220,
+    marginBottom: 20,
   },
   logoText: {
     fontSize: 34,
