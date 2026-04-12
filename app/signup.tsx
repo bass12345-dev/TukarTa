@@ -11,6 +11,7 @@ import {
   Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
+  Image,
 } from 'react-native';
 import { supabase } from '../utils/supabase';
 import { ArrowLeft, Mail, Lock, User } from 'lucide-react-native';
@@ -81,6 +82,11 @@ export default function SignupScreen() {
           >
             <ArrowLeft size={24} color="#00D4FF" />
           </TouchableOpacity>
+          <Image 
+            source={require('../assets/images/icon.png')} 
+            style={styles.logoImage} 
+            resizeMode="contain" 
+          />
         </View>
 
         {/* ── Focused Auth Card ── */}
@@ -212,6 +218,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(0, 212, 255, 0.2)',
     overflow: 'hidden',
+  },
+  logoImage: {
+    width: 60,
+    height: 60,
+    alignSelf: 'center',
+    marginTop: -10,
   },
   topAccent: {
     height: 3,

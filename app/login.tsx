@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   TextInput,
   KeyboardAvoidingView,
+  Image,
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
@@ -187,12 +188,13 @@ export default function LoginScreen() {
       >
         {/* ── Hero ── */}
         <View style={styles.heroSection}>
+          <Image 
+            source={require('../assets/images/icon.png')} 
+            style={styles.logoImage} 
+            resizeMode="contain" 
+          />
           <Text style={styles.eyebrow}>MUSICIANS PLATFORM</Text>
-          <Text style={styles.heroTitle}>
-            Welcome to{' '}
-            <Text style={styles.logoTukar}>Tukar</Text>
-            <Text style={styles.logoTa}>Ta</Text>
-          </Text>
+          <Text style={styles.heroTitle}>Welcome Back</Text>
           <Text style={styles.heroSubtitle}>
             Build smarter setlists. Find musicians who already know your songs.
           </Text>
@@ -370,7 +372,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderRadius: 20,
     borderWidth: 1,
-    overflow: 'hidden',
+  },
+  logoImage: {
+    width: 120,
+    height: 120,
+    marginBottom: 0,
   },
   topAccent: {
     height: 3,

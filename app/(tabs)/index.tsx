@@ -92,7 +92,11 @@ export default function DashboardScreen() {
             style={styles.premiumBanner}
           >
             <View style={styles.bannerIconContainer}>
-               <Mascot size={42} animated={false} />
+               <Image 
+                 source={require('../../assets/images/icon.png')} 
+                 style={{ width: 32, height: 32 }} 
+                 resizeMode="contain" 
+               />
             </View>
             <View style={styles.bannerContent}>
               <View style={styles.bannerTitleRow}>
