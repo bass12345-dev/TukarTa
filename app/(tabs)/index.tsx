@@ -64,13 +64,18 @@ export default function DashboardScreen() {
             >
               <LogOut size={20} color="var(--color-text-sec)" />
             </TouchableOpacity>
-            <View style={styles.avatar}>
-               {finalAvatarUrl ? (
-                 <Image source={{ uri: finalAvatarUrl }} style={styles.avatarImage} />
-               ) : (
-                 <Text style={styles.avatarText}>{initials}</Text>
-               )}
-            </View>
+            <TouchableOpacity 
+              onPress={() => router.push('/profile')}
+              activeOpacity={0.8}
+            >
+              <View style={styles.avatar}>
+                {finalAvatarUrl ? (
+                  <Image source={{ uri: finalAvatarUrl }} style={styles.avatarImage} />
+                ) : (
+                  <Text style={styles.avatarText}>{initials}</Text>
+                )}
+              </View>
+            </TouchableOpacity>
           </View>
         </View>
 

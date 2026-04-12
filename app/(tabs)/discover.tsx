@@ -181,7 +181,7 @@ export default function DiscoverScreen() {
             key={m.id}
             style={styles.card}
             activeOpacity={0.8}
-            onPress={() => {}}
+            onPress={() => router.push(`/musician/${m.id}`)}
           >
             {/* Avatar */}
             <View style={[styles.avatar, { backgroundColor: m.avatarColor }]}>
