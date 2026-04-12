@@ -3,6 +3,8 @@ import { ScrollView, View, Text, TouchableOpacity, StyleSheet, Dimensions } from
 import { useRouter } from 'expo-router';
 import { MessageSquare, Search, Music, Users, LogOut } from 'lucide-react-native';
 import { useAuth } from '../../context/auth';
+import { supabase } from '../../utils/supabase';
+import { Image } from 'react-native';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Orb } from '../../components/ui/Orb';
 import { Pill } from '../../components/ui/Pill';
@@ -25,14 +27,34 @@ export default function DashboardScreen() {
   const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Musician';
   const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
 
+  const [profile, setProfile] = React.useState<any>(null);
+
+  React.useEffect(() => {
+    if (user) {
+      const getProfile = async () => {
+        const { data } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+        if (data) setProfile(data);
+      };
+      getProfile();
+    }
+  }, [user]);
+
+  const finalDisplayName = profile?.display_name || displayName;
+  const finalAvatarUrl = profile?.avatar_url;
+
   return (
     <View style={styles.container}>
+      <LinearGradient colors={['#071420', '#0d2d45']} style={StyleSheet.absoluteFill} />
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>Good evening 🎸</Text>
-            <Text style={styles.profileName}>{displayName}</Text>
+            <Text style={styles.profileName}>{finalDisplayName}</Text>
           </View>
           <View style={styles.headerActions}>
             <TouchableOpacity 
@@ -43,7 +65,11 @@ export default function DashboardScreen() {
               <LogOut size={20} color="var(--color-text-sec)" />
             </TouchableOpacity>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{initials}</Text>
+               {finalAvatarUrl ? (
+                 <Image source={{ uri: finalAvatarUrl }} style={styles.avatarImage} />
+               ) : (
+                 <Text style={styles.avatarText}>{initials}</Text>
+               )}
             </View>
           </View>
         </View>
@@ -208,6 +234,11 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0, 212, 255, 0.25)',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   avatarText: {
     fontSize: 18,

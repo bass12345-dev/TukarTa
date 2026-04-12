@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Search, MapPin, Star, Music2 } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const MOCK_MUSICIANS = [
   {
@@ -115,6 +116,7 @@ export default function DiscoverScreen() {
 
   return (
     <View style={styles.container}>
+      <LinearGradient colors={['#071420', '#0d2d45']} style={StyleSheet.absoluteFill} />
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* ── Header ── */}

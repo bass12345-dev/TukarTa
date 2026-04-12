@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { Bell, MessageSquare, UserPlus, Zap, Music2, ChevronRight, CheckCheck } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const MOCK_NOTIFICATIONS = [
   {
@@ -89,6 +90,7 @@ export default function AlertsScreen() {
 
   return (
     <View style={styles.container}>
+      <LinearGradient colors={['#071420', '#0d2d45']} style={StyleSheet.absoluteFill} />
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* ── Header ── */}

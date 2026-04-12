@@ -83,11 +83,50 @@ export default function OnboardingScreen() {
     }
   };
 
+  const uploadAvatar = async (uri: string, userId: string) => {
+    try {
+      // 1. Get file extension and name
+      const ext = uri.split('.').pop() || 'jpg';
+      const fileName = `${userId}/${Date.now()}.${ext}`;
+      
+      // 2. Fetch image content as blob
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      
+      // 3. Upload to Supabase Storage
+      const { data, error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, blob, {
+          contentType: `image/${ext}`,
+          upsert: true
+        });
+
+      if (uploadError) throw uploadError;
+
+      // 4. Get Public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName);
+
+      return publicUrl;
+    } catch (error) {
+      console.error('Avatar upload failed:', error);
+      return null;
+    }
+  };
+
   const saveOnboarding = async () => {
     if (!user) return;
     try {
       setIsSaving(true);
       
+      // 0. Handle Avatar Upload if exists
+      let avatarUrl = user.user_metadata?.avatar_url || null;
+      if (formData.avatarUri) {
+        const uploadedUrl = await uploadAvatar(formData.avatarUri, user.id);
+        if (uploadedUrl) avatarUrl = uploadedUrl;
+      }
+
       // 1. Update basic user info
       const { error: userError } = await supabase
         .from('users')
@@ -95,6 +134,7 @@ export default function OnboardingScreen() {
           display_name: formData.useStageName ? formData.stageName : user.user_metadata?.full_name || formData.stageName,
           bio: formData.bio,
           city: formData.location,
+          avatar_url: avatarUrl,
           onboarding_completed: true
         })
         .eq('id', user.id);

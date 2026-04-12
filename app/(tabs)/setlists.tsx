@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Plus, ChevronRight, Calendar, Music2, Clock, ListMusic } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const MOCK_SETLISTS = [
   {
@@ -81,6 +82,7 @@ export default function SetlistsScreen() {
 
   return (
     <View style={styles.container}>
+      <LinearGradient colors={['#071420', '#0d2d45']} style={StyleSheet.absoluteFill} />
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* ── Header ── */}

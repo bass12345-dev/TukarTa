@@ -5,14 +5,14 @@
     "owner": "basildev",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/FinalTukar.png",
+    "icon": "./assets/images/icon.png",
     "scheme": "tukarta",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/FinalTukar.png",
+      "image": "./assets/images/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0ea5e9"
+      "backgroundColor": "#071420"
     },
     "ios": {
       "supportsTablet": true
@@ -20,8 +20,8 @@
     "android": {
       "package": "com.basildev.tukarta",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/FinalTukar.png",
-        "backgroundColor": "#0ea5e9"
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#071420"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
