@@ -10,8 +10,10 @@ import {
   Plus, 
   ChevronRight,
   MoreVertical,
-  Share2
+  Share2,
+  Settings
 } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/auth';
 import { supabase } from '../../utils/supabase';
 import { GlassCard } from '../../components/ui/GlassCard';
@@ -23,6 +25,7 @@ const { width } = Dimensions.get('window');
 
 export default function ProfileScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const [profile, setProfile] = React.useState<any>(null);
 
   React.useEffect(() => {
@@ -59,10 +62,13 @@ export default function ProfileScreen() {
           />
           
           <View style={styles.topActions}>
-            <TouchableOpacity style={styles.glassActionBtn}>
+            <TouchableOpacity 
+              style={styles.glassActionBtn}
+              onPress={() => router.push('/settings')}
+            >
               <View className="flex-row items-center gap-2">
-                <Edit2 size={14} color="#FFF" />
-                <Text style={styles.actionBtnText}>Edit Profile</Text>
+                <Settings size={14} color="#FFF" />
+                <Text style={styles.actionBtnText}>Settings</Text>
               </View>
             </TouchableOpacity>
             
