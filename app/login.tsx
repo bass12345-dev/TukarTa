@@ -1,25 +1,24 @@
+import * as AuthSession from 'expo-auth-session';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter, Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
+import { ArrowRight, Camera, Lock, Mail, Music2, Search, Zap } from 'lucide-react-native';
 import React from 'react';
 import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
-  Alert,
-  ActivityIndicator,
-  TextInput,
-  KeyboardAvoidingView,
-  Image,
+  View
 } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
-import * as AuthSession from 'expo-auth-session';
-import { supabase } from '../utils/supabase';
-import { Camera, Music2, Search, Zap, ArrowRight, Mail, Lock, User } from 'lucide-react-native';
-import { TextField } from '../components/ui/TextField';
 import { Button } from '../components/ui/Button';
+import { TextField } from '../components/ui/TextField';
+import { supabase } from '../utils/supabase';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -72,12 +71,9 @@ const FEATURES = [
 ];
 
 // ─── Feature card (matches setlist / alerts card pattern) ─────────────────────
-function FeatureCard({ icon: Icon, title, subtitle, color, glowColor, borderColor, tagBg, tag }: typeof FEATURES[0]) {
+function FeatureCard({ icon: Icon, title, subtitle, color, glowColor, tagBg, tag }: typeof FEATURES[0]) {
   return (
-    <View style={[styles.featureCard, { borderColor }]}>
-      {/* Top accent stripe */}
-      <View style={[styles.topAccent, { backgroundColor: color }]} />
-
+    <View style={styles.featureCard}>
       <View style={styles.featureCardInner}>
         {/* Icon bubble */}
         <View style={[styles.iconBubble, { backgroundColor: glowColor }]}>
@@ -91,7 +87,7 @@ function FeatureCard({ icon: Icon, title, subtitle, color, glowColor, borderColo
         </View>
 
         {/* Tag */}
-        <View style={[styles.tagBadge, { backgroundColor: tagBg, borderColor }]}>
+        <View style={[styles.tagBadge, { backgroundColor: tagBg }]}>
           <Text style={[styles.tagText, { color }]}>{tag}</Text>
         </View>
       </View>
@@ -371,11 +367,10 @@ const styles = StyleSheet.create({
   featureCard: {
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderRadius: 20,
-    borderWidth: 1,
   },
   logoImage: {
-    width: 120,
-    height: 120,
+    width: 160,
+    height: 160,
     marginBottom: 0,
   },
   topAccent: {

@@ -1,16 +1,23 @@
 import React from 'react';
-import { ScrollView, View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { ScrollView, View, Text, TouchableOpacity, StyleSheet, Dimensions, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MessageSquare, Search, Music, Users, LogOut } from 'lucide-react-native';
 import { useAuth } from '../../context/auth';
 import { supabase } from '../../utils/supabase';
-import { Image } from 'react-native';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Orb } from '../../components/ui/Orb';
 import { Pill } from '../../components/ui/Pill';
-import { Mascot } from '../../components/ui/Mascot';
 import { Button } from '../../components/ui/Button';
 import { LinearGradient } from 'expo-linear-gradient';
+
+const THEME = {
+  bg: '#071420',
+  text: '#F0F4FF',
+  textSec: 'rgba(200, 215, 235, 0.6)',
+  textDim: 'rgba(150, 175, 200, 0.35)',
+  surface: 'rgba(255, 255, 255, 0.04)',
+  glassBorder: 'rgba(255, 255, 255, 0.10)',
+};
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -62,7 +69,7 @@ export default function DashboardScreen() {
               style={styles.logoutBtn}
               activeOpacity={0.7}
             >
-              <LogOut size={20} color="var(--color-text-sec)" />
+              <LogOut size={20} color={THEME.textSec} />
             </TouchableOpacity>
             <TouchableOpacity 
               onPress={() => router.push('/profile')}
@@ -98,7 +105,7 @@ export default function DashboardScreen() {
           >
             <View style={styles.bannerIconContainer}>
                <Image 
-                 source={require('../../assets/images/icon.png')} 
+                 source={require('@/assets/images/icon.png')} 
                  style={{ width: 32, height: 32 }} 
                  resizeMode="contain" 
                />
@@ -164,7 +171,7 @@ export default function DashboardScreen() {
             </View>
             <View style={styles.hr} />
             <View style={styles.gigFooter}>
-              <Text style={styles.gigSetlist}>Acoustic Vibes Mix · <Text style={{ color: 'var(--color-text)' }}>11 songs</Text></Text>
+              <Text style={styles.gigSetlist}>Acoustic Vibes Mix · <Text style={{ color: THEME.text }}>11 songs</Text></Text>
               <Pill label="3/4 ✓" variant="green" />
             </View>
           </GlassCard>
@@ -191,7 +198,7 @@ function ActionCard({ title, subtitle, orbVariant, icon, onPress }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'var(--color-bg)',
+    backgroundColor: THEME.bg,
   },
   scroll: {
     flex: 1,
@@ -209,14 +216,14 @@ const styles = StyleSheet.create({
   },
   greeting: {
     fontSize: 13,
-    color: 'var(--color-text-sec)',
+    color: THEME.textSec,
     fontFamily: 'DM Sans',
     marginBottom: 2,
   },
   profileName: {
     fontSize: 26,
     fontWeight: '700',
-    color: 'var(--color-text)',
+    color: THEME.text,
     fontFamily: 'DM Sans Bold',
   },
   headerActions: {
@@ -261,13 +268,13 @@ const styles = StyleSheet.create({
   },
   statsMiniText: {
     fontSize: 18,
-    color: 'var(--color-text)',
+    color: THEME.text,
     fontFamily: 'DM Sans Bold',
     marginBottom: 4,
   },
   statsLabel: {
     fontSize: 12,
-    color: 'var(--color-text-sec)',
+    color: THEME.textSec,
     fontFamily: 'DM Sans',
     fontWeight: 'normal',
   },
@@ -284,7 +291,7 @@ const styles = StyleSheet.create({
   },
   instrumentText: {
     fontSize: 12,
-    color: 'var(--color-text-dim)',
+    color: THEME.textDim,
     fontFamily: 'DM Sans',
   },
   premiumWrapper: {
@@ -346,7 +353,7 @@ const styles = StyleSheet.create({
   secLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: 'var(--color-text-sec)',
+    color: THEME.textSec,
     letterSpacing: 1.2,
     fontFamily: 'DM Sans Bold',
     opacity: 0.6,
@@ -357,9 +364,9 @@ const styles = StyleSheet.create({
     marginBottom: 28,
   },
   featCard: {
-    backgroundColor: 'var(--color-surface)',
+    backgroundColor: THEME.surface,
     borderWidth: 1,
-    borderColor: 'var(--color-glass-border)',
+    borderColor: THEME.glassBorder,
     borderRadius: 24,
     padding: 20,
     flexDirection: 'row',
@@ -374,12 +381,12 @@ const styles = StyleSheet.create({
   featTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: 'var(--color-text)',
+    color: THEME.text,
     fontFamily: 'DM Sans Bold',
   },
   featSubtitle: {
     fontSize: 13,
-    color: 'var(--color-text-dim)',
+    color: THEME.textDim,
     fontFamily: 'DM Sans',
   },
   gigWrapper: {
@@ -399,17 +406,17 @@ const styles = StyleSheet.create({
   gigTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: 'var(--color-text)',
+    color: THEME.text,
     fontFamily: 'DM Sans Bold',
   },
   gigMeta: {
     fontSize: 13,
-    color: 'var(--color-text-sec)',
+    color: THEME.textSec,
     fontFamily: 'DM Sans',
   },
   hr: {
     height: 1,
-    backgroundColor: 'var(--color-glass-border)',
+    backgroundColor: THEME.glassBorder,
     marginVertical: 14,
   },
   gigFooter: {
@@ -419,8 +426,7 @@ const styles = StyleSheet.create({
   },
   gigSetlist: {
     fontSize: 13,
-    color: 'var(--color-text-sec)',
+    color: THEME.textSec,
     fontFamily: 'DM Sans',
   },
 });
-

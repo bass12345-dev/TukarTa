@@ -5,6 +5,15 @@ import { ChevronLeft, MoreVertical, Music, Sparkles, Play } from 'lucide-react-n
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Orb } from '../../components/ui/Orb';
 
+const THEME = {
+  bg: '#071420',
+  text: '#F0F4FF',
+  textSec: 'rgba(200, 215, 235, 0.6)',
+  textDim: 'rgba(150, 175, 200, 0.35)',
+  surface: 'rgba(255, 255, 255, 0.04)',
+  glassBorder: 'rgba(255, 255, 255, 0.10)',
+};
+
 const MOCK_SETLIST_SONGS = [
   { id: '1', title: 'Hotel California', artist: 'Eagles', key: 'Am', duration: '6:30', variant: 'cyan' },
   { id: '2', title: 'Faithfully', artist: 'Journey', key: 'E', duration: '4:26', variant: 'purple' },
@@ -95,7 +104,7 @@ function getVariantColor(variant: string) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'var(--color-bg)',
+    backgroundColor: THEME.bg,
   },
   header: {
     paddingTop: 24,

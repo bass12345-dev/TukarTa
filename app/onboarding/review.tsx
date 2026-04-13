@@ -8,6 +8,15 @@ import { GlassCard } from '../../components/ui/GlassCard';
 import { Orb } from '../../components/ui/Orb';
 import { Pill } from '../../components/ui/Pill';
 
+const THEME = {
+  bg: '#071420',
+  text: '#F0F4FF',
+  textSec: 'rgba(200, 215, 235, 0.6)',
+  textDim: 'rgba(150, 175, 200, 0.35)',
+  surface: 'rgba(255, 255, 255, 0.04)',
+  glassBorder: 'rgba(255, 255, 255, 0.10)',
+};
+
 const MOCK_EXTRACTED_SONGS = [
   { id: '1', title: 'Hotel California', info: 'Eagles · Rock', stars: 5, status: 'LIVE', variant: 'cyan' },
   { id: '2', title: 'Paraluman', info: 'Adie · OPM', stars: 4, status: 'LIVE', variant: 'purple' },
@@ -84,7 +93,7 @@ function getVariantColor(variant: string) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'var(--color-bg)',
+    backgroundColor: THEME.bg,
   },
   header: {
     paddingTop: 24,
@@ -99,13 +108,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 21,
     fontWeight: '700',
-    color: 'var(--color-text)',
+    color: THEME.text,
     fontFamily: 'DM Sans Bold',
     marginBottom: 3,
   },
   subtitle: {
     fontSize: 13,
-    color: 'var(--color-text-sec)',
+    color: THEME.textSec,
     fontFamily: 'DM Sans',
   },
   scroll: {
@@ -120,7 +129,7 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: 'var(--color-glass-border)',
+    borderBottomColor: THEME.glassBorder,
     gap: 12,
   },
   songInfo: {
@@ -129,12 +138,12 @@ const styles = StyleSheet.create({
   songTitle: {
     fontSize: 14.5,
     fontWeight: '600',
-    color: 'var(--color-text)',
+    color: THEME.text,
     fontFamily: 'DM Sans Bold',
   },
   songArtist: {
     fontSize: 11.5,
-    color: 'var(--color-text-sec)',
+    color: THEME.textSec,
     fontFamily: 'DM Sans',
   },
   songMeta: {
@@ -160,6 +169,6 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 32,
     borderTopWidth: 1,
-    borderTopColor: 'var(--color-glass-border)',
+    borderTopColor: THEME.glassBorder,
   },
 });
