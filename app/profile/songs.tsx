@@ -46,7 +46,10 @@ export default function SongDictionaryScreen() {
             <Text style={styles.headerTitle}>My Song Dictionary</Text>
             <Text style={styles.headerSubtitle}>24 songs · 20 live-ready · 4 learning</Text>
           </View>
-          <TouchableOpacity style={styles.addBtn}>
+          <TouchableOpacity 
+            style={styles.addBtn}
+            onPress={() => router.push('/songs/add')}
+          >
             <Plus size={24} color="#FFF" />
           </TouchableOpacity>
         </View>

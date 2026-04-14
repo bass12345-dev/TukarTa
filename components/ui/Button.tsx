@@ -7,12 +7,14 @@ interface ButtonProps extends TouchableOpacityProps {
   variant?: 'primary' | 'glass' | 'ghost' | 'cyan';
   size?: 'default' | 'sm';
   title: string;
+  icon?: React.ReactNode;
 }
 
 export const Button: React.FC<ButtonProps> = ({ 
   title, 
   variant = 'primary', 
   size = 'default', 
+  icon,
   className,
   ...props 
 }) => {
@@ -55,6 +57,7 @@ export const Button: React.FC<ButtonProps> = ({
             elevation: 8 
           }}
         >
+          {icon && <View style={{ marginRight: 8 }}>{icon}</View>}
           <Text className={textClasses}>{title}</Text>
         </LinearGradient>
       </TouchableOpacity>
@@ -67,6 +70,7 @@ export const Button: React.FC<ButtonProps> = ({
       className={containerClasses} 
       {...props}
     >
+      {icon && <View style={{ marginRight: 8 }}>{icon}</View>}
       <Text className={textClasses}>{title}</Text>
     </TouchableOpacity>
   );

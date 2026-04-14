@@ -22,6 +22,9 @@ import {
 } from '@expo-google-fonts/jetbrains-mono';
 import { AuthProvider, useAuth } from '../context/auth';
 import { useRouter, useSegments } from 'expo-router';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const queryClient = new QueryClient();
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -64,9 +67,11 @@ export default function RootLayout() {
   }
 
   return (
-    <AuthProvider>
-      <RootLayoutNav />
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <RootLayoutNav />
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }
 
