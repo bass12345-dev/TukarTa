@@ -167,7 +167,10 @@ export default function ProfileScreen() {
               <SongRow title="Sana" subtitle="I Belong to the Zoo · OPM" rating={3} status="LEARNING" statusVariant="gold" iconColor="#EC4899" />
             </View>
 
-            <TouchableOpacity style={styles.viewAllBtn}>
+            <TouchableOpacity 
+              style={styles.viewAllBtn}
+              onPress={() => router.push('/profile/songs')}
+            >
               <Text style={styles.viewAllText}>View all 24 songs →</Text>
             </TouchableOpacity>
           </View>
