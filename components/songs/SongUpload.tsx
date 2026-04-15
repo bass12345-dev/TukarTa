@@ -46,6 +46,15 @@ export function SongUpload({ onBack, onAnalyze, onSearch }: SongUploadProps) {
     setImages(prev => prev.filter((_, i) => i !== index));
   };
 
+  const normalize = (str: string) => {
+    return str
+      .toLowerCase()
+      .replace(/\s*\(.*?\)\s*/g, ' ') // Remove parentheses content e.g. (Live)
+      .replace(/\s*\[.*?\]\s*/g, ' ') // Remove bracket content e.g. [Official]
+      .replace(/[^a-z0-9 ]/g, '')     // Remove special characters
+      .trim();
+  };
+
   const handleAnalyze = async () => {
     if (images.length === 0) return;
 
@@ -80,10 +89,18 @@ export function SongUpload({ onBack, onAnalyze, onSearch }: SongUploadProps) {
         allExtractedSongs.push(...songs);
       }
       
-      // 4. De-duplicate results
-      const uniqueSongs = Array.from(new Map(
-        allExtractedSongs.map(s => [`${s.title.toLowerCase()}|${s.artist.toLowerCase()}`, s])
-      ).values());
+      // 4. De-duplicate results intelligently
+      const uniqueSongsMap = new Map<string, { title: string; artist: string }>();
+      
+      allExtractedSongs.forEach(song => {
+        const key = `${normalize(song.title)}|${normalize(song.artist)}`;
+        // If we don't have this song yet, or the current one has a better artist name (not "Unknown Artist")
+        if (!uniqueSongsMap.has(key) || (song.artist.toLowerCase() !== 'unknown artist' && uniqueSongsMap.get(key)?.artist.toLowerCase() === 'unknown artist')) {
+          uniqueSongsMap.set(key, song);
+        }
+      });
+
+      const uniqueSongs = Array.from(uniqueSongsMap.values());
 
       // 5. Proceed to review
       onAnalyze(uniqueSongs);

@@ -6,6 +6,8 @@ import { ScrollView, StyleSheet, Text, View, Platform } from 'react-native';
 import { Button } from '../ui/Button';
 import { Orb } from '../ui/Orb';
 import { Pill } from '../ui/Pill';
+import { useAddMultipleSongs } from '../../utils/hooks/useSongs';
+import { ActivityIndicator } from 'react-native';
 
 const THEME = {
   bg: '#071420',
@@ -17,12 +19,12 @@ const THEME = {
 };
 
 const MOCK_EXTRACTED_SONGS = [
-  { id: '1', title: 'Hotel California', info: 'Eagles · Rock', stars: 5, status: 'LIVE', variant: 'cyan' },
-  { id: '2', title: 'Paraluman', info: 'Adie · OPM', stars: 4, status: 'LIVE', variant: 'purple' },
-  { id: '3', title: 'Kundiman', info: 'Parokya ni Edgar · OPM', stars: 5, status: 'LIVE', variant: 'gold' },
-  { id: '4', title: 'Sana', info: 'I Belong to the Zoo · OPM', stars: 3, status: 'LEARNING', variant: 'pink' },
-  { id: '5', title: 'Faithfully', info: 'Journey · Rock', stars: 4, status: 'LIVE', variant: 'cyan' },
-  { id: '6', title: 'Harana', info: 'Parokya ni Edgar · OPM', stars: 5, status: 'LIVE', variant: 'green' },
+  { id: '1', title: 'Hotel California', artist: 'Eagles', stars: 5, status: 'LIVE' as const, variant: 'cyan' },
+  { id: '2', title: 'Paraluman', artist: 'Adie', stars: 4, status: 'LIVE' as const, variant: 'purple' },
+  { id: '3', title: 'Kundiman', artist: 'Parokya ni Edgar', stars: 5, status: 'LIVE' as const, variant: 'gold' },
+  { id: '4', title: 'Sana', artist: 'I Belong to the Zoo', stars: 3, status: 'LEARNING' as const, variant: 'pink' },
+  { id: '5', title: 'Faithfully', artist: 'Journey', stars: 4, status: 'LIVE' as const, variant: 'cyan' },
+  { id: '6', title: 'Harana', artist: 'Parokya ni Edgar', stars: 5, status: 'LIVE' as const, variant: 'green' },
 ];
 
 interface SongReviewProps {
@@ -36,13 +38,30 @@ export function SongReview({ onSave, stepLabel, initialSongs = [] }: SongReviewP
   const mappedSongs = initialSongs.map((s, idx) => ({
     id: String(idx + 1),
     title: s.title,
-    info: s.artist,
+    artist: s.artist,
     stars: 5,
     status: 'LIVE' as const,
     variant: ['cyan', 'purple', 'gold', 'green', 'pink'][idx % 5]
   }));
 
   const [songs] = useState(mappedSongs.length > 0 ? mappedSongs : MOCK_EXTRACTED_SONGS);
+  const saveMutation = useAddMultipleSongs();
+
+  const handleSave = async () => {
+    try {
+      // Prepare songs for saving (just title and artist)
+      const songsToSave = songs.map(s => ({
+        title: s.title,
+        artist: s.artist
+      }));
+      
+      await saveMutation.mutateAsync(songsToSave);
+      onSave(); // Navigate away
+    } catch (error) {
+      console.error('Failed to save songs:', error);
+      alert('Failed to save songs to profile.');
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -66,7 +85,7 @@ export function SongReview({ onSave, stepLabel, initialSongs = [] }: SongReviewP
             </Orb>
             <View style={styles.songInfo}>
               <Text style={styles.songTitle}>{song.title}</Text>
-              <Text style={styles.songArtist}>{song.info}</Text>
+              <Text style={styles.songArtist}>{song.artist}</Text>
             </View>
             <View style={styles.songMeta}>
               <View style={styles.stars}>
@@ -84,9 +103,11 @@ export function SongReview({ onSave, stepLabel, initialSongs = [] }: SongReviewP
 
       <View style={styles.footer}>
         <Button 
-          title="Save to my profile →" 
+          title={saveMutation.isPending ? "Saving to profile..." : "Save to my profile →"} 
           variant="cyan" 
-          onPress={onSave}
+          onPress={handleSave}
+          disabled={saveMutation.isPending}
+          icon={saveMutation.isPending ? <ActivityIndicator size="small" color="#FFF" /> : null}
         />
       </View>
     </View>
