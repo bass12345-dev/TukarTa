@@ -241,7 +241,7 @@ export default function ProfileScreen() {
                   <BandCard 
                     key={item.id}
                     title={item.band.name} 
-                    subtitle={`${item.band.member_count?.[0]?.count || 1} members · ${item.band.genre || 'Various'}`} 
+                    subtitle={`${item.band.member_count?.[0]?.count || 1} members · ${item.band.genres?.join(', ') || 'Various'}`} 
                     initials={item.band.name.split(' ').map((n: any) => n[0]).join('').toUpperCase().slice(0, 2)} 
                     role={item.role.toUpperCase()} 
                     roleVariant={item.role === 'leader' ? 'cyan' : 'purple'} 

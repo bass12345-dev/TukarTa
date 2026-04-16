@@ -34,7 +34,7 @@ export function useMyBands() {
           band:bands (
             id,
             name,
-            genre,
+            genres,
             member_count:band_members(count)
           )
         `)

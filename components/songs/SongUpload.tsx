@@ -63,7 +63,7 @@ export function SongUpload({ onBack, onAnalyze, onSearch }: SongUploadProps) {
     try {
       setUploading(true);
       abortControllerRef.current = new AbortController();
-      const allExtractedSongs: Array<{ title: string; artist: string }> = [];
+      const allExtractedSongs: Array<{ title: string; artist: string; genre: string }> = [];
       
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
@@ -107,13 +107,13 @@ export function SongUpload({ onBack, onAnalyze, onSearch }: SongUploadProps) {
       }
       
       // 4. De-duplicate results intelligently
-      const uniqueSongsMap = new Map<string, { title: string; artist: string }>();
+      const uniqueSongsMap = new Map<string, { title: string; artist: string; genre: string }>();
       
       allExtractedSongs.forEach(song => {
         const key = `${normalize(song.title)}|${normalize(song.artist)}`;
         // If we don't have this song yet, or the current one has a better artist name (not "Unknown Artist")
         if (!uniqueSongsMap.has(key) || (song.artist.toLowerCase() !== 'unknown artist' && uniqueSongsMap.get(key)?.artist.toLowerCase() === 'unknown artist')) {
-          uniqueSongsMap.set(key, song);
+          uniqueSongsMap.set(key, { title: song.title, artist: song.artist, genre: song.genre });
         }
       });
 
