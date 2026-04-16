@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { supabase } from '../supabase';
 import { searchSongs, getArtistMetadata, SongResult } from '../musicApi';
 
@@ -53,12 +53,15 @@ export function useAddSong() {
   });
 }
 
-export function useMySongs() {
-  return useQuery({
-    queryKey: ['my-songs'],
-    queryFn: async () => {
+export function useInfiniteMySongs(pageSize = 20) {
+  return useInfiniteQuery({
+    queryKey: ['my-songs', 'infinite'],
+    queryFn: async ({ pageParam = 0 }) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
+
+      const from = pageParam * pageSize;
+      const to = from + pageSize - 1;
 
       const { data, error } = await supabase
         .from('musician_song_knowledge')
@@ -76,10 +79,15 @@ export function useMySongs() {
           )
         `)
         .eq('musician_id', user.id)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .range(from, to);
 
       if (error) throw error;
       return data;
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      return lastPage.length === pageSize ? allPages.length : undefined;
     },
   });
 }

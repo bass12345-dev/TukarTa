@@ -8,24 +8,13 @@ import {
   Star
 } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { Dimensions, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator, FlatList } from 'react-native';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Pill } from '../../components/ui/Pill';
 import { Button } from '../../components/ui/Button';
-import { useMySongs } from '../../utils/hooks/useSongs';
-import { ActivityIndicator } from 'react-native';
+import { useInfiniteMySongs } from '../../utils/hooks/useSongs';
 
 const { width } = Dimensions.get('window');
-
-const MOCK_SONGS = [
-  { id: '1', title: 'Hotel California', artist: 'Eagles', style: 'Rock', key: 'Am', time: '6:30', rating: 5, status: 'LIVE' },
-  { id: '2', title: 'Paraluman', artist: 'Adie', style: 'OPM', key: 'C', time: '3:58', rating: 4, status: 'LIVE' },
-  { id: '3', title: 'Kundiman', artist: 'Parokya ni Edgar', style: 'OPM', key: 'G', time: '4:10', rating: 5, status: 'LIVE' },
-  { id: '4', title: 'Faithfully', artist: 'Journey', style: 'Rock', key: 'E', time: '4:26', rating: 4, status: 'LIVE' },
-  { id: '5', title: 'More Than Words', artist: 'Extreme', style: 'Acoustic Pop', key: 'G', time: '5:56', rating: 5, status: 'LIVE' },
-  { id: '6', title: 'Your Song', artist: 'Parokya ni Edgar', style: 'OPM', key: 'A', time: '2:48', rating: 4, status: 'LEARNING' },
-  { id: '7', title: 'Magbalik', artist: 'Callalily', style: 'OPM', key: 'D', time: '4:27', rating: 3, status: 'LEARNING' },
-];
 
 const CATEGORIES = ['All', 'OPM', 'Rock', 'Pop', 'Acoustic', 'Worship'];
 
@@ -34,16 +23,25 @@ export default function SongDictionaryScreen() {
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   
-  const { data: mySongs, isLoading } = useMySongs();
+  const { 
+    data, 
+    fetchNextPage, 
+    hasNextPage, 
+    isFetchingNextPage, 
+    isLoading 
+  } = useInfiniteMySongs(20);
 
-  // 1. Process data: calculation stats
-  const totalCount = mySongs?.length || 0;
-  const liveCount = mySongs?.filter(s => s.can_perform_live).length || 0;
+  // 1. Flatten pages into a single array
+  const allSongs = data?.pages.flat() || [];
+
+  // 2. Process data: calculation stats
+  const totalCount = allSongs.length;
+  const liveCount = allSongs.filter(s => s.can_perform_live).length;
   const learningCount = totalCount - liveCount;
-  const uniqueGenres = new Set(mySongs?.map(s => (s.song as any)?.genre).filter(Boolean)).size;
+  const uniqueGenres = new Set(allSongs.map(s => (s.song as any)?.genre).filter(Boolean)).size;
 
-  // 2. Filter data
-  const filteredSongs = mySongs?.filter(item => {
+  // 3. Filter data
+  const filteredSongs = allSongs.filter(item => {
     const song = item.song as any;
     if (!song) return false;
     
@@ -59,15 +57,8 @@ export default function SongDictionaryScreen() {
     return searchMatch && categoryMatch;
   });
 
-  const liveSongs = filteredSongs?.filter(s => s.can_perform_live) || [];
-  const learningSongs = filteredSongs?.filter(s => !s.can_perform_live) || [];
-
-  return (
-    <View style={styles.container}>
-      <Stack.Screen options={{ headerShown: false }} />
-      <LinearGradient colors={['#071420', '#0a1a2a']} style={StyleSheet.absoluteFill} />
-
-      {/* Header Section */}
+  const renderHeader = () => (
+    <>
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
@@ -75,7 +66,9 @@ export default function SongDictionaryScreen() {
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
             <Text style={styles.headerTitle}>My Song Dictionary</Text>
-            <Text style={styles.headerSubtitle}>24 songs · 20 live-ready · 4 learning</Text>
+            <Text style={styles.headerSubtitle}>
+              {totalCount} songs · {liveCount} live-ready
+            </Text>
           </View>
           <TouchableOpacity 
             style={styles.addBtn}
@@ -85,7 +78,6 @@ export default function SongDictionaryScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Stats Summary Cards */}
         <View style={styles.statsRow}>
           <StatCard value={String(totalCount)} label="TOTAL" color="#00D4FF" />
           <StatCard value={String(liveCount)} label="LIVE" color="#10B981" />
@@ -94,101 +86,112 @@ export default function SongDictionaryScreen() {
         </View>
       </View>
 
-      <ScrollView 
-        stickyHeaderIndices={[1]} 
-        showsVerticalScrollIndicator={false}
+      <View style={styles.searchSection}>
+        <GlassCard 
+          intensity={10} 
+          noPadding 
+          contentContainerStyle={styles.searchBar}
+        >
+          <Search size={20} color="rgba(150, 175, 200, 0.5)" />
+          <TextInput
+            placeholder="Search songs, artists, keys..."
+            placeholderTextColor="rgba(150, 175, 200, 0.4)"
+            style={styles.searchInput}
+            value={search}
+            onChangeText={setSearch}
+          />
+        </GlassCard>
+      </View>
+
+      <View style={styles.filterStickyContainer}>
+         <View style={styles.filterRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
+            {CATEGORIES.map(cat => (
+              <TouchableOpacity 
+                key={cat} 
+                style={[styles.categoryPill, activeCategory === cat && styles.categoryPillActive]}
+                onPress={() => setActiveCategory(cat)}
+              >
+                <Text style={[styles.categoryText, activeCategory === cat && styles.categoryTextActive]}>{cat}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        <View style={styles.listSubHeader}>
+          <Text style={styles.showingText}>Showing <Text style={{ color: '#00D4FF' }}>{filteredSongs.length}</Text> songs</Text>
+          <TouchableOpacity style={styles.sortBtn}>
+            <Text style={styles.sortText}>Sort: </Text>
+            <View style={styles.sortPicker}>
+              <Text style={styles.sortValue}>Recent</Text>
+              <ChevronLeft size={14} color="rgba(150, 175, 200, 0.6)" style={{ transform: [{ rotate: '-90deg' }] }} />
+            </View>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </>
+  );
+
+  const renderFooter = () => {
+    if (!isFetchingNextPage) return <View style={{ height: 40 }} />;
+    return (
+      <View style={styles.footerLoader}>
+        <ActivityIndicator size="small" color="#00D4FF" />
+        <Text style={styles.footerLoaderText}>Loading more...</Text>
+      </View>
+    );
+  };
+
+  const renderEmpty = () => {
+    if (isLoading) return (
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color="#00D4FF" />
+        <Text style={styles.loaderText}>Fetching your repertoire...</Text>
+      </View>
+    );
+
+    return (
+      <View style={styles.emptyContainer}>
+        <Music size={48} color="rgba(150, 175, 200, 0.2)" />
+        <Text style={styles.emptyTitle}>
+          {search ? "No matches found" : "Your dictionary is empty"}
+        </Text>
+        <Text style={styles.emptySubtitle}>
+          {search ? "Try adjusting your search or filters" : "Start adding songs manually or via screenshot!"}
+        </Text>
+        {!search && (
+          <Button 
+            title="Add first song" 
+            variant="cyan"
+            onPress={() => router.push('/songs/add')}
+            style={{ marginTop: 20 }}
+          />
+        )}
+      </View>
+    );
+  };
+
+  return (
+    <View style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <LinearGradient colors={['#071420', '#0a1a2a']} style={StyleSheet.absoluteFill} />
+
+      <FlatList
+        data={filteredSongs}
+        keyExtractor={(item) => (item.song as any).id}
+        renderItem={({ item }) => <SongListItem item={item} />}
+        ListHeaderComponent={renderHeader}
+        ListFooterComponent={renderFooter}
+        ListEmptyComponent={renderEmpty}
+        onEndReached={() => {
+          if (hasNextPage && !isFetchingNextPage) {
+            fetchNextPage();
+          }
+        }}
+        onEndReachedThreshold={0.5}
         contentContainerStyle={styles.scrollContent}
-      >
-        {/* Search Bar */}
-        <View style={styles.searchSection}>
-          <GlassCard 
-            intensity={10} 
-            noPadding 
-            contentContainerStyle={styles.searchBar}
-          >
-            <Search size={20} color="rgba(150, 175, 200, 0.5)" />
-            <TextInput
-              placeholder="Search songs, artists, keys..."
-              placeholderTextColor="rgba(150, 175, 200, 0.4)"
-              style={styles.searchInput}
-              value={search}
-              onChangeText={setSearch}
-            />
-          </GlassCard>
-        </View>
-
-        {/* Filters & Sorting Sticky */}
-        <View style={styles.filterStickyContainer}>
-           <View style={styles.filterRow}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
-              {CATEGORIES.map(cat => (
-                <TouchableOpacity 
-                  key={cat} 
-                  style={[styles.categoryPill, activeCategory === cat && styles.categoryPillActive]}
-                  onPress={() => setActiveCategory(cat)}
-                >
-                  <Text style={[styles.categoryText, activeCategory === cat && styles.categoryTextActive]}>{cat}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-          <View style={styles.listSubHeader}>
-            <Text style={styles.showingText}>Showing <Text style={{ color: '#00D4FF' }}>{filteredSongs?.length || 0}</Text> songs</Text>
-            <TouchableOpacity style={styles.sortBtn}>
-              <Text style={styles.sortText}>Sort: </Text>
-              <View style={styles.sortPicker}>
-                <Text style={styles.sortValue}>Recent</Text>
-                <ChevronLeft size={14} color="rgba(150, 175, 200, 0.6)" style={{ transform: [{ rotate: '-90deg' }] }} />
-              </View>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Song List Content */}
-        <View style={styles.songsList}>
-          {isLoading ? (
-            <View style={styles.loaderContainer}>
-              <ActivityIndicator size="large" color="#00D4FF" />
-              <Text style={styles.loaderText}>Fetching your repertoire...</Text>
-            </View>
-          ) : totalCount === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Music size={48} color="rgba(150, 175, 200, 0.2)" />
-              <Text style={styles.emptyTitle}>Your dictionary is empty</Text>
-              <Text style={styles.emptySubtitle}>Start adding songs manually or via screenshot!</Text>
-              <Button 
-                title="Add first song" 
-                variant="cyan"
-                onPress={() => router.push('/songs/add')}
-                style={{ marginTop: 20 }}
-              />
-            </View>
-          ) : (
-            <>
-              {/* Live Ready Section */}
-              {liveSongs.length > 0 && (
-                <View>
-                  <SectionHeader label={`LIVE READY (${liveSongs.length})`} color="#10B981" />
-                  {liveSongs.map(item => (
-                    <SongListItem key={(item.song as any).id} item={item} />
-                  ))}
-                </View>
-              )}
-
-              {/* Still Learning Section */}
-              {learningSongs.length > 0 && (
-                <View style={{ marginTop: 24 }}>
-                  <SectionHeader label={`STILL LEARNING (${learningSongs.length})`} color="#F59E0B" />
-                  {learningSongs.map(item => (
-                    <SongListItem key={(item.song as any).id} item={item} />
-                  ))}
-                </View>
-              )}
-            </>
-          )}
-        </View>
-      </ScrollView>
+        showsVerticalScrollIndicator={false}
+      />
     </View>
   );
 }
@@ -233,7 +236,7 @@ function SongListItem({ item }: { item: any }) {
       </View>
       <View style={styles.songMeta}>
         <View style={styles.metaTop}>
-          {song.original_key && <Pill label={song.original_key} variant="cyan" className="px-2" />}
+          {song.original_key && <Pill label={song.original_key} variant="cyan" />}
           {song.bpm && <Text style={styles.timeText}>{song.bpm} BPM</Text>}
         </View>
         {isLive && (
@@ -324,6 +327,7 @@ const styles = StyleSheet.create({
   searchSection: {
     paddingHorizontal: 20,
     marginBottom: 20,
+    marginTop: 20,
   },
   searchBar: {
     flexDirection: 'row',
@@ -332,7 +336,6 @@ const styles = StyleSheet.create({
     height: 50,
     borderRadius: 15,
     gap: 10,
-    padding: 10,
   },
   searchInput: {
     flex: 1,
@@ -430,6 +433,7 @@ const styles = StyleSheet.create({
   songItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 20,
     marginBottom: 20,
     gap: 15,
   },
@@ -509,5 +513,17 @@ const styles = StyleSheet.create({
     fontFamily: 'DM Sans',
     textAlign: 'center',
     paddingHorizontal: 40,
+  },
+  footerLoader: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  footerLoaderText: {
+    color: 'rgba(150, 175, 200, 0.5)',
+    fontSize: 12,
+    fontFamily: 'DM Sans',
   }
 });

@@ -56,10 +56,21 @@ serve(async (req) => {
     // 4. Call Gemini 1.5 Flash
     const prompt = `
       Extract a list of songs from this image. 
-      The image might be a handwritten setlist, a screenshot of notes, or a printed list.
-      Identify both OPM (Filipino) and International songs.
-      Return the results strictly as a JSON array of objects with "title" and "artist" keys.
-      If the artist is not clear, put "Unknown Artist".
+      The image might be:
+      1. A screenshot of a music app (Spotify, Apple Music, YouTube Music).
+      2. A handwritten setlist or notebook page.
+      3. A printed list of songs.
+
+      ### CRITICAL INSTRUCTIONS:
+      - IGNORE all UI elements: Battery percentage, Time/Clock, Network icons, "Play", "Shuffle", "Download", "Repeat", "Library", "Search" buttons.
+      - IGNORE navigation text: "Playlist", "Album", "Followers", "Artist Info", "Lyrics".
+      - IGNORE handwritten "noise": "Set 1", "Break", "Don't forget", "Check mic", or page numbers.
+      - FOCUS ONLY on Song Titles and Artist Names.
+      - For handwritten notes, do your best to decipher messy handwriting.
+      - If the artist is not explicitly mentioned but you can infer it from a well-known song title, please include the most likely artist.
+      - If the artist is truly unknown, use "Unknown Artist".
+
+      Return the results STRICTLY as a JSON array of objects with "title" and "artist" keys.
       Example format: [{"title": "With or Without You", "artist": "U2"}, {"title": "Ang Huling El Bimbo", "artist": "Eraserheads"}]
       Only return the JSON array, no other text.
     `

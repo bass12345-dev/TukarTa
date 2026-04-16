@@ -1,8 +1,8 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack } from 'expo-router';
-import { Music } from 'lucide-react-native';
-import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View, Platform } from 'react-native';
+import { Music, Trash2, X } from 'lucide-react-native';
+import React, { useState, useMemo } from 'react';
+import { ScrollView, StyleSheet, Text, View, Platform, TouchableOpacity } from 'react-native';
 import { Button } from '../ui/Button';
 import { Orb } from '../ui/Orb';
 import { Pill } from '../ui/Pill';
@@ -35,17 +35,35 @@ interface SongReviewProps {
 
 export function SongReview({ onSave, stepLabel, initialSongs = [] }: SongReviewProps) {
   // Map extracted songs to the UI format
-  const mappedSongs = initialSongs.map((s, idx) => ({
-    id: String(idx + 1),
-    title: s.title,
-    artist: s.artist,
-    stars: 5,
-    status: 'LIVE' as const,
-    variant: ['cyan', 'purple', 'gold', 'green', 'pink'][idx % 5]
-  }));
+  const mappedSongs = useMemo(() => {
+    return initialSongs
+      .filter(s => {
+        const title = s.title?.trim() || '';
+        const artist = s.artist?.trim() || '';
+        // Skip if title is empty or too short
+        if (title.length < 2) return false;
+        // Skip things that look like timestamps (e.g. "12:00", "3:45")
+        if (/^\d{1,2}:\d{2}$/.test(title)) return false;
+        // Skip purely numeric strings (likely battery or page numbers)
+        if (/^\d+$/.test(title) && artist.toLowerCase() === 'unknown artist') return false;
+        return true;
+      })
+      .map((s, idx) => ({
+        id: `extracted-${idx}-${Date.now()}`,
+        title: s.title,
+        artist: s.artist,
+        stars: 5,
+        status: 'LIVE' as const,
+        variant: ['cyan', 'purple', 'gold', 'green', 'pink'][idx % 5]
+      }));
+  }, [initialSongs]);
 
-  const [songs] = useState(mappedSongs.length > 0 ? mappedSongs : MOCK_EXTRACTED_SONGS);
+  const [songs, setSongs] = useState(mappedSongs.length > 0 ? mappedSongs : MOCK_EXTRACTED_SONGS);
   const saveMutation = useAddMultipleSongs();
+
+  const removeSong = (id: string) => {
+    setSongs(prev => prev.filter(s => s.id !== id));
+  };
 
   const handleSave = async () => {
     try {
@@ -91,11 +109,20 @@ export function SongReview({ onSave, stepLabel, initialSongs = [] }: SongReviewP
               <View style={styles.stars}>
                 <Text style={styles.starText}>{'★'.repeat(song.stars)}<Text style={styles.starOff}>{'★'.repeat(5 - song.stars)}</Text></Text>
               </View>
-              <Pill 
-                label={song.status} 
-                variant={song.status === 'LIVE' ? 'green' : 'gold'} 
-                style={styles.statusPill} 
-              />
+              <View style={styles.metaBottom}>
+                <Pill 
+                  label={song.status} 
+                  variant={song.status === 'LIVE' ? 'green' : 'gold'} 
+                  style={styles.statusPill} 
+                />
+                <TouchableOpacity 
+                  style={styles.deleteBtn} 
+                  onPress={() => removeSong(song.id)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Trash2 size={14} color="#EF4444" />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         ))}
@@ -183,7 +210,20 @@ const styles = StyleSheet.create({
   },
   songMeta: {
     alignItems: 'flex-end',
-    gap: 5,
+    gap: 6,
+  },
+  metaBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  deleteBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   stars: {
     flexDirection: 'row',

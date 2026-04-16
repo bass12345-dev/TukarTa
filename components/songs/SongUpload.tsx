@@ -7,7 +7,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { Button } from '../ui/Button';
 import { supabase } from '../../utils/supabase';
 import { useAnalyzeScreenshot } from '../../utils/hooks/useSongs';
-import { ActivityIndicator } from 'react-native';
+import { ActivityIndicator, Alert } from 'react-native';
+import { useRef } from 'react';
 
 interface SongUploadProps {
   onBack: () => void;
@@ -20,6 +21,7 @@ export function SongUpload({ onBack, onAnalyze, onSearch }: SongUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [currentProgress, setCurrentProgress] = useState(0); // For bulk upload progress
   const [selectedImage, setSelectedImage] = useState<string | null>(null); // For full preview
+  const abortControllerRef = useRef<AbortController | null>(null);
   const analyzeMutation = useAnalyzeScreenshot();
 
   const pickImage = async () => {
@@ -60,12 +62,16 @@ export function SongUpload({ onBack, onAnalyze, onSearch }: SongUploadProps) {
 
     try {
       setUploading(true);
+      abortControllerRef.current = new AbortController();
       const allExtractedSongs: Array<{ title: string; artist: string }> = [];
       
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
       for (let i = 0; i < images.length; i++) {
+        // Double check cancellation before each major step
+        if (abortControllerRef.current?.signal.aborted) break;
+        
         setCurrentProgress(i + 1);
         const imageUri = images[i];
         
@@ -85,8 +91,19 @@ export function SongUpload({ onBack, onAnalyze, onSearch }: SongUploadProps) {
         if (uploadError) throw uploadError;
 
         // 3. Trigger AI Analysis
+        // Note: Mutation itself doesn't easily support signal in mutateAsync 
+        // without wrapping, so we'll just check signal before and after.
+        if (abortControllerRef.current?.signal.aborted) break;
+        
         const songs = await analyzeMutation.mutateAsync(filePath);
+        
+        if (abortControllerRef.current?.signal.aborted) break;
         allExtractedSongs.push(...songs);
+      }
+      
+      // If user cancelled, don't proceed to review
+      if (abortControllerRef.current?.signal.aborted) {
+        return;
       }
       
       // 4. De-duplicate results intelligently
@@ -108,6 +125,15 @@ export function SongUpload({ onBack, onAnalyze, onSearch }: SongUploadProps) {
       console.error('Analysis failed:', error);
       alert('Failed to analyze: ' + error.message);
     } finally {
+      setUploading(false);
+      setCurrentProgress(0);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleCancel = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
       setUploading(false);
       setCurrentProgress(0);
     }
@@ -194,11 +220,23 @@ export function SongUpload({ onBack, onAnalyze, onSearch }: SongUploadProps) {
             style={{ opacity: (images.length > 0 && !uploading) ? 1 : 0.6 }}
             icon={uploading ? <ActivityIndicator size="small" color="#FFF" /> : null}
           />
-          <Button 
-            title="Search manually instead" 
-            variant="ghost" 
-            onPress={onSearch} 
-          />
+          
+          {uploading && (
+            <Button 
+              title="Cancel Analysis" 
+              variant="ghost" 
+              onPress={handleCancel}
+              style={styles.cancelButton}
+            />
+          )}
+
+          {!uploading && (
+            <Button 
+              title="Search manually instead" 
+              variant="ghost" 
+              onPress={onSearch} 
+            />
+          )}
         </View>
       </ScrollView>
 
@@ -387,6 +425,10 @@ const styles = StyleSheet.create({
   btnSection: {
     gap: 10,
     paddingBottom: 32,
+  },
+  cancelButton: {
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderWidth: 1,
   },
   modalOverlay: {
     flex: 1,
