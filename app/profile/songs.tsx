@@ -36,9 +36,9 @@ export default function SongDictionaryScreen() {
 
   // 2. Process data: calculation stats
   const totalCount = allSongs.length;
-  const liveCount = allSongs.filter(s => s.can_perform_live).length;
+  const liveCount = allSongs.filter(item => item.can_perform_live).length;
   const learningCount = totalCount - liveCount;
-  const uniqueGenres = new Set(allSongs.map(s => (s.song as any)?.genre).filter(Boolean)).size;
+  const uniqueGenres = new Set(allSongs.map(item => item.genre || (item.song as any)?.genre).filter(Boolean)).size;
 
   // 3. Filter data
   const filteredSongs = allSongs.filter(item => {
@@ -51,8 +51,9 @@ export default function SongDictionaryScreen() {
       song.artist.toLowerCase().includes(search.toLowerCase());
     
     // Category filter
+    const effectiveGenre = item.genre || song.genre;
     const categoryMatch = activeCategory === 'All' || 
-      song.genre === activeCategory;
+      effectiveGenre === activeCategory;
       
     return searchMatch && categoryMatch;
   });
@@ -227,7 +228,7 @@ function SongListItem({ item }: { item: any }) {
       </View>
       <View style={styles.songInfo}>
         <Text style={styles.songTitle}>{song.title}</Text>
-        <Text style={styles.songSubtitle}>{song.artist} · {song.genre || 'General'}</Text>
+        <Text style={styles.songSubtitle}>{song.artist} · {item.genre || song.genre || 'General'}</Text>
         <View style={styles.starsRow}>
           {[1,2,3,4,5].map(i => (
             <Star key={i} size={10} color="#F59E0B" fill={i <= item.confidence_level ? "#F59E0B" : "transparent"} />

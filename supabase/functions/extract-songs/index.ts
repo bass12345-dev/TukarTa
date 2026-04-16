@@ -69,9 +69,10 @@ serve(async (req) => {
       - For handwritten notes, do your best to decipher messy handwriting.
       - If the artist is not explicitly mentioned but you can infer it from a well-known song title, please include the most likely artist.
       - If the artist is truly unknown, use "Unknown Artist".
+      - For "genre", identify if it fits one of these: OPM, Rock, Pop, Acoustic, Worship, or Ballad. If it doesn't fit, provide a short 1-word genre.
 
-      Return the results STRICTLY as a JSON array of objects with "title" and "artist" keys.
-      Example format: [{"title": "With or Without You", "artist": "U2"}, {"title": "Ang Huling El Bimbo", "artist": "Eraserheads"}]
+      Return the results STRICTLY as a JSON array of objects with "title", "artist", and "genre" keys.
+      Example format: [{"title": "With or Without You", "artist": "U2", "genre": "Rock"}, {"title": "Ang Huling El Bimbo", "artist": "Eraserheads", "genre": "OPM"}]
       Only return the JSON array, no other text.
     `
 

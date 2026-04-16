@@ -1,3 +1,4 @@
+import { useAuth } from '@/context/auth';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import {
@@ -9,34 +10,29 @@ import React from 'react';
 import { Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Pill } from '../../components/ui/Pill';
-import { useAuth } from '../../context/auth';
-import { supabase } from '../../utils/supabase';
+import { useMusicianProfile, useMyBands, useSongStats } from '../../utils/hooks/useMusician';
+import { useInfiniteMySongs } from '../../utils/hooks/useSongs';
 
 const { width } = Dimensions.get('window');
 
 export default function ProfileScreen() {
   const { user } = useAuth();
   const router = useRouter();
-  const [profile, setProfile] = React.useState<any>(null);
+  
+  const { data: profileData, isLoading: isProfileLoading } = useMusicianProfile(user?.id);
+  const { data: bandData } = useMyBands();
+  const { data: statsData } = useSongStats(user?.id);
+  const { data: songsData } = useInfiniteMySongs(4); // Just get the latest 4
 
-  React.useEffect(() => {
-    if (user) {
-      const fetchProfile = async () => {
-        const { data } = await supabase
-          .from('users')
-          .select('*, musician_profiles(*)')
-          .eq('id', user.id)
-          .single();
-        if (data) setProfile(data);
-      };
-      fetchProfile();
-    }
-  }, [user]);
+  const profile = profileData;
+  const mProfile = profile?.musician_profiles?.[0];
+  const allSongs = songsData?.pages.flat() || [];
+  const recentSongs = allSongs.slice(0, 4);
 
-  // Sample data to match screenshot perfectly if DB is empty
-  const displayName = profile?.display_name || "Marco Rivera";
-  const handle = profile?.handle || "@marcorivera";
-  const location = profile?.location || "Cebu City, PH";
+  // Real data mapping
+  const displayName = profile?.display_name || user?.email?.split('@')[0] || "Guest Musician";
+  const handle = mProfile?.handle || `@${displayName.toLowerCase().replace(/\s+/g, '')}`;
+  const location = profile?.city || "Unknown Location";
   const initials = displayName.split(' ').map((n: any) => n[0]).join('').toUpperCase().slice(0, 2);
 
   return (
@@ -102,17 +98,17 @@ export default function ProfileScreen() {
 
           {/* Stats Bar */}
           <View style={styles.statsContainer}>
-            <StatItem value="24" label="Songs" hasBorder />
-            <StatItem value="14" label="Gigs" hasBorder />
-            <StatItem value="4.8" label="Rating" hasBorder isRating />
-            <StatItem value="8" label="Yrs Exp" />
+            <StatItem value={String(statsData?.total || 0)} label="Songs" hasBorder />
+            <StatItem value="0" label="Gigs" hasBorder />
+            <StatItem value={mProfile?.avg_rating ? String(mProfile.avg_rating) : "0"} label="Rating" hasBorder isRating />
+            <StatItem value={String(mProfile?.years_exp || 0)} label="Yrs Exp" />
           </View>
 
           {/* About Section */}
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>ABOUT</Text>
             <Text style={styles.bioText}>
-              Acoustic singer-guitarist from Cebu. 8 years of live gigging across bars, cafés, weddings, and church worship. OPM, Pop, and Classic Rock specialist.
+              {profile?.bio || "No bio added yet. Edit your profile to tell us about your musical journey!"}
             </Text>
           </View>
 
@@ -120,12 +116,13 @@ export default function ProfileScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>GENRES</Text>
             <View style={styles.genreList}>
-              <Pill label="OPM" variant="cyan" />
-              <Pill label="Acoustic" variant="cyan" />
-              <Pill label="Pop" variant="cyan" />
-              <Pill label="Classic Rock" variant="purple" />
-              <Pill label="80s / 90s" variant="purple" />
-              <Pill label="Kundiman" variant="gold" />
+              {mProfile?.genres?.length > 0 ? (
+                mProfile.genres.map((g: string) => (
+                  <Pill key={g} label={g} variant="cyan" />
+                ))
+              ) : (
+                <Text style={styles.emptyText}>No genres listed</Text>
+              )}
             </View>
           </View>
 
@@ -144,17 +141,28 @@ export default function ProfileScreen() {
           {/* Songs I Know */}
           <View style={styles.section}>            
             <View style={styles.songList}>
-              <SongRow title="Hotel California" subtitle="Eagles · Rock" rating={5} status="LIVE" statusVariant="green" iconColor="#00D4FF" />
-              <SongRow title="Paraluman" subtitle="Adie · OPM" rating={4} status="LIVE" statusVariant="green" iconColor="#F59E0B" />
-              <SongRow title="Kundiman" subtitle="Parokya ni Edgar · OPM" rating={5} status="LIVE" statusVariant="green" iconColor="#8B5CF6" />
-              <SongRow title="Sana" subtitle="I Belong to the Zoo · OPM" rating={3} status="LEARNING" statusVariant="gold" iconColor="#EC4899" />
+              {recentSongs.length > 0 ? (
+                recentSongs.map((item: any) => (
+                  <SongRow 
+                    key={item.song.id}
+                    title={item.song.title} 
+                    subtitle={`${item.song.artist} · ${item.genre || item.song.genre || 'General'}`} 
+                    rating={item.confidence_level} 
+                    status={item.can_perform_live ? "LIVE" : "LEARNING"} 
+                    statusVariant={item.can_perform_live ? "green" : "gold"} 
+                    iconColor={item.can_perform_live ? "#00D4FF" : "#F59E0B"} 
+                  />
+                ))
+              ) : (
+                <Text style={styles.emptyText}>No songs in dictionary yet</Text>
+              )}
             </View>
 
             <TouchableOpacity 
               style={styles.viewAllBtn}
               onPress={() => router.push('/profile/songs')}
             >
-              <Text style={styles.viewAllText}>View all 24 songs →</Text>
+              <Text style={styles.viewAllText}>View all {statsData?.total || 0} songs →</Text>
             </TouchableOpacity>
           </View>
 
@@ -228,8 +236,20 @@ export default function ProfileScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>MY BANDS</Text>
             <View style={{ gap: 12 }}>
-              <BandCard title="Tunog Cebu" subtitle="4 members · OPM, Acoustic" initials="TC" role="LEADER" roleVariant="cyan" />
-              <BandCard title="Sunday Session" subtitle="3 members · Rock, Pop" initials="SS" role="MEMBER" roleVariant="purple" />
+              {bandData?.length ? (
+                bandData.map((item: any) => (
+                  <BandCard 
+                    key={item.id}
+                    title={item.band.name} 
+                    subtitle={`${item.band.member_count?.[0]?.count || 1} members · ${item.band.genre || 'Various'}`} 
+                    initials={item.band.name.split(' ').map((n: any) => n[0]).join('').toUpperCase().slice(0, 2)} 
+                    role={item.role.toUpperCase()} 
+                    roleVariant={item.role === 'leader' ? 'cyan' : 'purple'} 
+                  />
+                ))
+              ) : (
+                <Text style={styles.emptyText}>Not a member of any bands yet</Text>
+              )}
             </View>
           </View>
 
@@ -691,5 +711,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: 'rgba(150, 175, 200, 0.6)',
     fontFamily: 'DM Sans',
+  },
+  emptyText: {
+    fontSize: 13,
+    color: 'rgba(150, 175, 200, 0.4)',
+    fontFamily: 'DM Sans',
+    fontStyle: 'italic',
   }
 });

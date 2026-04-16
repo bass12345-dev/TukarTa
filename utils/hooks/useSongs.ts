@@ -69,6 +69,7 @@ export function useInfiniteMySongs(pageSize = 20) {
           confidence_level,
           can_perform_live,
           source,
+          genre,
           song:songs (
             id,
             title,
@@ -96,7 +97,7 @@ export function useAddMultipleSongs() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (songs: Array<{ title: string; artist: string }>) => {
+    mutationFn: async (songs: Array<{ title: string; artist: string; genre: string }>) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
@@ -130,12 +131,13 @@ export function useAddMultipleSongs() {
       if (!songData || songData.length === 0) return;
 
       // 3. Batch Upsert into Musician Song Knowledge
-      const knowledgeToSave = songData.map(song => ({
+      const knowledgeToSave = songData.map((song, idx) => ({
         musician_id: user.id,
         song_id: song.id,
         confidence_level: 5,
         can_perform_live: true,
-        source: 'screenshot'
+        source: 'screenshot',
+        genre: songs[idx].genre
       }));
 
       const { error: knowledgeError } = await supabase
@@ -161,7 +163,7 @@ export function useAnalyzeScreenshot() {
       });
 
       if (error) throw error;
-      return data.songs as Array<{ title: string; artist: string }>;
+      return data.songs as Array<{ title: string; artist: string; genre: string }>;
     },
   });
 }

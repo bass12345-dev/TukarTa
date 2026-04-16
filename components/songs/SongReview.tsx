@@ -19,19 +19,21 @@ const THEME = {
 };
 
 const MOCK_EXTRACTED_SONGS = [
-  { id: '1', title: 'Hotel California', artist: 'Eagles', stars: 5, status: 'LIVE' as const, variant: 'cyan' },
-  { id: '2', title: 'Paraluman', artist: 'Adie', stars: 4, status: 'LIVE' as const, variant: 'purple' },
-  { id: '3', title: 'Kundiman', artist: 'Parokya ni Edgar', stars: 5, status: 'LIVE' as const, variant: 'gold' },
-  { id: '4', title: 'Sana', artist: 'I Belong to the Zoo', stars: 3, status: 'LEARNING' as const, variant: 'pink' },
-  { id: '5', title: 'Faithfully', artist: 'Journey', stars: 4, status: 'LIVE' as const, variant: 'cyan' },
-  { id: '6', title: 'Harana', artist: 'Parokya ni Edgar', stars: 5, status: 'LIVE' as const, variant: 'green' },
+  { id: '1', title: 'Hotel California', artist: 'Eagles', genre: 'Rock', stars: 5, status: 'LIVE' as const, variant: 'cyan' },
+  { id: '2', title: 'Paraluman', artist: 'Adie', genre: 'OPM', stars: 4, status: 'LIVE' as const, variant: 'purple' },
+  { id: '3', title: 'Kundiman', artist: 'Parokya ni Edgar', genre: 'OPM', stars: 5, status: 'LIVE' as const, variant: 'gold' },
+  { id: '4', title: 'Sana', artist: 'I Belong to the Zoo', genre: 'OPM', stars: 3, status: 'LEARNING' as const, variant: 'pink' },
+  { id: '5', title: 'Faithfully', artist: 'Journey', genre: 'Rock', stars: 4, status: 'LIVE' as const, variant: 'cyan' },
+  { id: '6', title: 'Harana', artist: 'Parokya ni Edgar', genre: 'OPM', stars: 5, status: 'LIVE' as const, variant: 'green' },
 ];
 
 interface SongReviewProps {
   onSave: () => void;
   stepLabel?: string;
-  initialSongs?: Array<{ title: string; artist: string }>;
+  initialSongs?: Array<{ title: string; artist: string; genre: string }>;
 }
+
+const CATEGORIES = ['OPM', 'Rock', 'Pop', 'Acoustic', 'Worship', 'Ballad'];
 
 export function SongReview({ onSave, stepLabel, initialSongs = [] }: SongReviewProps) {
   // Map extracted songs to the UI format
@@ -52,6 +54,7 @@ export function SongReview({ onSave, stepLabel, initialSongs = [] }: SongReviewP
         id: `extracted-${idx}-${Date.now()}`,
         title: s.title,
         artist: s.artist,
+        genre: s.genre || 'Pop',
         stars: 5,
         status: 'LIVE' as const,
         variant: ['cyan', 'purple', 'gold', 'green', 'pink'][idx % 5]
@@ -65,12 +68,17 @@ export function SongReview({ onSave, stepLabel, initialSongs = [] }: SongReviewP
     setSongs(prev => prev.filter(s => s.id !== id));
   };
 
+  const updateGenre = (id: string, genre: string) => {
+    setSongs(prev => prev.map(s => s.id === id ? { ...s, genre } : s));
+  };
+
   const handleSave = async () => {
     try {
-      // Prepare songs for saving (just title and artist)
+      // Prepare songs for saving
       const songsToSave = songs.map(s => ({
         title: s.title,
-        artist: s.artist
+        artist: s.artist,
+        genre: s.genre
       }));
       
       await saveMutation.mutateAsync(songsToSave);
@@ -104,6 +112,28 @@ export function SongReview({ onSave, stepLabel, initialSongs = [] }: SongReviewP
             <View style={styles.songInfo}>
               <Text style={styles.songTitle}>{song.title}</Text>
               <Text style={styles.songArtist}>{song.artist}</Text>
+              
+              <View style={styles.genrePicker}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.genreScroll}>
+                  {CATEGORIES.map(cat => (
+                    <TouchableOpacity 
+                      key={cat} 
+                      onPress={() => updateGenre(song.id, cat)}
+                      style={[
+                        styles.genreMiniPill, 
+                        song.genre === cat && styles.genreMiniPillActive
+                      ]}
+                    >
+                      <Text style={[
+                        styles.genreMiniText,
+                        song.genre === cat && styles.genreMiniTextActive
+                      ]}>
+                        {cat}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
             </View>
             <View style={styles.songMeta}>
               <View style={styles.stars}>
@@ -207,6 +237,34 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     color: THEME.textSec,
     fontFamily: 'DM Sans',
+    marginBottom: 8,
+  },
+  genrePicker: {
+    marginTop: 2,
+  },
+  genreScroll: {
+    gap: 6,
+    paddingRight: 10,
+  },
+  genreMiniPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  genreMiniPillActive: {
+    backgroundColor: 'rgba(0, 212, 255, 0.1)',
+    borderColor: '#00D4FF',
+  },
+  genreMiniText: {
+    fontSize: 10,
+    color: 'rgba(150, 175, 200, 0.6)',
+    fontFamily: 'DM Sans Bold',
+  },
+  genreMiniTextActive: {
+    color: '#00D4FF',
   },
   songMeta: {
     alignItems: 'flex-end',
