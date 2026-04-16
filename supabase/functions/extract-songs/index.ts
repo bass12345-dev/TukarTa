@@ -43,9 +43,15 @@ serve(async (req) => {
       throw new Error(`Failed to download file: ${downloadError.message}`)
     }
 
-    // 3. Convert blob to base64 for Gemini
+    // 3. Convert blob to base64 for Gemini (Safer way to avoid stack overflow)
     const arrayBuffer = await fileData.arrayBuffer()
-    const base64Image = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
+    const uint8Array = new Uint8Array(arrayBuffer)
+    let binary = ''
+    const chunk_size = 8192
+    for (let i = 0; i < uint8Array.length; i += chunk_size) {
+      binary += String.fromCharCode(...uint8Array.slice(i, i + chunk_size))
+    }
+    const base64Image = btoa(binary)
 
     // 4. Call Gemini 1.5 Flash
     const prompt = `

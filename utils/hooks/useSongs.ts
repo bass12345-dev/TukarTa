@@ -53,6 +53,37 @@ export function useAddSong() {
   });
 }
 
+export function useMySongs() {
+  return useQuery({
+    queryKey: ['my-songs'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('musician_song_knowledge')
+        .select(`
+          confidence_level,
+          can_perform_live,
+          source,
+          song:songs (
+            id,
+            title,
+            artist,
+            genre,
+            original_key,
+            bpm
+          )
+        `)
+        .eq('musician_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
 export function useAddMultipleSongs() {
   const queryClient = useQueryClient();
 
@@ -61,47 +92,51 @@ export function useAddMultipleSongs() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      for (const song of songs) {
-        // Normalization for better matching
-        const normalizedTitle = song.title.trim();
-        const normalizedArtist = song.artist.trim();
+      // 1. Pre-process and normalize in-memory to prevent duplicates in the batch
+      const normalizedSongs = songs.map(s => ({
+        title: s.title.trim(),
+        artist: (s.artist || 'Unknown Artist').trim(),
+        added_by: user.id
+      }));
 
-        // 1. Intelligent Case-Insensitive Lookup
-        const { data: existingSong } = await supabase
-          .from('songs')
-          .select('id')
-          .ilike('title', normalizedTitle)
-          .ilike('artist', normalizedArtist)
-          .maybeSingle();
+      // Unique-ify by title and artist (normalized)
+      const uniqueToSave = Array.from(new Map(
+        normalizedSongs.map(s => [`${s.title.toLowerCase()}|${s.artist.toLowerCase()}`, s])
+      ).values());
 
-        let songId = existingSong?.id;
+      // 2. Batch Upsert into Songs table
+      // select() returns all matching/inserted rows so we get the IDs
+      const { data: songData, error: songError } = await supabase
+        .from('songs')
+        .upsert(uniqueToSave, { 
+          onConflict: 'title, artist',
+          ignoreDuplicates: false // We want the IDs back for existing ones too
+        })
+        .select('id');
 
-        if (!songId) {
-          // 2. Insert if not found (using upsert as safety)
-          const { data: newSong, error: songError } = await supabase
-            .from('songs')
-            .upsert({
-              title: normalizedTitle,
-              artist: normalizedArtist,
-              added_by: user.id
-            }, { onConflict: 'title, artist' })
-            .select()
-            .single();
+      if (songError) {
+        console.error('Batch song upsert failed:', songError);
+        throw songError;
+      }
 
-          if (songError) continue;
-          songId = newSong.id;
-        }
+      if (!songData || songData.length === 0) return;
 
-        // 3. Add to user's knowledge (using upsert to avoid error if already linked)
-        await supabase
-          .from('musician_song_knowledge')
-          .upsert({
-            musician_id: user.id,
-            song_id: songId,
-            confidence_level: 5,
-            can_perform_live: true,
-            source: 'screenshot'
-          }, { onConflict: 'musician_id, song_id' });
+      // 3. Batch Upsert into Musician Song Knowledge
+      const knowledgeToSave = songData.map(song => ({
+        musician_id: user.id,
+        song_id: song.id,
+        confidence_level: 5,
+        can_perform_live: true,
+        source: 'screenshot'
+      }));
+
+      const { error: knowledgeError } = await supabase
+        .from('musician_song_knowledge')
+        .upsert(knowledgeToSave, { onConflict: 'musician_id, song_id' });
+
+      if (knowledgeError) {
+        console.error('Batch knowledge upsert failed:', knowledgeError);
+        throw knowledgeError;
       }
     },
     onSuccess: () => {

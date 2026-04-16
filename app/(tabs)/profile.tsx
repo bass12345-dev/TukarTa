@@ -1,25 +1,16 @@
-import React from 'react';
-import { View, Text, ScrollView, StyleSheet, Image, TouchableOpacity, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { 
-  Edit2, 
-  MapPin, 
-  Star, 
-  Music, 
-  CheckCircle2, 
-  Plus, 
-  ChevronRight,
-  MoreVertical,
-  Share2,
-  Settings
-} from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import { useAuth } from '../../context/auth';
-import { supabase } from '../../utils/supabase';
+import {
+  Music,
+  Settings,
+  Star
+} from 'lucide-react-native';
+import React from 'react';
+import { Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Pill } from '../../components/ui/Pill';
-import { Button } from '../../components/ui/Button';
-import { cn } from '../../utils/cn';
+import { useAuth } from '../../context/auth';
+import { supabase } from '../../utils/supabase';
 
 const { width } = Dimensions.get('window');
 
@@ -151,15 +142,7 @@ export default function ProfileScreen() {
           </View>
 
           {/* Songs I Know */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionLabel}>SONGS I KNOW <Text style={{ color: '#00D4FF' }}>(24)</Text></Text>
-              <TouchableOpacity className="flex-row items-center gap-1">
-                <Plus size={14} color="#00D4FF" />
-                <Text style={styles.addText}>Add songs</Text>
-              </TouchableOpacity>
-            </View>
-            
+          <View style={styles.section}>            
             <View style={styles.songList}>
               <SongRow title="Hotel California" subtitle="Eagles · Rock" rating={5} status="LIVE" statusVariant="green" iconColor="#00D4FF" />
               <SongRow title="Paraluman" subtitle="Adie · OPM" rating={4} status="LIVE" statusVariant="green" iconColor="#F59E0B" />

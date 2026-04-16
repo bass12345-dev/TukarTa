@@ -11,6 +11,9 @@ import React, { useState } from 'react';
 import { Dimensions, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Pill } from '../../components/ui/Pill';
+import { Button } from '../../components/ui/Button';
+import { useMySongs } from '../../utils/hooks/useSongs';
+import { ActivityIndicator } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -30,6 +33,34 @@ export default function SongDictionaryScreen() {
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
+  
+  const { data: mySongs, isLoading } = useMySongs();
+
+  // 1. Process data: calculation stats
+  const totalCount = mySongs?.length || 0;
+  const liveCount = mySongs?.filter(s => s.can_perform_live).length || 0;
+  const learningCount = totalCount - liveCount;
+  const uniqueGenres = new Set(mySongs?.map(s => (s.song as any)?.genre).filter(Boolean)).size;
+
+  // 2. Filter data
+  const filteredSongs = mySongs?.filter(item => {
+    const song = item.song as any;
+    if (!song) return false;
+    
+    // Search filter
+    const searchMatch = search.toLowerCase() === '' || 
+      song.title.toLowerCase().includes(search.toLowerCase()) ||
+      song.artist.toLowerCase().includes(search.toLowerCase());
+    
+    // Category filter
+    const categoryMatch = activeCategory === 'All' || 
+      song.genre === activeCategory;
+      
+    return searchMatch && categoryMatch;
+  });
+
+  const liveSongs = filteredSongs?.filter(s => s.can_perform_live) || [];
+  const learningSongs = filteredSongs?.filter(s => !s.can_perform_live) || [];
 
   return (
     <View style={styles.container}>
@@ -56,10 +87,10 @@ export default function SongDictionaryScreen() {
 
         {/* Stats Summary Cards */}
         <View style={styles.statsRow}>
-          <StatCard value="24" label="TOTAL" color="#00D4FF" />
-          <StatCard value="20" label="LIVE" color="#10B981" />
-          <StatCard value="4" label="LEARNING" color="#F59E0B" />
-          <StatCard value="6" label="GENRES" color="#8B5CF6" />
+          <StatCard value={String(totalCount)} label="TOTAL" color="#00D4FF" />
+          <StatCard value={String(liveCount)} label="LIVE" color="#10B981" />
+          <StatCard value={String(learningCount)} label="LEARNING" color="#F59E0B" />
+          <StatCard value={String(uniqueGenres)} label="GENRES" color="#8B5CF6" />
         </View>
       </View>
 
@@ -103,11 +134,11 @@ export default function SongDictionaryScreen() {
           </View>
 
           <View style={styles.listSubHeader}>
-            <Text style={styles.showingText}>Showing <Text style={{ color: '#00D4FF' }}>7</Text> songs</Text>
+            <Text style={styles.showingText}>Showing <Text style={{ color: '#00D4FF' }}>{filteredSongs?.length || 0}</Text> songs</Text>
             <TouchableOpacity style={styles.sortBtn}>
               <Text style={styles.sortText}>Sort: </Text>
               <View style={styles.sortPicker}>
-                <Text style={styles.sortValue}>A → Z</Text>
+                <Text style={styles.sortValue}>Recent</Text>
                 <ChevronLeft size={14} color="rgba(150, 175, 200, 0.6)" style={{ transform: [{ rotate: '-90deg' }] }} />
               </View>
             </TouchableOpacity>
@@ -116,19 +147,46 @@ export default function SongDictionaryScreen() {
 
         {/* Song List Content */}
         <View style={styles.songsList}>
-          {/* Live Ready Section */}
-          <SectionHeader label="LIVE READY (5)" color="#10B981" />
-          {MOCK_SONGS.filter(s => s.status === 'LIVE').map(song => (
-            <SongListItem key={song.id} song={song} />
-          ))}
+          {isLoading ? (
+            <View style={styles.loaderContainer}>
+              <ActivityIndicator size="large" color="#00D4FF" />
+              <Text style={styles.loaderText}>Fetching your repertoire...</Text>
+            </View>
+          ) : totalCount === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Music size={48} color="rgba(150, 175, 200, 0.2)" />
+              <Text style={styles.emptyTitle}>Your dictionary is empty</Text>
+              <Text style={styles.emptySubtitle}>Start adding songs manually or via screenshot!</Text>
+              <Button 
+                title="Add first song" 
+                variant="cyan"
+                onPress={() => router.push('/songs/add')}
+                style={{ marginTop: 20 }}
+              />
+            </View>
+          ) : (
+            <>
+              {/* Live Ready Section */}
+              {liveSongs.length > 0 && (
+                <View>
+                  <SectionHeader label={`LIVE READY (${liveSongs.length})`} color="#10B981" />
+                  {liveSongs.map(item => (
+                    <SongListItem key={(item.song as any).id} item={item} />
+                  ))}
+                </View>
+              )}
 
-          {/* Still Learning Section */}
-          <View style={{ marginTop: 24 }}>
-            <SectionHeader label="STILL LEARNING (2)" color="#F59E0B" />
-            {MOCK_SONGS.filter(s => s.status === 'LEARNING').map(song => (
-              <SongListItem key={song.id} song={song} />
-            ))}
-          </View>
+              {/* Still Learning Section */}
+              {learningSongs.length > 0 && (
+                <View style={{ marginTop: 24 }}>
+                  <SectionHeader label={`STILL LEARNING (${learningSongs.length})`} color="#F59E0B" />
+                  {learningSongs.map(item => (
+                    <SongListItem key={(item.song as any).id} item={item} />
+                  ))}
+                </View>
+              )}
+            </>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -153,9 +211,11 @@ function SectionHeader({ label, color }: any) {
   );
 }
 
-function SongListItem({ song }: any) {
-  const iconColor = song.status === 'LIVE' ? '#00D4FF' : '#F59E0B';
-  const bgColor = song.status === 'LIVE' ? 'rgba(0, 212, 255, 0.1)' : 'rgba(245, 158, 11, 0.1)';
+function SongListItem({ item }: { item: any }) {
+  const song = item.song;
+  const isLive = item.can_perform_live;
+  const iconColor = isLive ? '#00D4FF' : '#F59E0B';
+  const bgColor = isLive ? 'rgba(0, 212, 255, 0.1)' : 'rgba(245, 158, 11, 0.1)';
 
   return (
     <TouchableOpacity style={styles.songItem}>
@@ -164,19 +224,19 @@ function SongListItem({ song }: any) {
       </View>
       <View style={styles.songInfo}>
         <Text style={styles.songTitle}>{song.title}</Text>
-        <Text style={styles.songSubtitle}>{song.artist} · {song.style}</Text>
+        <Text style={styles.songSubtitle}>{song.artist} · {song.genre || 'General'}</Text>
         <View style={styles.starsRow}>
           {[1,2,3,4,5].map(i => (
-            <Star key={i} size={10} color="#F59E0B" fill={i <= song.rating ? "#F59E0B" : "transparent"} />
+            <Star key={i} size={10} color="#F59E0B" fill={i <= item.confidence_level ? "#F59E0B" : "transparent"} />
           ))}
         </View>
       </View>
       <View style={styles.songMeta}>
         <View style={styles.metaTop}>
-          <Pill label={song.key} variant="cyan" className="px-2" />
-          <Text style={styles.timeText}>{song.time}</Text>
+          {song.original_key && <Pill label={song.original_key} variant="cyan" className="px-2" />}
+          {song.bpm && <Text style={styles.timeText}>{song.bpm} BPM</Text>}
         </View>
-        {song.status === 'LIVE' && (
+        {isLive && (
           <Text style={styles.liveTag}>LIVE</Text>
         )}
       </View>
@@ -421,5 +481,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
+  },
+  loaderContainer: {
+    paddingVertical: 60,
+    alignItems: 'center',
+    gap: 12,
+  },
+  loaderText: {
+    color: 'rgba(150, 175, 200, 0.6)',
+    fontFamily: 'DM Sans',
+    fontSize: 14,
+  },
+  emptyContainer: {
+    paddingVertical: 80,
+    alignItems: 'center',
+    gap: 12,
+  },
+  emptyTitle: {
+    color: '#FFF',
+    fontSize: 18,
+    fontFamily: 'DM Sans Bold',
+    marginTop: 10,
+  },
+  emptySubtitle: {
+    color: 'rgba(150, 175, 200, 0.6)',
+    fontSize: 14,
+    fontFamily: 'DM Sans',
+    textAlign: 'center',
+    paddingHorizontal: 40,
   }
 });
