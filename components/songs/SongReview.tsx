@@ -33,7 +33,7 @@ interface SongReviewProps {
   initialSongs?: Array<{ title: string; artist: string; genre: string }>;
 }
 
-const CATEGORIES = ['OPM', 'Rock', 'Pop', 'Acoustic', 'Worship', 'Ballad'];
+const CATEGORIES = ['OPM', 'Rock', 'Pop', 'Acoustic', 'Worship', 'Ballad', 'Hip-Hop', 'R&B', 'Electronic', 'Country', 'Jazz', 'Classical', 'Blues', 'Folk', 'Metal', 'Punk', 'Reggae', 'Soul', 'Latin'];
 
 export function SongReview({ onSave, stepLabel, initialSongs = [] }: SongReviewProps) {
   // Map extracted songs to the UI format

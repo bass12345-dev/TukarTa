@@ -16,7 +16,7 @@ import { useInfiniteMySongs } from '../../utils/hooks/useSongs';
 
 const { width } = Dimensions.get('window');
 
-const CATEGORIES = ['All', 'OPM', 'Rock', 'Pop', 'Acoustic', 'Worship'];
+const CATEGORIES = ['All', 'OPM', 'Rock', 'Pop', 'Acoustic', 'Worship', 'Ballad', 'Hip-Hop', 'R&B', 'Electronic', 'Country', 'Jazz', 'Classical', 'Blues', 'Folk', 'Metal', 'Punk', 'Reggae', 'Soul', 'Latin'];
 
 export default function SongDictionaryScreen() {
   const router = useRouter();
