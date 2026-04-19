@@ -10,78 +10,35 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import { Plus, ChevronRight, Calendar, Music2, Clock, ListMusic } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { CreateGigModal } from '../../components/gigs/CreateGigModal';
+import { useMyGigs } from '../../utils/hooks/useMusician';
 
-const MOCK_SETLISTS = [
-  {
-    id: '1',
-    title: 'Acoustic Vibes Mix',
-    venue: 'Handuraw Café',
-    date: 'Oct 24, 2026',
-    songs: 11,
-    duration: '90 min',
-    color: '#00D4FF',
-    glowColor: 'rgba(0,212,255,0.18)',
-    borderColor: 'rgba(0,212,255,0.22)',
-    tag: 'Upcoming',
-    tagColor: '#00D4FF',
-    tagBg: 'rgba(0,212,255,0.1)',
-  },
-  {
-    id: '2',
-    title: 'Friday Night Gig',
-    venue: 'The Blue Note',
-    date: 'Nov 02, 2026',
-    songs: 12,
-    duration: '60 min',
-    color: '#8B5CF6',
-    glowColor: 'rgba(139,92,246,0.18)',
-    borderColor: 'rgba(139,92,246,0.22)',
-    tag: 'Upcoming',
-    tagColor: '#8B5CF6',
-    tagBg: 'rgba(139,92,246,0.1)',
-  },
-  {
-    id: '3',
-    title: 'Wedding Set',
-    venue: 'Garden Terrace',
-    date: 'Nov 15, 2026',
-    songs: 25,
-    duration: '120 min',
-    color: '#F59E0B',
-    glowColor: 'rgba(245,158,11,0.18)',
-    borderColor: 'rgba(245,158,11,0.22)',
-    tag: 'Long Set',
-    tagColor: '#F59E0B',
-    tagBg: 'rgba(245,158,11,0.1)',
-  },
-  {
-    id: '4',
-    title: 'Acoustic Solo',
-    venue: 'Coffee House',
-    date: 'Dec 01, 2026',
-    songs: 8,
-    duration: '45 min',
-    color: '#10B981',
-    glowColor: 'rgba(16,185,129,0.18)',
-    borderColor: 'rgba(16,185,129,0.22)',
-    tag: 'Solo',
-    tagColor: '#10B981',
-    tagBg: 'rgba(16,185,129,0.1)',
-  },
-];
 
 const FILTERS = ['All', 'Upcoming', 'Past', 'Draft'];
 
 export default function SetlistsScreen() {
   const router = useRouter();
   const [activeFilter, setActiveFilter] = useState('All');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  
+  const { data: gigs, isLoading } = useMyGigs();
 
-  const filtered = activeFilter === 'All'
-    ? MOCK_SETLISTS
-    : MOCK_SETLISTS.filter((s) => s.tag === activeFilter);
+  const filtered = !gigs ? [] : activeFilter === 'All'
+    ? gigs
+    : gigs.filter((s: any) => {
+        // Simple logic for tags based on date if not present
+        const date = new Date(s.gig_date);
+        const isPast = date < new Date();
+        if (activeFilter === 'Upcoming') return !isPast;
+        if (activeFilter === 'Past') return isPast;
+        return true;
+      });
+
+  const totalSongs = 0; // Will be calculated once we have setlists/songs
 
   return (
     <View style={styles.container}>
+      <CreateGigModal visible={showCreateModal} onClose={() => setShowCreateModal(false)} />
       <LinearGradient colors={['#071420', '#0d2d45']} style={StyleSheet.absoluteFill} />
       <Stack.Screen options={{ headerShown: false }} />
 
@@ -91,7 +48,11 @@ export default function SetlistsScreen() {
           <Text style={styles.eyebrow}>MY GIGS</Text>
           <Text style={styles.title}>Setlists</Text>
         </View>
-        <TouchableOpacity style={styles.addBtn} activeOpacity={0.8}>
+        <TouchableOpacity 
+          style={styles.addBtn} 
+          activeOpacity={0.8}
+          onPress={() => setShowCreateModal(true)}
+        >
           <Plus size={20} color="#071420" strokeWidth={2.5} />
         </TouchableOpacity>
       </View>
@@ -100,12 +61,12 @@ export default function SetlistsScreen() {
       <View style={styles.summaryRow}>
         <View style={styles.summaryChip}>
           <ListMusic size={13} color="#00D4FF" />
-          <Text style={styles.summaryChipText}>{MOCK_SETLISTS.length} setlists</Text>
+          <Text style={styles.summaryChipText}>{gigs?.length || 0} gigs</Text>
         </View>
         <View style={styles.summaryChip}>
           <Music2 size={13} color="rgba(255,255,255,0.4)" />
           <Text style={styles.summaryChipText}>
-            {MOCK_SETLISTS.reduce((acc, s) => acc + s.songs, 0)} total songs
+            {totalSongs} total songs
           </Text>
         </View>
       </View>
@@ -139,72 +100,58 @@ export default function SetlistsScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {filtered.map((set) => (
-          <TouchableOpacity
-            key={set.id}
-            activeOpacity={0.8}
-            onPress={() => router.push(`/setlist/${set.id}`)}
-          >
-            <View style={[styles.card, { borderColor: set.borderColor }]}>
-              {/* Top accent line */}
-              <View style={[styles.topAccent, { backgroundColor: set.color }]} />
+        {filtered.map((gig: any) => {
+          const date = new Date(gig.gig_date);
+          const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          const isPast = date < new Date();
+          const themeColor = isPast ? '#8B5CF6' : '#00D4FF';
+          const glowColor = isPast ? 'rgba(139,92,246,0.18)' : 'rgba(0,212,255,0.18)';
+          const borderColor = isPast ? 'rgba(139,92,246,0.22)' : 'rgba(0,212,255,0.22)';
 
-              {/* Card body */}
-              <View style={styles.cardInner}>
-                {/* Icon + Title Row */}
-                <View style={styles.cardTop}>
-                  <View style={[styles.iconBubble, { backgroundColor: set.glowColor }]}>
-                    <Music2 size={18} color={set.color} />
+          return (
+            <TouchableOpacity
+              key={gig.id}
+              activeOpacity={0.8}
+              onPress={() => router.push(`/setlist/${gig.id}`)}
+            >
+              <View style={[styles.card, { borderColor }]}>
+                <View style={[styles.topAccent, { backgroundColor: themeColor }]} />
+                <View style={styles.cardInner}>
+                  <View style={styles.cardTop}>
+                    <View style={[styles.iconBubble, { backgroundColor: glowColor }]}>
+                      <Calendar size={18} color={themeColor} />
+                    </View>
+                    <View style={styles.titleArea}>
+                      <Text style={styles.setTitle} numberOfLines={1}>{gig.name}</Text>
+                      <Text style={styles.setVenue} numberOfLines={1}>{gig.venue}</Text>
+                      <Text style={styles.bandContext}>{gig.band?.name}</Text>
+                    </View>
+                    <View style={[styles.tagBadge, { backgroundColor: isPast ? 'rgba(139,92,246,0.1)' : 'rgba(0,212,255,0.1)', borderColor }]}>
+                      <Text style={[styles.tagText, { color: themeColor }]}>{isPast ? 'Past' : 'Upcoming'}</Text>
+                    </View>
                   </View>
-                  <View style={styles.titleArea}>
-                    <Text style={styles.setTitle} numberOfLines={1}>{set.title}</Text>
-                    <Text style={styles.setVenue} numberOfLines={1}>{set.venue}</Text>
-                  </View>
-                  <View style={[styles.tagBadge, { backgroundColor: set.tagBg, borderColor: set.borderColor }]}>
-                    <Text style={[styles.tagText, { color: set.color }]}>{set.tag}</Text>
-                  </View>
-                </View>
 
-                {/* Stats Row */}
-                <View style={styles.statsRow}>
-                  <View style={styles.statItem}>
-                    <Calendar size={12} color="rgba(255,255,255,0.35)" />
-                    <Text style={styles.statText}>{set.date}</Text>
+                  <View style={styles.statsRow}>
+                    <View style={styles.statItem}>
+                      <Calendar size={12} color="rgba(255,255,255,0.35)" />
+                      <Text style={styles.statText}>{dateStr}</Text>
+                    </View>
+                    <View style={styles.statSep} />
+                    <View style={styles.statItem}>
+                      <Clock size={12} color="rgba(255,255,255,0.35)" />
+                      <Text style={styles.statText}>{gig.duration_min} min</Text>
+                    </View>
                   </View>
-                  <View style={styles.statSep} />
-                  <View style={[styles.songCountBadge, { backgroundColor: 'rgba(255,255,255,0.06)' }]}>
-                    <Text style={[styles.songCountText, { color: set.color }]}>{set.songs}</Text>
-                    <Text style={styles.songCountLabel}> songs</Text>
-                  </View>
-                  <View style={styles.statSep} />
-                  <View style={styles.statItem}>
-                    <Clock size={12} color="rgba(255,255,255,0.35)" />
-                    <Text style={styles.statText}>{set.duration}</Text>
-                  </View>
-                </View>
 
-                {/* Progress bar (songs / max 30) */}
-                <View style={styles.progressTrack}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      {
-                        width: `${Math.min((set.songs / 30) * 100, 100)}%` as any,
-                        backgroundColor: set.color,
-                      },
-                    ]}
-                  />
-                </View>
-
-                {/* Footer */}
-                <View style={styles.cardFooter}>
-                  <Text style={styles.footerHint}>Tap to manage setlist</Text>
-                  <ChevronRight size={16} color={set.color} />
+                  <View style={styles.cardFooter}>
+                    <Text style={styles.footerHint}>Tap to manage gig & setlist</Text>
+                    <ChevronRight size={16} color={themeColor} />
+                  </View>
                 </View>
               </View>
-            </View>
-          </TouchableOpacity>
-        ))}
+            </TouchableOpacity>
+          );
+        })}
 
         {filtered.length === 0 && (
           <View style={styles.emptyState}>
@@ -379,6 +326,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'rgba(255,255,255,0.45)',
     fontFamily: 'DM Sans',
+  },
+  bandContext: {
+    fontSize: 10,
+    color: '#00D4FF',
+    fontFamily: 'DM Sans Bold',
+    textTransform: 'uppercase',
+    marginTop: 2,
   },
   tagBadge: {
     paddingHorizontal: 9,

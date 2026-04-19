@@ -332,3 +332,71 @@ export function useUpdateProfile() {
     },
   });
 }
+
+export function useMyGigs() {
+  return useQuery({
+    queryKey: ['my-gigs'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      // Fetch gigs from bands where user is leader or active member
+      const { data, error } = await supabase
+        .from('gigs')
+        .select(`
+          *,
+          band:bands (
+            id,
+            name,
+            avatar_url
+          )
+        `)
+        .order('gig_date', { ascending: true });
+
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+export function useCreateGig() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ 
+      bandId, 
+      name, 
+      venue, 
+      date, 
+      duration = 60 
+    }: { 
+      bandId: string; 
+      name: string; 
+      venue: string; 
+      date: string; 
+      duration?: number;
+    }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('gigs')
+        .insert({
+          band_id: bandId,
+          name,
+          venue,
+          gig_date: date,
+          duration_min: duration,
+          created_by: user.id
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-gigs'] });
+    },
+  });
+}
