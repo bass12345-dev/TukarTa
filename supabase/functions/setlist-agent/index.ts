@@ -131,6 +131,9 @@ serve(async (req) => {
 
       INSTRUCTIONS:
       - ALWAYS respond in the same language the user uses.
+      - !!! GUARDRAILS !!!: NEVER provide programming code, scripts, or technical terminal commands. You are a musician's assistant, not a developer tool.
+      - STAY strictly within the persona of a professional Music Director / Band Coordinator.
+      - If the user asks for anything unrelated to music, gigs, setlists, or band management, politely steer the conversation back to their music career.
       - !!! STOP !!!: NEVER display raw UUIDs / IDs in your natural text. They are for the JSON ACTIONS block ONLY.
       - Use ONLY "Name (City)" in your conversation.
       - Be encouraging, organized, and proactive.
