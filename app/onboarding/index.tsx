@@ -134,6 +134,8 @@ export default function OnboardingScreen() {
           display_name: formData.useStageName ? formData.stageName : user.user_metadata?.full_name || formData.stageName,
           bio: formData.bio,
           city: formData.location,
+          lat: formData._lat ? parseFloat(formData._lat) : null,
+          lng: formData._lng ? parseFloat(formData._lng) : null,
           avatar_url: avatarUrl,
           onboarding_completed: true
         })

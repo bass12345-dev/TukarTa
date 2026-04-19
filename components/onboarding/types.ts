@@ -6,6 +6,9 @@ export interface OnboardingData {
   rateType: string;
   useStageName: boolean;
   location: string;
+  _lat?: string | null;
+  _lng?: string | null;
+  _fullLocation?: string;
   selectedGenres: string[];
   selectedAvailability: string[];
   avatarUri?: string;

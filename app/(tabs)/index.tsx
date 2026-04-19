@@ -1,7 +1,8 @@
 import React from 'react';
-import { ScrollView, View, Text, TouchableOpacity, StyleSheet, Dimensions, Image } from 'react-native';
+import { ScrollView, View, Text, TouchableOpacity, StyleSheet, Dimensions, Image, Modal } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
-import { MessageSquare, Search, Music, Users, LogOut } from 'lucide-react-native';
+import { MessageSquare, Search, Music, Users, LogOut, Bell, UserPlus, Check, X as CloseX } from 'lucide-react-native';
 import { useAuth } from '../../context/auth';
 import { supabase } from '../../utils/supabase';
 import { GlassCard } from '../../components/ui/GlassCard';
@@ -9,6 +10,7 @@ import { Orb } from '../../components/ui/Orb';
 import { Pill } from '../../components/ui/Pill';
 import { Button } from '../../components/ui/Button';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useMyInvites } from '../../utils/hooks/useMusician';
 
 const THEME = {
   bg: '#071420',
@@ -17,11 +19,15 @@ const THEME = {
   textDim: 'rgba(150, 175, 200, 0.35)',
   surface: 'rgba(255, 255, 255, 0.04)',
   glassBorder: 'rgba(255, 255, 255, 0.10)',
+  cyan: '#00D4FF',
+  purple: '#8B5CF6',
+  gold: '#F59E0B',
 };
 
 export default function DashboardScreen() {
   const router = useRouter();
   const { user, signOut } = useAuth();
+  const { data: invites, isLoading: isInvitesLoading } = useMyInvites();
 
   const handleSignOut = async () => {
     try {
@@ -53,10 +59,64 @@ export default function DashboardScreen() {
   const finalDisplayName = profile?.display_name || displayName;
   const finalAvatarUrl = profile?.avatar_url;
 
+  const [showAlerts, setShowAlerts] = React.useState(false);
+
   return (
     <View style={styles.container}>
+      {/* Notifications Modal */}
+      <Modal
+        visible={showAlerts}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAlerts(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalBackdrop} 
+          activeOpacity={1} 
+          onPress={() => setShowAlerts(false)}
+        >
+          <BlurView intensity={20} style={StyleSheet.absoluteFill} tint="dark" />
+        </TouchableOpacity>
+
+        <View style={styles.alertsContainer}>
+          <GlassCard style={styles.alertsCard} intensity={40}>
+            <View style={styles.alertsHeader}>
+              <Text style={styles.alertsTitle}>Recent Alerts</Text>
+              <TouchableOpacity onPress={() => setShowAlerts(false)} style={styles.closeBtn}>
+                <CloseX size={18} color="rgba(255,255,255,0.4)" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.alertsList} showsVerticalScrollIndicator={false}>
+              {invites && invites.length > 0 ? (
+                invites.map((invite: any) => (
+                  <View key={invite.id} style={styles.inviteItem}>
+                    <View style={styles.inviteIcon}>
+                      <UserPlus size={16} color={THEME.cyan} />
+                    </View>
+                    <View style={styles.inviteInfo}>
+                      <Text style={styles.inviteTitle}>Invite from {invite.band?.name}</Text>
+                      <Text style={styles.inviteBody}>{invite.message || 'Wants you to join their band'}</Text>
+                    </View>
+                    <View style={styles.inviteActions}>
+                      <TouchableOpacity style={[styles.actionBtn, styles.acceptBtn]}>
+                        <Check size={14} color="#FFF" />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.actionBtn, styles.declineBtn]}>
+                        <CloseX size={14} color="rgba(255,255,255,0.4)" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.noAlertsText}>No new notifications</Text>
+              )}
+            </ScrollView>
+          </GlassCard>
+        </View>
+      </Modal>
+
       <LinearGradient colors={['#071420', '#0d2d45']} style={StyleSheet.absoluteFill} />
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={showAlerts ? false : true}>
         {/* Header */}
         <View style={styles.header}>
           <View>
@@ -65,8 +125,16 @@ export default function DashboardScreen() {
           </View>
           <View style={styles.headerActions}>
             <TouchableOpacity 
+              onPress={() => setShowAlerts(!showAlerts)}
+              style={styles.headerBtn}
+              activeOpacity={0.7}
+            >
+              <Bell size={20} color={showAlerts ? THEME.cyan : THEME.textSec} />
+              {invites && invites.length > 0 && <View style={styles.unreadDot} />}
+            </TouchableOpacity>
+            <TouchableOpacity 
               onPress={handleSignOut} 
-              style={styles.logoutBtn}
+              style={styles.headerBtn}
               activeOpacity={0.7}
             >
               <LogOut size={20} color={THEME.textSec} />
@@ -231,7 +299,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  logoutBtn: {
+  headerBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -240,6 +308,119 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  alertsContainer: {
+    position: 'absolute',
+    top: 100,
+    left: 20,
+    right: 20,
+    zIndex: 1000,
+  },
+  alertsCard: {
+    padding: 20,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 212, 255, 0.2)',
+    maxHeight: 400,
+  },
+  closeBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unreadDot: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF4B4B',
+    borderWidth: 1.5,
+    borderColor: '#071420',
+  },
+  alertsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  alertsTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFF',
+    fontFamily: 'DM Sans Bold',
+  },
+  closeText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.4)',
+    fontFamily: 'DM Sans',
+  },
+  alertsList: {
+    gap: 10,
+  },
+  inviteItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    padding: 10,
+    borderRadius: 12,
+  },
+  inviteIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 212, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inviteInfo: {
+    flex: 1,
+  },
+  inviteTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFF',
+    fontFamily: 'DM Sans Bold',
+  },
+  inviteBody: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.4)',
+    fontFamily: 'DM Sans',
+  },
+  inviteActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  acceptBtn: {
+    backgroundColor: '#10B981',
+  },
+  declineBtn: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  noAlertsText: {
+    fontSize: 12,
+    color: THEME.textDim,
+    fontFamily: 'DM Sans',
+    textAlign: 'center',
+    paddingVertical: 10,
   },
   avatar: {
     width: 48,

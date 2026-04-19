@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { Home, Music, Search, Bell, User } from 'lucide-react-native';
+import { Home, Music, Search, Bell, User, Users } from 'lucide-react-native';
 import { useColorScheme } from 'react-native';
 
 export default function TabLayout() {
@@ -47,10 +47,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="alerts"
+        name="bands"
         options={{
-          title: 'Alerts',
-          tabBarIcon: ({ color }) => <Bell size={22} color={color} />,
+          title: 'Bands',
+          tabBarIcon: ({ color }) => <Users size={22} color={color} />,
         }}
       />
       <Tabs.Screen

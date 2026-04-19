@@ -22,11 +22,14 @@ import {
   Eye, 
   Globe,
   Music,
-  DollarSign
+  DollarSign,
+  MapPin
 } from 'lucide-react-native';
 import { useAuth } from '../../context/auth';
 import { supabase } from '../../utils/supabase';
 import { GlassCard } from '../../components/ui/GlassCard';
+import { LocationPicker } from '../../components/ui/LocationPicker';
+import { useUpdateProfile } from '../../utils/hooks/useMusician';
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -38,6 +41,9 @@ export default function EditProfileScreen() {
   const [displayName, setDisplayName] = useState('');
   const [role, setRole] = useState('');
   const [rate, setRate] = useState('');
+  const [location, setLocation] = useState('');
+  const [coords, setCoords] = useState<{ lat: string | null; lng: string | null }>({ lat: null, lng: null });
+  const [showPicker, setShowPicker] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -57,6 +63,8 @@ export default function EditProfileScreen() {
       if (error) throw error;
       if (data) {
         setDisplayName(data.display_name || '');
+        setLocation(data.city || '');
+        setCoords({ lat: data.lat?.toString() || null, lng: data.lng?.toString() || null });
         const mProfile = data.musician_profiles?.[0];
         if (mProfile) {
           setRole(mProfile.roles?.[0] || '');
@@ -70,29 +78,20 @@ export default function EditProfileScreen() {
     }
   }
 
+  const updateProfile = useUpdateProfile();
+
   async function handleSave() {
     if (!user) return;
     try {
       setSaving(true);
-      
-      // 1. Update User Record
-      const { error: userError } = await supabase
-        .from('users')
-        .update({ display_name: displayName })
-        .eq('id', user.id);
-      
-      if (userError) throw userError;
-
-      // 2. Update Musician Profile Record
-      const { error: musicianError } = await supabase
-        .from('musician_profiles')
-        .upsert({ 
-          user_id: user.id,
-          roles: [role],
-          rate_amount: rate ? parseFloat(rate) : null
-        }, { onConflict: 'user_id' });
-
-      if (musicianError) throw musicianError;
+      await updateProfile.mutateAsync({
+        displayName,
+        city: location,
+        lat: coords.lat ? parseFloat(coords.lat) : null,
+        lng: coords.lng ? parseFloat(coords.lng) : null,
+        role,
+        rate: rate ? parseFloat(rate) : null
+      });
 
       Alert.alert('Success', 'Profile updated successfully!');
       router.back();
@@ -189,6 +188,25 @@ export default function EditProfileScreen() {
                 onChangeText={setRole}
               />
             </View>
+          </GlassCard>
+        </View>
+
+        <View style={styles.formSection}>
+          <Text style={styles.sectionTitle}>LOCATION & RATE</Text>
+          <GlassCard style={styles.inputGroup} intensity={12}>
+            <TouchableOpacity 
+              style={styles.inputItem} 
+              onPress={() => setShowPicker(true)}
+              activeOpacity={0.7}
+            >
+              <MapPin size={18} color="rgba(255,255,255,0.4)" />
+              <View style={styles.locationDisplay}>
+                <Text style={[styles.locationText, !location && { color: 'rgba(255,255,255,0.2)' }]}>
+                  {location || 'Select City'}
+                </Text>
+              </View>
+              <ChevronLeft size={16} color="rgba(255,255,255,0.2)" style={{ transform: [{ rotate: '180deg' }] }} />
+            </TouchableOpacity>
             <View style={styles.hr} />
             <View style={styles.inputItem}>
               <DollarSign size={18} color="rgba(255,255,255,0.4)" />
@@ -204,6 +222,15 @@ export default function EditProfileScreen() {
           </GlassCard>
         </View>
 
+        <LocationPicker
+          visible={showPicker}
+          onClose={() => setShowPicker(false)}
+          onSelect={(loc) => {
+            setLocation(loc.city);
+            setCoords({ lat: loc.lat, lng: loc.lng });
+          }}
+        />
+
         {/* Security Section (Based on screenshot) */}
         <View style={styles.formSection}>
           <Text style={styles.sectionTitle}>SECURITY & PRIVACY</Text>
@@ -214,7 +241,6 @@ export default function EditProfileScreen() {
             <SecurityLink label="Location Sharing" Icon={Globe} status="On" />
           </GlassCard>
         </View>
-
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -354,6 +380,14 @@ const styles = StyleSheet.create({
     height: '100%',
     color: '#FFF',
     fontSize: 16,
+    fontFamily: 'DM Sans',
+  },
+  locationDisplay: {
+    flex: 1,
+  },
+  locationText: {
+    fontSize: 16,
+    color: '#FFF',
     fontFamily: 'DM Sans',
   },
   hr: {

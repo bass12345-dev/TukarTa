@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../supabase';
 
 export function useMusicianProfile(userId: string | undefined) {
@@ -71,5 +71,158 @@ export function useSongStats(userId: string | undefined) {
       };
     },
     enabled: !!userId,
+  });
+}
+
+export function useCreateBand() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ name, genres, city, lat, lng }: { name: string; genres: string[]; city: string; lat?: number | null; lng?: number | null }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // 1. Create the band
+      const { data: band, error: bandError } = await supabase
+        .from('bands')
+        .insert({
+          name,
+          genres,
+          city,
+          lat,
+          lng,
+          leader_id: user.id
+        })
+        .select()
+        .single();
+
+      if (bandError) throw bandError;
+
+      // 2. Add creator as leader member
+      const { error: memberError } = await supabase
+        .from('band_members')
+        .insert({
+          band_id: band.id,
+          user_id: user.id,
+          role: 'leader',
+          status: 'active'
+        });
+
+      if (memberError) throw memberError;
+
+      return band;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-bands'] });
+    },
+  });
+}
+
+export function useDeleteBand() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (bandId: string) => {
+      const { error } = await supabase
+        .from('bands')
+        .delete()
+        .eq('id', bandId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-bands'] });
+    },
+  });
+}
+
+export function useInviteMusician() {
+  return useMutation({
+    mutationFn: async ({ bandId, musicianId, message }: { bandId: string; musicianId: string; message?: string }) => {
+      const { error } = await supabase
+        .from('musician_invites')
+        .insert({
+          from_band_id: bandId,
+          to_musician_id: musicianId,
+          message: message || `Hey! Join our band.`
+        });
+      
+      if (error) throw error;
+    },
+  });
+}
+
+export function useMyInvites() {
+  return useQuery({
+    queryKey: ['my-invites'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const { data, error } = await supabase
+        .from('musician_invites')
+        .select(`
+          *,
+          band:bands (
+            id,
+            name,
+            avatar_url
+          )
+        `)
+        .eq('to_musician_id', user.id)
+        .eq('status', 'pending');
+
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+export function useUpdateProfile() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ displayName, city, lat, lng, bio, role, rate }: { 
+      displayName?: string; 
+      city?: string; 
+      lat?: number | null; 
+      lng?: number | null; 
+      bio?: string;
+      role?: string;
+      rate?: number | null;
+    }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // 1. Update User Record
+      const { error: userError } = await supabase
+        .from('users')
+        .update({ 
+          display_name: displayName,
+          city,
+          lat,
+          lng,
+          bio
+        })
+        .eq('id', user.id);
+      
+      if (userError) throw userError;
+
+      // 2. Update Musician Profile Record
+      if (role !== undefined || rate !== undefined) {
+        const { error: musicianError } = await supabase
+          .from('musician_profiles')
+          .upsert({ 
+            user_id: user.id,
+            roles: role ? [role] : undefined,
+            rate_amount: rate
+          }, { onConflict: 'user_id' });
+
+        if (musicianError) throw musicianError;
+      }
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['musician-profile'] });
+    },
   });
 }

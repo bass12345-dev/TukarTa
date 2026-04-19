@@ -1,5 +1,5 @@
 import React from 'react';
-import { TouchableOpacity, Text, TouchableOpacityProps, View } from 'react-native';
+import { TouchableOpacity, Text, TouchableOpacityProps, View, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { cn } from '../../utils/cn';
 
@@ -8,6 +8,7 @@ interface ButtonProps extends TouchableOpacityProps {
   size?: 'default' | 'sm';
   title: string;
   icon?: React.ReactNode;
+  isLoading?: boolean;
 }
 
 export const Button: React.FC<ButtonProps> = ({ 
@@ -15,6 +16,7 @@ export const Button: React.FC<ButtonProps> = ({
   variant = 'primary', 
   size = 'default', 
   icon,
+  isLoading,
   className,
   ...props 
 }) => {
@@ -57,8 +59,14 @@ export const Button: React.FC<ButtonProps> = ({
             elevation: 8 
           }}
         >
-          {icon && <View style={{ marginRight: 8 }}>{icon}</View>}
-          <Text className={textClasses}>{title}</Text>
+          {isLoading ? (
+            <ActivityIndicator color="#FFF" size="small" />
+          ) : (
+            <>
+              {icon && <View style={{ marginRight: 8 }}>{icon}</View>}
+              <Text className={textClasses}>{title}</Text>
+            </>
+          )}
         </LinearGradient>
       </TouchableOpacity>
     );
@@ -68,10 +76,17 @@ export const Button: React.FC<ButtonProps> = ({
     <TouchableOpacity 
       activeOpacity={0.7} 
       className={containerClasses} 
+      disabled={isLoading || props.disabled}
       {...props}
     >
-      {icon && <View style={{ marginRight: 8 }}>{icon}</View>}
-      <Text className={textClasses}>{title}</Text>
+      {isLoading ? (
+        <ActivityIndicator color={isPrimary ? "#FFF" : "#00D4FF"} size="small" />
+      ) : (
+        <>
+          {icon && <View style={{ marginRight: 8 }}>{icon}</View>}
+          <Text className={textClasses}>{title}</Text>
+        </>
+      )}
     </TouchableOpacity>
   );
 };
