@@ -1,5 +1,15 @@
-import React, { useRef, useState, useMemo } from 'react';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import {
+  Calendar,
+  ChevronLeft,
+  Music,
+  Send,
+  UserPlus,
+  X
+} from 'lucide-react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -8,34 +18,18 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  ActivityIndicator,
 } from 'react-native';
-import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
-import { 
-  ChevronLeft, 
-  Send, 
-  Sparkles, 
-  Zap, 
-  Music2, 
-  Check, 
-  Calendar, 
-  UserPlus, 
-  Music, 
-  PlusCircle, 
-  X,
-  AlertCircle
-} from 'lucide-react-native';
-import { 
-  useGigDetails, 
-  useGigSetlist, 
-  useSetlistAI, 
-  useAddSongToSetlist, 
-  useSetlistSongs,
-  useCreateGig,
-  useInviteMusician
-} from '../utils/hooks/useMusician';
-import { GlassCard } from '../components/ui/GlassCard';
 import { Button } from '../components/ui/Button';
+import { GlassCard } from '../components/ui/GlassCard';
+import {
+  useAddSongToSetlist,
+  useCreateGig,
+  useGigDetails,
+  useGigSetlist,
+  useInviteMusician,
+  useSetlistAI,
+  useSetlistSongs
+} from '../utils/hooks/useMusician';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Segment = { text: string; highlight?: boolean };
@@ -45,6 +39,7 @@ type Message = {
   segments: Segment[];
   badge?: string;
   actions?: any[];
+  isAnimating?: boolean;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -52,6 +47,36 @@ function rich(parts: (string | { h: string })[]): Segment[] {
   return parts.map((p) =>
     typeof p === 'string' ? { text: p } : { text: p.h, highlight: true }
   );
+}
+
+function TypewriterText({ segments, onComplete }: { segments: Segment[]; onComplete: () => void }) {
+  const [index, setIndex] = useState(0);
+  const [charIndex, setCharIndex] = useState(0);
+  
+  useEffect(() => {
+    if (index >= segments.length) {
+      onComplete();
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      if (charIndex < segments[index].text.length) {
+        setCharIndex(prev => prev + 1);
+      } else {
+        setIndex(prev => prev + 1);
+        setCharIndex(0);
+      }
+    }, 8); // Significantly faster typing speed
+
+    return () => clearTimeout(timer);
+  }, [index, charIndex, segments]);
+
+  const displayedSegments = segments.slice(0, index + 1).map((seg, i) => ({
+    ...seg,
+    text: i === index ? seg.text.slice(0, charIndex) : seg.text
+  }));
+
+  return <RichText segments={displayedSegments} isUser={false} />;
 }
 
 function parseAIMessage(content: string) {
@@ -122,6 +147,29 @@ function ProposalCard({ action, onApprove, onCancel, isApplied }: any) {
   );
 }
 
+// ─── Typing Indicator ────────────────────────────────────────────────────────
+function TypingIndicator() {
+  const [dots, setDots] = useState('');
+  
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setDots(prev => (prev.length < 3 ? prev + '.' : ''));
+    }, 400);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <View style={[styles.msgWrapper, styles.msgWrapperAI]}>
+      <GlassCard intensity={15} style={[styles.msgBubble, styles.msgBubbleAI, { paddingVertical: 12, paddingHorizontal: 16 }]}>
+        <Text style={styles.aiLabel}>GIG ASSISTANT IS TYPING</Text>
+        <View style={styles.dotsRow}>
+          <Text style={styles.typingText}>Thinking{dots}</Text>
+        </View>
+      </GlassCard>
+    </View>
+  );
+}
+
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export default function AIAgentScreen() {
   const router = useRouter();
@@ -140,6 +188,11 @@ export default function AIAgentScreen() {
   const createGig = useCreateGig();
   const inviteMusician = useInviteMusician();
 
+  // Scroll to bottom whenever messages or isPending change
+  React.useEffect(() => {
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+  }, [messages, aiMutation.isPending]);
+
   // Initialize welcome message
   React.useEffect(() => {
     if (gigId && gig) {
@@ -152,6 +205,7 @@ export default function AIAgentScreen() {
             { h: gig.name },
             `. What's the vibe today?`,
           ]),
+          isAnimating: true
         }
       ]);
     } else if (!gigId) {
@@ -162,6 +216,7 @@ export default function AIAgentScreen() {
           segments: rich([
             `Welcome to your AI Gig Assistant! ✦ I can help you plan new gigs, find band members, or build setlists. What are we working on?`,
           ]),
+          isAnimating: true
         }
       ]);
     }
@@ -195,6 +250,7 @@ export default function AIAgentScreen() {
         segments: [{ text: cleanReply }],
         actions,
         badge: actions.length > 0 ? `${actions.length} proposals ready ✓` : undefined,
+        isAnimating: true
       };
       
       setMessages((prev) => [...prev, aiReply]);
@@ -290,7 +346,19 @@ export default function AIAgentScreen() {
                   {msg.role === 'assistant' && (
                     <Text style={styles.aiLabel}>GIG ASSISTANT</Text>
                   )}
-                  <RichText segments={msg.segments} isUser={msg.role === 'user'} />
+                  
+                  {msg.role === 'assistant' && msg.isAnimating ? (
+                    <TypewriterText 
+                      segments={msg.segments} 
+                      onComplete={() => {
+                        setMessages(prev => prev.map(m => 
+                          m.id === msg.id ? { ...m, isAnimating: false } : m
+                        ));
+                      }} 
+                    />
+                  ) : (
+                    <RichText segments={msg.segments} isUser={msg.role === 'user'} />
+                  )}
                   
                   {msg.badge && (
                     <View style={styles.badge}>
@@ -319,6 +387,8 @@ export default function AIAgentScreen() {
               )}
             </View>
           ))}
+          
+          {aiMutation.isPending && <TypingIndicator />}
         </ScrollView>
 
         {/* ── Input Area ── */}
@@ -591,5 +661,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#8B5CF6',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 20,
+  },
+  typingText: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.5)',
+    fontFamily: 'DM Sans Medium',
+    fontStyle: 'italic',
   }
 });
