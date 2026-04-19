@@ -10,7 +10,14 @@ import { Orb } from '../../components/ui/Orb';
 import { Pill } from '../../components/ui/Pill';
 import { Button } from '../../components/ui/Button';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useMyInvites } from '../../utils/hooks/useMusician';
+import { 
+  useMyInvites, 
+  useMusicianProfile, 
+  useSongStats, 
+  useMyBands, 
+  useMyGigs 
+} from '../../utils/hooks/useMusician';
+import { ActivityIndicator } from 'react-native';
 
 const THEME = {
   bg: '#071420',
@@ -27,7 +34,13 @@ const THEME = {
 export default function DashboardScreen() {
   const router = useRouter();
   const { user, signOut } = useAuth();
-  const { data: invites, isLoading: isInvitesLoading } = useMyInvites();
+  
+  // Real Data Hooks
+  const { data: invites } = useMyInvites();
+  const { data: profile, isLoading: isProfileLoading } = useMusicianProfile(user?.id);
+  const { data: stats } = useSongStats(user?.id);
+  const { data: bands } = useMyBands();
+  const { data: gigs, isLoading: isGigsLoading } = useMyGigs();
 
   const handleSignOut = async () => {
     try {
@@ -37,38 +50,33 @@ export default function DashboardScreen() {
     }
   };
 
-  const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Musician';
+  const displayName = profile?.display_name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Musician';
   const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
+  const avatarUrl = profile?.avatar_url;
+  
+  const mProfile = profile?.musician_profiles?.[0];
+  const roles = mProfile?.roles || ['Musician'];
+  const rating = mProfile?.avg_rating || '5.0';
+  
+  const upcomingGig = gigs?.[0]; // First gig is next one due to order by gig_date
 
-  const [profile, setProfile] = React.useState<any>(null);
-
-  React.useEffect(() => {
-    if (user) {
-      const getProfile = async () => {
-        const { data } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-        if (data) setProfile(data);
-      };
-      getProfile();
-    }
-  }, [user]);
-
-  const finalDisplayName = profile?.display_name || displayName;
-  const finalAvatarUrl = profile?.avatar_url;
+  if (isProfileLoading) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color={THEME.cyan} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-
       <LinearGradient colors={['#071420', '#0d2d45']} style={StyleSheet.absoluteFill} />
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={true}>
         {/* Header */}
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>Good evening 🎸</Text>
-            <Text style={styles.profileName}>{finalDisplayName}</Text>
+            <Text style={styles.profileName}>{displayName}</Text>
           </View>
           <View style={styles.headerActions}>
             <TouchableOpacity 
@@ -93,8 +101,8 @@ export default function DashboardScreen() {
               activeOpacity={0.8}
             >
               <View style={styles.avatar}>
-                {finalAvatarUrl ? (
-                  <Image source={{ uri: finalAvatarUrl }} style={styles.avatarImage} />
+                {avatarUrl ? (
+                  <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
                 ) : (
                   <Text style={styles.avatarText}>{initials}</Text>
                 )}
@@ -103,12 +111,16 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* Profile Card Summary (Tightened) */}
+        {/* Profile Card Summary (Dynamic) */}
         <View style={styles.statsSummary}>
-           <Text style={styles.statsMiniText}>24 <Text style={styles.statsLabel}>Songs</Text>  ·  2 <Text style={styles.statsLabel}>Bands</Text>  ·  14 <Text style={styles.statsLabel}>Gigs</Text></Text>
+           <Text style={styles.statsMiniText}>
+             {stats?.total || 0} <Text style={styles.statsLabel}>Songs</Text>  ·  
+             {bands?.length || 0} <Text style={styles.statsLabel}>Bands</Text>  ·  
+             {gigs?.length || 0} <Text style={styles.statsLabel}>Gigs</Text>
+           </Text>
            <View style={styles.ratingRow}>
-              <Text style={styles.ratingValue}>★ 4.8</Text>
-              <Text style={styles.instrumentText}>Singer · Guitarist</Text>
+              <Text style={styles.ratingValue}>★ {rating}</Text>
+              <Text style={styles.instrumentText}>{roles.join(' · ')}</Text>
            </View>
         </View>
 
@@ -159,17 +171,17 @@ export default function DashboardScreen() {
           />
           <ActionCard 
             title="My Setlists" 
-            subtitle="3 active gigs" 
+            subtitle={`${gigs?.length || 0} active gigs`} 
             orbVariant="cyan" 
             icon={<Music size={20} color="#00D4FF" />} 
             onPress={() => router.push('/setlist/default')}
           />
           <ActionCard 
             title="My Band" 
-            subtitle="Tunog Cebu · 4" 
+            subtitle={(bands?.[0] as any)?.band?.name || 'Create a band'} 
             orbVariant="gold" 
             icon={<Users size={20} color="#F59E0B" />} 
-            onPress={() => {}}
+            onPress={() => router.push('/bands')}
           />
         </View>
 
@@ -177,22 +189,44 @@ export default function DashboardScreen() {
         <View style={styles.secLabelRow}>
           <Text style={styles.secLabel}>UPCOMING GIG</Text>
         </View>
-        <TouchableOpacity onPress={() => router.push('/setlist/default')} style={styles.gigWrapper}>
-          <GlassCard style={styles.gigCard} intensity={30}>
-            <View style={styles.gigHeader}>
-              <View>
-                <Text style={styles.gigTitle}>Handuraw Café</Text>
-                <Text style={styles.gigMeta}>Tomorrow · 8:00 PM · 90 min</Text>
+        
+        {upcomingGig ? (
+          <TouchableOpacity onPress={() => router.push(`/setlist/${upcomingGig.id}`)} style={styles.gigWrapper}>
+            <GlassCard style={styles.gigCard} intensity={30}>
+              <View style={styles.gigHeader}>
+                <View>
+                  <Text style={styles.gigTitle}>{upcomingGig.name}</Text>
+                  <Text style={styles.gigMeta}>
+                    {new Date(upcomingGig.gig_date).toLocaleDateString()} · {upcomingGig.venue}
+                  </Text>
+                </View>
+                {new Date(upcomingGig.gig_date).toDateString() === new Date().toDateString() && (
+                  <Pill label="Today" variant="gold" />
+                )}
               </View>
-              <Pill label="Tonight" variant="gold" />
-            </View>
-            <View style={styles.hr} />
-            <View style={styles.gigFooter}>
-              <Text style={styles.gigSetlist}>Acoustic Vibes Mix · <Text style={{ color: THEME.text }}>11 songs</Text></Text>
-              <Pill label="3/4 ✓" variant="green" />
-            </View>
-          </GlassCard>
-        </TouchableOpacity>
+              <View style={styles.hr} />
+              <View style={styles.gigFooter}>
+                <Text style={styles.gigSetlist}>
+                  {upcomingGig.band?.name} · <Text style={{ color: THEME.text }}>{upcomingGig.duration_min} min</Text>
+                </Text>
+                <Pill label="View Setlist" variant="cyan" />
+              </View>
+            </GlassCard>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.gigWrapper}>
+            <GlassCard style={styles.gigCard} intensity={15}>
+              <Text style={styles.featSubtitle}>No upcoming gigs scheduled.</Text>
+              <Button 
+                title="Create Gig" 
+                variant="glass" 
+                size="sm" 
+                className="mt-4" 
+                onPress={() => router.push('/gigs/new')} 
+              />
+            </GlassCard>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -216,6 +250,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: THEME.bg,
+  },
+  center: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   scroll: {
     flex: 1,

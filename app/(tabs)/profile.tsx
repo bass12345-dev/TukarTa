@@ -7,10 +7,15 @@ import {
   Star
 } from 'lucide-react-native';
 import React from 'react';
-import { Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Pill } from '../../components/ui/Pill';
-import { useMusicianProfile, useMyBands, useSongStats } from '../../utils/hooks/useMusician';
+import { 
+  useMusicianProfile, 
+  useMyBands, 
+  useSongStats, 
+  useMyGigs 
+} from '../../utils/hooks/useMusician';
 import { useInfiniteMySongs } from '../../utils/hooks/useSongs';
 
 const { width } = Dimensions.get('window');
@@ -22,6 +27,7 @@ export default function ProfileScreen() {
   const { data: profileData, isLoading: isProfileLoading } = useMusicianProfile(user?.id);
   const { data: bandData } = useMyBands();
   const { data: statsData } = useSongStats(user?.id);
+  const { data: myGigs } = useMyGigs();
   const { data: songsData } = useInfiniteMySongs(4); // Just get the latest 4
 
   const profile = profileData;
@@ -30,10 +36,22 @@ export default function ProfileScreen() {
   const recentSongs = allSongs.slice(0, 4);
 
   // Real data mapping
-  const displayName = profile?.display_name || user?.email?.split('@')[0] || "Guest Musician";
-  const handle = mProfile?.handle || `@${displayName.toLowerCase().replace(/\s+/g, '')}`;
+  const displayName = profile?.display_name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || "Guest Musician";
+  const handle = `@${displayName.toLowerCase().replace(/\s/g, '') || 'musician'}`;
   const location = profile?.city || "Unknown Location";
   const initials = displayName.split(' ').map((n: any) => n[0]).join('').toUpperCase().slice(0, 2);
+  const roles = mProfile?.roles || [];
+  const rate = mProfile?.rate_amount ? `₱${mProfile.rate_amount} / gig` : 'Rate on request';
+  const yearsExp = mProfile?.years_exp || '1+';
+  const isAvailable = mProfile?.is_available ?? true;
+
+  if (isProfileLoading) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color="#00D4FF" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -53,21 +71,20 @@ export default function ProfileScreen() {
               style={styles.glassActionBtn}
               onPress={() => router.push('/settings')}
             >
-              <View className="flex-row items-center gap-2">
+              <View style={styles.actionBtnRow}>
                 <Settings size={14} color="#FFF" />
                 <Text style={styles.actionBtnText}>Settings</Text>
               </View>
             </TouchableOpacity>
             
             <Pill 
-              label="Available for gigs" 
-              variant="green" 
-              dotColor="#10B981" 
-              className="bg-brand-green-dim/40 border-brand-green/30"
+              label={isAvailable ? "Available for gigs" : "Not available"} 
+              variant={isAvailable ? "green" : "gold"} 
+              dotColor={isAvailable ? "#10B981" : "#F59E0B"}
             />
           </View>
 
-          {/* Avatar Positioned Overlap */}
+          {/* Avatar Area */}
           <View style={styles.avatarContainer}>
              <View style={styles.avatar}>
                {profile?.avatar_url ? (
@@ -91,17 +108,19 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.tagRow}>
-            <Pill label="Singer" variant="cyan" />
-            <Pill label="Guitarist" variant="purple" />
-            <Pill label="₱1,500 / gig" variant="gold" />
+            {roles.map((role: string, i: number) => (
+              <Pill key={role} label={role} variant={i % 2 === 0 ? "cyan" : "purple"} />
+            ))}
+            {roles.length === 0 && <Pill label="Musician" variant="cyan" />}
+            <Pill label={rate} variant="gold" />
           </View>
 
           {/* Stats Bar */}
           <View style={styles.statsContainer}>
             <StatItem value={String(statsData?.total || 0)} label="Songs" hasBorder />
-            <StatItem value="0" label="Gigs" hasBorder />
-            <StatItem value={mProfile?.avg_rating ? String(mProfile.avg_rating) : "0"} label="Rating" hasBorder isRating />
-            <StatItem value={String(mProfile?.years_exp || 0)} label="Yrs Exp" />
+            <StatItem value={String(myGigs?.length || 0)} label="Gigs" hasBorder />
+            <StatItem value={mProfile?.avg_rating ? String(mProfile.avg_rating) : "5.0"} label="Rating" hasBorder isRating />
+            <StatItem value={String(yearsExp)} label="Yrs Exp" />
           </View>
 
           {/* About Section */}
@@ -340,6 +359,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#071420',
   },
+  center: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   scroll: {
     flex: 1,
   },
@@ -366,6 +389,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
+  },
+  actionBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   actionBtnText: {
     color: '#FFF',
