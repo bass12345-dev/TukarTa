@@ -30,12 +30,12 @@ serve(async (req) => {
     // 2. Fetch Global Context (Bands user leads & Top available musicians)
     const { data: myBands } = await supabase
       .from('bands')
-      .select('*')
+      .select('id, name, city')
       .eq('leader_id', userId)
 
     const { data: discoverMusicians } = await supabase
       .from('users')
-      .select('id, display_name, musician_profiles(roles, genres)')
+      .select('id, display_name, city, musician_profiles(roles, genres)')
       .limit(15)
 
     // 3. Fetch Gig-Specific Context (if gigId provided)
@@ -67,8 +67,8 @@ serve(async (req) => {
       repertoireContext = repertoire?.map((r: any) => `- ${r.song.title} (${r.song.artist}) [ID: ${r.song.id}]`).join('\n') || "No songs in repertoire."
     }
 
-    const bandList = myBands?.map(b => `- ${b.name} [ID: ${b.id}]`).join('\n') || "No bands found."
-    const musicianList = discoverMusicians?.map(m => `- ${m.display_name} (${m.musician_profiles?.[0]?.roles?.join(', ') || 'Musician'}) [ID: ${m.id}]`).join('\n') || "No musicians found."
+    const bandList = myBands?.map(b => `- ${b.name} (${b.city || 'Unknown City'}) [ID: ${b.id}]`).join('\n') || "No bands found."
+    const musicianList = discoverMusicians?.map(m => `- ${m.display_name} (${m.city || 'Unknown City'}) (${m.musician_profiles?.[0]?.roles?.join(', ') || 'Musician'}) [ID: ${m.id}]`).join('\n') || "No musicians found."
 
     // 4. Construct Multi-Purpose Prompt
     const systemPrompt = `
@@ -93,10 +93,13 @@ serve(async (req) => {
       3. ADD_SONG: If user is editing a setlist. Requires: songId, title.
 
       INSTRUCTIONS:
+      - ALWAYS respond in the same language the user uses. If the user chats in Tagalog, respond in Tagalog. If in Spanish, respond in Spanish.
+      - NEVER display raw IDs (UUIDs) in your natural language response to the user. Use names instead.
+      - When mentioning musicians or bands, use the format "Name (City)".
       - Be encouraging, organized, and proactive.
       - If pieces of information are missing (e.g., date for a gig), ASK for them first.
-      - When you are ready to perform an action, append it in the ACTIONS section at the end.
-      - ONLY use IDs provided in the context for actions.
+      - When you are ready to perform an action, append it ONLY in the ACTIONS section at the end.
+      - ONLY use IDs provided in the context for the JSON data in the ACTIONS section.
 
       OUTPUT FORMAT:
       Your response should be natural text. If you want to propose an action, end with:

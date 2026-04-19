@@ -10,7 +10,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { X, Calendar, MapPin, Music, Clock, ChevronRight, Users } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import { Button } from '../ui/Button';
@@ -25,7 +27,8 @@ interface CreateGigModalProps {
 export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
   const [name, setName] = useState('');
   const [venue, setVenue] = useState('');
-  const [date, setDate] = useState('');
+  const [dateObj, setDateObj] = useState(new Date());
+  const [showPicker, setShowPicker] = useState(false);
   const [duration, setDuration] = useState('60');
   const [selectedBandId, setSelectedBandId] = useState<string | null>(null);
   
@@ -33,14 +36,19 @@ export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
   const createGig = useCreateGig();
 
   const handleCreate = async () => {
-    if (!selectedBandId || !name || !venue || !date) return;
+    if (!selectedBandId) {
+      Alert.alert("Action Required", "Please select a band before creating a gig.");
+      return;
+    }
+
+    if (!name || !venue || !dateObj) return;
     
     try {
       await createGig.mutateAsync({
         bandId: selectedBandId,
         name,
         venue,
-        date: new Date(date).toISOString(), // Simplified date parsing
+        date: dateObj.toISOString(),
         duration: parseInt(duration) || 60,
       });
       
@@ -48,12 +56,31 @@ export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
       // Reset form
       setName('');
       setVenue('');
-      setDate('');
+      setDateObj(new Date());
       setDuration('60');
       setSelectedBandId(null);
     } catch (error) {
       console.error('Failed to create gig:', error);
     }
+  };
+
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowPicker(false);
+    }
+    if (selectedDate) {
+      setDateObj(selectedDate);
+    }
+  };
+
+  const formatDateDisplay = (date: Date) => {
+    return date.toLocaleString([], {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   };
 
   return (
@@ -144,16 +171,28 @@ export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
               <View style={styles.row}>
                 <View style={[styles.inputGroup, { flex: 1 }]}>
                   <Text style={styles.label}>Date & Time</Text>
-                  <View style={styles.inputWrapper}>
-                    <Calendar size={18} color="rgba(255,255,255,0.3)" />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="YYYY-MM-DD HH:MM"
-                      placeholderTextColor="rgba(255,255,255,0.2)"
-                      value={date}
-                      onChangeText={setDate}
+                  <TouchableOpacity 
+                    style={styles.inputWrapper}
+                    onPress={() => setShowPicker(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Calendar size={18} color="#00D4FF" />
+                    <Text style={styles.inputText}>
+                      {formatDateDisplay(dateObj)}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {showPicker && (
+                    <DateTimePicker
+                      value={dateObj}
+                      mode="datetime"
+                      is24Hour={true}
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      onChange={onDateChange}
+                      textColor="#FFF"
+                      themeVariant="dark"
                     />
-                  </View>
+                  )}
                 </View>
                 <View style={[styles.inputGroup, { width: 100 }]}>
                   <Text style={styles.label}>Min</Text>
@@ -177,7 +216,7 @@ export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
             <View style={styles.footer}>
               <Button
                 title="Cancel"
-                variant="outline"
+                variant="ghost"
                 onPress={onClose}
                 style={{ flex: 1 }}
               />
@@ -186,7 +225,7 @@ export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
                 variant="primary"
                 onPress={handleCreate}
                 style={{ flex: 2 }}
-                disabled={!selectedBandId || !name || !venue || !date || createGig.isPending}
+                disabled={createGig.isPending}
               />
             </View>
           </View>
@@ -306,6 +345,12 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.05)',
   },
   input: {
+    flex: 1,
+    color: '#FFF',
+    fontSize: 15,
+    fontFamily: 'DM Sans',
+  },
+  inputText: {
     flex: 1,
     color: '#FFF',
     fontSize: 15,
