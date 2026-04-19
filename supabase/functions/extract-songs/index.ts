@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0"
 
-const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')
+const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY')
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
@@ -26,8 +26,8 @@ serve(async (req) => {
       })
     }
 
-    if (!GEMINI_API_KEY) {
-      throw new Error('GEMINI_API_KEY is not set')
+    if (!GROQ_API_KEY) {
+      throw new Error('GROQ_API_KEY is not set')
     }
 
     // 1. Initialize Supabase client with Service Role to access storage
@@ -43,7 +43,7 @@ serve(async (req) => {
       throw new Error(`Failed to download file: ${downloadError.message}`)
     }
 
-    // 3. Convert blob to base64 for Gemini (Safer way to avoid stack overflow)
+    // 3. Convert blob to base64 for Groq
     const arrayBuffer = await fileData.arrayBuffer()
     const uint8Array = new Uint8Array(arrayBuffer)
     let binary = ''
@@ -53,7 +53,7 @@ serve(async (req) => {
     }
     const base64Image = btoa(binary)
 
-    // 4. Call Gemini 1.5 Flash
+    // 4. Call Groq Llama 3.2 Vision
     const prompt = `
       Extract a list of songs from this image. 
       The image might be:
@@ -71,48 +71,55 @@ serve(async (req) => {
       - If the artist is truly unknown, use "Unknown Artist".
       - For "genre", identify if it fits one of these: OPM, Rock, Pop, Acoustic, Worship, Ballad, Hip-Hop, R&B, Electronic, Country, Jazz, Classical, Blues, Folk, Metal, Punk, Reggae, Soul, or Latin. If it doesn't fit, provide a short 1-word genre.
 
-      Return the results STRICTLY as a JSON array of objects with "title", "artist", and "genre" keys.
-      Example format: [{"title": "With or Without You", "artist": "U2", "genre": "Rock"}, {"title": "Ang Huling El Bimbo", "artist": "Eraserheads", "genre": "OPM"}]
-      Only return the JSON array, no other text.
+      Return the results STRICTLY as a JSON object with a "songs" key containing an array of objects with "title", "artist", and "genre" keys.
+      Example format: {"songs": [{"title": "With or Without You", "artist": "U2", "genre": "Rock"}, {"title": "Ang Huling El Bimbo", "artist": "Eraserheads", "genre": "OPM"}]}
+      Only return the JSON, no other text.
     `
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
+        'Authorization': `Bearer ${GROQ_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: prompt },
-            {
-              inlineData: {
-                mimeType: "image/jpeg", // We'll assume jpeg/png, Gemini is flexible
-                data: base64Image
+        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:image/jpeg;base64,${base64Image}`
+                }
               }
-            }
-          ]
-        }],
-        generationConfig: {
-          response_mime_type: "application/json",
-        }
+            ]
+          }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.1,
       })
     })
 
+
     const result = await response.json()
-    console.log('Gemini Result:', JSON.stringify(result))
+    console.log('Groq Result:', JSON.stringify(result))
 
     if (!response.ok) {
-      throw new Error(`Gemini API error: ${result.error?.message || response.statusText}`)
+      throw new Error(`Groq API error: ${result.error?.message || response.statusText}`)
     }
 
-    const textResponse = result.candidates?.[0]?.content?.parts?.[0]?.text
-    const songs = JSON.parse(textResponse || '[]')
+    const content = result.choices?.[0]?.message?.content
+    const parsedData = JSON.parse(content || '{"songs": []}')
+    const songs = parsedData.songs || []
 
     return new Response(JSON.stringify({ songs }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     })
+
 
   } catch (error) {
     console.error('Error:', error.message)

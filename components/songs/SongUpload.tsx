@@ -9,6 +9,7 @@ import { supabase } from '../../utils/supabase';
 import { useAnalyzeScreenshot } from '../../utils/hooks/useSongs';
 import { ActivityIndicator, Alert } from 'react-native';
 import { useRef } from 'react';
+import * as FileSystem from 'expo-file-system';
 
 interface SongUploadProps {
   onBack: () => void;
@@ -79,14 +80,17 @@ export function SongUpload({ onBack, onAnalyze, onSearch }: SongUploadProps) {
         const fileName = `${Date.now()}-${i}-${Math.random().toString(36).substring(7)}.jpg`;
         const filePath = `${user.id}/${fileName}`;
         
-        // Convert URI to Blob
-        const response = await fetch(imageUri);
-        const blob = await response.blob();
+        // 2. Read file as ArrayBuffer (Modern Expo 54 way)
+        const file = new FileSystem.File(imageUri);
+        const arrayBuffer = await file.arrayBuffer();
 
-        // 2. Upload to Supabase Storage
+        // 3. Upload to Supabase Storage
         const { error: uploadError } = await supabase.storage
           .from('song-screenshots')
-          .upload(filePath, blob);
+          .upload(filePath, arrayBuffer, {
+            contentType: 'image/jpeg',
+            upsert: true,
+          });
 
         if (uploadError) throw uploadError;
 
