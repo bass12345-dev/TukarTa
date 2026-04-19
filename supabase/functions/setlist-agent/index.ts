@@ -29,11 +29,15 @@ serve(async (req) => {
 
     // 2. Fetch Context
     // Gig & Band info
-    const { data: gig } = await supabase
+    const { data: gig, error: gigError } = await supabase
       .from('gigs')
       .select('*, band:bands(*)')
       .eq('id', gigId)
       .single()
+
+    if (gigError || !gig) {
+      throw new Error(`Gig not found: ${gigError?.message || 'Unknown error'}`)
+    }
 
     // User's known songs
     const { data: repertoire } = await supabase
@@ -59,11 +63,11 @@ serve(async (req) => {
       CONTEXT:
       - Gig: ${gig.name}
       - Venue: ${gig.venue}
-      - Band: ${gig.band.name} (Genres: ${gig.band.genres.join(', ')})
+      - Band: ${gig.band?.name || 'Independent'} (Genres: ${gig.band?.genres?.join(', ') || 'N/A'})
       - Current Setlist: ${currentList || 'Empty'}
 
       REPERTOIRE (The only songs this musician knows and can play):
-      ${knownSongs}
+      ${knownSongs || 'No songs in repertoire yet.'}
 
       INSTRUCTIONS:
       1. Respond to the user's message in a helpful, encouraging "gig-ready" tone.
@@ -84,7 +88,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'llama3-70b-8192',
+        model: 'llama-3.3-70b-versatile',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: message }
@@ -93,7 +97,17 @@ serve(async (req) => {
       })
     })
 
+    if (!groqRes.ok) {
+      const errorData = await groqRes.json()
+      throw new Error(`Groq API Error: ${errorData.error?.message || groqRes.statusText}`)
+    }
+
     const result = await groqRes.json()
+    
+    if (!result.choices || result.choices.length === 0) {
+      throw new Error('Groq returned no choices. Please try again.')
+    }
+
     const aiMessage = result.choices[0].message.content
 
     return new Response(JSON.stringify({ reply: aiMessage }), {

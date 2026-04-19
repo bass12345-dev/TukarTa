@@ -148,13 +148,16 @@ export default function AIAgentScreen() {
 
   const applyActions = async (msgId: string, actions: any[]) => {
     try {
+      let nextPosition = (currentSongs?.length || 0) + 1;
+      
       for (const action of actions) {
         if (action.type === 'add') {
           await addSong.mutateAsync({
             setlistId: setlist?.id,
             songId: action.songId,
-            position: (currentSongs?.length || 0) + 1
+            position: nextPosition
           });
+          nextPosition++;
         }
       }
       
