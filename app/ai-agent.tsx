@@ -8,7 +8,9 @@ import {
   X,
   History,
   Plus,
-  Circle
+  Circle,
+  CheckCircle,
+  Check
 } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -106,52 +108,50 @@ function parseAIMessage(content: string) {
 }
 
 // ─── Proposal Card Component ─────────────────────────────────────────────────
-function ProposalCard({ action, onApprove, onCancel, isApplied }: any) {
+function ProposalCard({ action, onApprove, onCancel }: any) {
   const isSong = action.type === 'add';
   const isGig = action.type === 'proposal_create_gig';
   const isInvite = action.type === 'proposal_invite';
-
-  if (isApplied) return null;
+  const isApplied = action.isApplied;
 
   return (
-    <GlassCard intensity={20} style={styles.proposalCard}>
-      <View style={styles.proposalHeader}>
-        {isSong && <Music size={18} color="#00D4FF" />}
-        {isGig && <Calendar size={18} color="#F59E0B" />}
-        {isInvite && <UserPlus size={18} color="#8B5CF6" />}
-        <Text style={styles.proposalType}>
-          {isSong ? 'Song Suggestion' : isGig ? 'Gig Proposal' : 'Recruitment Proposal'}
-        </Text>
-      </View>
-      
-      <View style={styles.proposalBody}>
-        {isSong && <Text style={styles.proposalTitle}>{action.title || 'Unknown Song'}</Text>}
-        {isGig && (
-          <>
-            <Text style={styles.proposalTitle}>{action.data.name}</Text>
-            <Text style={styles.proposalMeta}>{action.data.venue} · {action.data.date}</Text>
-          </>
-        )}
-        {isInvite && (
-          <>
-            <Text style={styles.proposalTitle}>Invite Musician</Text>
-            <Text style={styles.proposalMeta}>Proposed to join your band</Text>
-          </>
-        )}
-      </View>
+    <GlassCard 
+      intensity={isApplied ? 30 : 12} 
+      style={[styles.proposalCard, isApplied && styles.proposalCardActive]}
+      noPadding
+    >
+      <View style={styles.proposalContent}>
+        <View style={[styles.proposalIconBox, { backgroundColor: isSong ? 'rgba(0,212,255,0.06)' : isGig ? 'rgba(245,158,11,0.06)' : 'rgba(139,92,246,0.06)' }]}>
+          {isSong && <Music size={18} color="#00D4FF" />}
+          {isGig && <Calendar size={18} color="#F59E0B" />}
+          {isInvite && <UserPlus size={18} color="#8B5CF6" />}
+        </View>
+        
+        <View style={styles.proposalTextContainer}>
+          <Text style={styles.proposalTitle} numberOfLines={1}>
+            {isSong ? action.title : isGig ? action.data.name : (action.data.musicianName || 'Invite Musician')}
+          </Text>
+          <Text style={styles.proposalSubtitle} numberOfLines={1}>
+            {isSong ? 'Song Suggestion' : isGig ? action.data.venue : 'Proposed recruitment'}
+          </Text>
+        </View>
 
-      <View style={styles.proposalActions}>
-        <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
-          <X size={16} color="rgba(255,255,255,0.4)" />
-        </TouchableOpacity>
-        <Button 
-          title="Approve" 
-          size="sm" 
-          variant="glass" 
-          style={styles.approveBtn}
-          onPress={onApprove} 
-          isLoading={false}
-        />
+        <View style={styles.proposalRight}>
+          {!isApplied ? (
+            <View style={styles.proposalActionsRow}>
+              <TouchableOpacity style={styles.miniCancelBtn} onPress={onCancel}>
+                <X size={14} color="rgba(255,255,255,0.3)" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={onApprove} style={styles.approveMiniBtn}>
+                <Text style={styles.approveMiniText}>Approve</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.checkboxActive}>
+              <Check size={14} color="#FFF" strokeWidth={3} />
+            </View>
+          )}
+        </View>
       </View>
     </GlassCard>
   );
@@ -362,8 +362,11 @@ export default function AIAgentScreen() {
       setMessages(prev => prev.map(m => 
         m.id === msgId ? { 
           ...m, 
-          actions: m.actions?.filter(a => a !== action),
-          badge: m.actions?.length === 1 ? 'Action approved! ✓' : m.badge 
+          actions: m.actions?.map(a => 
+            // Better matching for actions
+            (a === action) ? { ...a, isApplied: true } : a
+          ),
+          badge: 'Action approved! ✓' 
         } : m
       ));
     } catch (error) {
@@ -770,62 +773,88 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   proposalsContainer: {
-    paddingLeft: 20,
+    paddingHorizontal: 14,
     marginBottom: 24,
-    gap: 12,
+    gap: 8,
   },
   proposalCard: {
-    padding: 16,
-    borderRadius: 16,
+    height: 70,
+    borderRadius: 24,
+    borderWidth: 1.2,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    overflow: 'hidden',
+  },
+  proposalCardActive: {
+    borderColor: '#00D4FF',
+    borderWidth: 1.5,
+    backgroundColor: 'rgba(0, 212, 255, 0.06)',
+  },
+  proposalContent: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    paddingHorizontal: 16,
   },
-  proposalHeader: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+  proposalIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
   },
-  proposalType: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.4)',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    position: 'absolute',
-    top: -20,
-    left: 0,
-  },
-  proposalBody: {
+  proposalTextContainer: {
     flex: 1,
+    marginLeft: 14,
   },
   proposalTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
     color: '#FFF',
-    marginBottom: 2,
   },
-  proposalMeta: {
+  proposalSubtitle: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.4)',
+    color: 'rgba(255,255,255,0.3)',
+    marginTop: 1,
   },
-  proposalActions: {
+  proposalRight: {
+    marginLeft: 10,
+  },
+  proposalActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  approveBtn: {
-    height: 32,
+  approveMiniBtn: {
+    backgroundColor: 'rgba(0, 212, 255, 0.1)',
     paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 212, 255, 0.2)',
   },
-  cancelBtn: {
-    height: 32,
+  approveMiniText: {
+    color: '#00D4FF',
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  miniCancelBtn: {
     width: 32,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  checkboxActive: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#00D4FF',
     alignItems: 'center',
     justifyContent: 'center',
   },

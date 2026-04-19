@@ -126,7 +126,7 @@ serve(async (req) => {
 
       YOUR CAPABILITIES (Action Proposals):
       1. CREATE_GIG: If user wants to plan an event. Requires: name, venue, date (YYYY-MM-DD), bandId.
-      2. INVITE_MUSICIAN: If user needs a specific role. Requires: musicianId, bandId, message.
+      2. INVITE_MUSICIAN: If user needs a specific role. Requires: musicianId, musicianName, bandId, message.
       3. ADD_SONG: If user is editing a setlist. Requires: songId, title.
 
       INSTRUCTIONS:
@@ -140,7 +140,7 @@ serve(async (req) => {
 
       OUTPUT FORMAT:
       Your response should be natural text. If you want to propose an action, end with:
-      ACTIONS: [{"type": "proposal_create_gig", "data": {...}}, {"type": "proposal_invite", "data": {...}}, {"type": "add", "songId": "uuid", "title": "Song Title"}]
+      ACTIONS: [{"type": "proposal_create_gig", "data": {"name": "...", "venue": "...", "date": "...", "bandId": "..."}}, {"type": "proposal_invite", "data": {"musicianId": "...", "musicianName": "...", "bandId": "...", "message": "..."}}, {"type": "add", "songId": "uuid", "title": "Song Title"}]
     `
 
     // 5. Fetch History
