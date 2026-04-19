@@ -611,3 +611,26 @@ export function useMusicianSongs(userId: string | undefined) {
     enabled: !!userId,
   });
 }
+export function useMusicianReviews(musicianId?: string) {
+  return useQuery({
+    queryKey: ['musician-reviews', musicianId],
+    queryFn: async () => {
+      if (!musicianId) return [];
+      const { data, error } = await supabase
+        .from('musician_reviews')
+        .select(`
+          *,
+          reviewer:users (
+            display_name,
+            avatar_url
+          )
+        `)
+        .eq('musician_id', musicianId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!musicianId,
+  });
+}
