@@ -45,8 +45,8 @@ export default function DashboardScreen() {
   const handleSignOut = async () => {
     try {
       await signOut();
-    } catch (error) {
-      console.error('Error signing out:', error);
+    } catch (err) {
+      console.error('Error signing out:', err);
     }
   };
 
@@ -222,7 +222,7 @@ export default function DashboardScreen() {
                 variant="glass" 
                 size="sm" 
                 className="mt-4" 
-                onPress={() => router.push('/gigs/new')} 
+                onPress={() => router.push('/ai-agent')} 
               />
             </GlassCard>
           </View>

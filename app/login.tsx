@@ -189,6 +189,10 @@ export default function LoginScreen() {
             style={styles.logoImage} 
             resizeMode="contain" 
           />
+          <Text style={styles.logoText}>
+          <Text style={styles.logoTextLight}>Tukar</Text>
+          <Text style={styles.logoTextBold}>Ta</Text>
+        </Text>
           <Text style={styles.eyebrow}>MUSICIANS PLATFORM</Text>
           <Text style={styles.heroTitle}>Welcome Back</Text>
           <Text style={styles.heroSubtitle}>
@@ -209,7 +213,7 @@ export default function LoginScreen() {
             <View style={[styles.topAccent, { backgroundColor: '#00D4FF' }]} />
 
             <View style={styles.authCardInner}>
-              <Text style={styles.authTitle}>Welcome Back</Text>
+              {/* <Text style={styles.authTitle}>Welcome Back</Text> */}
               <Text style={styles.authSubtitle}>Sign in to access your setlists and network</Text>
 
               <View style={styles.form}>
@@ -343,13 +347,17 @@ const styles = StyleSheet.create({
     fontFamily: 'DM Sans Bold',
     lineHeight: 42,
   },
-  logoTukar: {
-    color: '#00D4FF',
-    fontFamily: 'DM Sans Bold',
+  logoText: {
+    fontSize: 28,
+    marginBottom: 8,
   },
-  logoTa: {
-    color: '#FFFFFF',
+  logoTextLight: {
+    fontFamily: 'DM Sans Medium',
+    color: '#00D4FF',
+  },
+  logoTextBold: {
     fontFamily: 'DM Sans Bold',
+    color: '#F0F4FF',
   },
   heroSubtitle: {
     fontSize: 14,

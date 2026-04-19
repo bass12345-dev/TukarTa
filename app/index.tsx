@@ -1,9 +1,8 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter, Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
-import { Animated, Dimensions, StyleSheet, Text, View, Image } from 'react-native';
+import { Animated, Dimensions, Image, StyleSheet, Text, View } from 'react-native';
 import { Button } from '../components/ui/Button';
-import { Mascot } from '../components/ui/Mascot';
 
 const { width, height } = Dimensions.get('window');
 
@@ -72,6 +71,10 @@ export default function SplashScreen() {
           style={styles.logoImage} 
           resizeMode="contain" 
         />
+        <Text style={styles.logoText}>
+          <Text style={styles.logoTextLight}>Tukar</Text>
+          <Text style={styles.logoTextBold}>Ta</Text>
+        </Text>
 
         <Text style={styles.tagline}>
           The AI co-pilot for musicians and bands
@@ -87,7 +90,7 @@ export default function SplashScreen() {
         </Animated.View>
 
         <Text style={styles.footerText}>
-          v1.0.0 — GEC PROJECT
+          v1.0.0 — BASS DEV PROJECT
         </Text>
       </Animated.View>
     </View>

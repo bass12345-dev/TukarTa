@@ -10,9 +10,13 @@ import {
   Plus,
   Circle,
   CheckCircle,
-  Check
+  Check,
+  Camera,
+  Image as ImageIcon,
+  Loader2
 } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
+import * as ImagePicker from 'expo-image-picker';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -39,8 +43,11 @@ import {
   useSetlistSongs,
   useAISessions,
   useAIChatHistory,
-  useCreateAISession
+  useCreateAISession,
+  useAddSongToKnowledge
 } from '../utils/hooks/useMusician';
+import { supabase } from '../utils/supabase';
+import { decode } from 'base64-arraybuffer';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Segment = { text: string; highlight?: boolean };
@@ -112,6 +119,7 @@ function ProposalCard({ action, onApprove, onCancel }: any) {
   const isSong = action.type === 'add';
   const isGig = action.type === 'proposal_create_gig';
   const isInvite = action.type === 'proposal_invite';
+  const isDictionary = action.type === 'proposal_add_to_dictionary';
   const isApplied = action.isApplied;
 
   return (
@@ -129,10 +137,10 @@ function ProposalCard({ action, onApprove, onCancel }: any) {
         
         <View style={styles.proposalTextContainer}>
           <Text style={styles.proposalTitle} numberOfLines={1}>
-            {isSong ? action.title : isGig ? action.data.name : (action.data.musicianName || 'Invite Musician')}
+            {isSong ? 'SONG SUGGESTION' : isGig ? 'GIG PROPOSAL' : isDictionary ? 'ADD TO DICTIONARY' : 'RECRUITMENT'}
           </Text>
           <Text style={styles.proposalSubtitle} numberOfLines={1}>
-            {isSong ? 'Song Suggestion' : isGig ? action.data.venue : 'Proposed recruitment'}
+            {isSong ? 'Song Suggestion' : isGig ? action.data.venue : isDictionary ? `${action.data.artist} • ${action.data.genre || 'Music'}` : 'Proposed recruitment'}
           </Text>
         </View>
 
@@ -190,6 +198,7 @@ export default function AIAgentScreen() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isHistoryVisible, setIsHistoryVisible] = useState(false);
   const [lastSyncedSessionId, setLastSyncedSessionId] = useState<string | null>(null);
+  const [isExtracting, setIsExtracting] = useState(false);
   const isCreatingSession = useRef(false);
   const autoCreatedSessionRef = useRef<string | null>(null);
   const insets = useSafeAreaInsets();
@@ -203,7 +212,8 @@ export default function AIAgentScreen() {
   const { data: historyMessages, isLoading: isLoadingHistory } = useAIChatHistory(sessionId || undefined);
   const createSession = useCreateAISession();
   const aiMutation = useSetlistAI();
-  const addSong = useAddSongToSetlist();
+  const addSongToSetlist = useAddSongToSetlist();
+  const addSongToKnowledge = useAddSongToKnowledge();
   const createGig = useCreateGig();
   const inviteMusician = useInviteMusician();
 
@@ -335,11 +345,82 @@ export default function AIAgentScreen() {
     }
   };
 
+  const handlePickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.7,
+    });
+    if (!result.canceled) {
+      processExtraction(result.assets[0].uri);
+    }
+  };
+
+  const handleCaptureImage = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      alert('Sorry, we need camera permissions to make this work!');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.7,
+    });
+    if (!result.canceled) {
+      processExtraction(result.assets[0].uri);
+    }
+  };
+
+  const processExtraction = async (uri: string) => {
+    setIsExtracting(true);
+    try {
+      const fileName = `${Date.now()}.jpg`;
+      const filePath = `extractions/${fileName}`;
+      
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const reader = new FileReader();
+      
+      const base64Promise = new Promise<string>((resolve) => {
+        reader.onloadend = () => {
+          const base64String = reader.result as string;
+          resolve(base64String.split(',')[1]);
+        };
+      });
+      reader.readAsDataURL(blob);
+      const base64 = await base64Promise;
+
+      const { error: uploadError } = await supabase.storage
+        .from('song-screenshots')
+        .upload(filePath, decode(base64), { contentType: 'image/jpeg' });
+
+      if (uploadError) throw uploadError;
+
+      const { data, error } = await supabase.functions.invoke('extract-songs', {
+        body: { filePath }
+      });
+
+      if (error) throw error;
+
+      if (data.songs && data.songs.length > 0) {
+        const songList = data.songs.map((s: any) => `- ${s.title} by ${s.artist} (${s.genre || 'Music'})`).join('\n');
+        handleSend(`I've uploaded a screenshot. Please help me add these extracted songs to my music dictionary:\n${songList}`);
+      } else {
+        handleSend("I uploaded an image but couldn't find any songs. Can you help me check if it's clear enough?");
+      }
+    } catch (e) {
+      console.error("Extraction failed:", e);
+      handleSend("Sorry, I had trouble reading that image. Could you try uploading it again?");
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
   const applySingleAction = async (msgId: string, action: any) => {
     try {
       if (action.type === 'add') {
         const nextPosition = (currentSongs?.length || 0) + 1;
-        await addSong.mutateAsync({
+        await addSongToSetlist.mutateAsync({
           setlistId: setlist?.id || '',
           songId: action.songId,
           position: nextPosition
@@ -356,6 +437,12 @@ export default function AIAgentScreen() {
           bandId: action.data.bandId,
           musicianId: action.data.musicianId,
           message: action.data.message
+        });
+      } else if (action.type === 'proposal_add_to_dictionary') {
+        await addSongToKnowledge.mutateAsync({
+          title: action.data.title,
+          artist: action.data.artist,
+          genre: action.data.genre
         });
       }
 
@@ -552,21 +639,29 @@ export default function AIAgentScreen() {
 
         <View style={[styles.inputOuter, { paddingBottom: insets.bottom > 0 ? insets.bottom : 20 }]}>
           <View style={styles.inputInner}>
+            <View style={styles.actionBtns}>
+              <TouchableOpacity style={styles.actionBtn} onPress={handleCaptureImage} disabled={isExtracting}>
+                <Camera size={20} color="rgba(255,255,255,0.5)" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionBtn} onPress={handlePickImage} disabled={isExtracting}>
+                <ImageIcon size={20} color="rgba(255,255,255,0.5)" />
+              </TouchableOpacity>
+            </View>
             <TextInput
               style={styles.input}
-              placeholder="e.g. 'Plan a bar gig for next Friday'"
+              placeholder={isExtracting ? "Extracting songs..." : "e.g. 'Plan a bar gig for next Friday'"}
               placeholderTextColor="rgba(255,255,255,0.3)"
               value={input}
               onChangeText={setInput}
               multiline
-              editable={!aiMutation.isPending && !!sessionId}
+              editable={!aiMutation.isPending && !!sessionId && !isExtracting}
             />
             <TouchableOpacity 
-              style={[styles.sendBtn, (!input.trim() || !sessionId) && { opacity: 0.5 }]} 
+              style={[styles.sendBtn, (!input.trim() || !sessionId || isExtracting) && { opacity: 0.5 }]} 
               onPress={() => handleSend()}
-              disabled={!input.trim() || aiMutation.isPending || !sessionId}
+              disabled={!input.trim() || aiMutation.isPending || !sessionId || isExtracting}
             >
-              {aiMutation.isPending ? (
+              {aiMutation.isPending || isExtracting ? (
                 <ActivityIndicator size="small" color="#FFF" />
               ) : (
                 <Send size={20} color="#FFF" />
@@ -868,11 +963,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 24,
-    paddingLeft: 20,
+    paddingLeft: 10,
     paddingRight: 6,
     paddingVertical: 6,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
+  },
+  actionBtns: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    gap: 4,
+  },
+  actionBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.03)',
   },
   input: {
     flex: 1,

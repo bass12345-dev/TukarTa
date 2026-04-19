@@ -713,3 +713,42 @@ export function useMusicianReviews(musicianId?: string) {
     enabled: !!musicianId,
   });
 }
+export function useAddSongToKnowledge() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ title, artist, genre }: { title: string; artist: string; genre?: string }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // 1. Upsert global song entry
+      const { data: song, error: songError } = await supabase
+        .from('songs')
+        .upsert(
+          { title, artist, genre, added_by: user.id },
+          { onConflict: 'title, artist' }
+        )
+        .select()
+        .single();
+      
+      if (songError) throw songError;
+
+      // 2. Link to user's knowledge bank
+      const { error: knowledgeError } = await supabase
+        .from('musician_song_knowledge')
+        .upsert({
+          musician_id: user.id,
+          song_id: song.id,
+          confidence_level: 3,
+          source: 'ai_extraction'
+        }, { onConflict: 'musician_id, song_id' });
+
+      if (knowledgeError) throw knowledgeError;
+      return song;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-known-songs'] });
+      queryClient.invalidateQueries({ queryKey: ['song-stats'] });
+    },
+  });
+}
