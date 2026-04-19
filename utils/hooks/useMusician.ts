@@ -526,14 +526,93 @@ export function useAddSongToSetlist() {
 }
 
 export function useSetlistAI() {
+  const queryClient = useQueryClient();
+
   return useMutation({
-    mutationFn: async ({ gigId, message, setlistId }: { gigId: string; message: string; setlistId: string }) => {
+    mutationFn: async ({ gigId, message, setlistId, sessionId }: { gigId: string; message: string; setlistId: string; sessionId?: string }) => {
       const { data, error } = await supabase.functions.invoke('setlist-agent', {
-        body: { gigId, message, setlistId }
+        body: { gigId, message, setlistId, sessionId }
       });
       
       if (error) throw error;
       return data;
+    },
+    onSuccess: (_, variables) => {
+      // Refresh history for the current session
+      if (variables.sessionId) {
+        queryClient.invalidateQueries({ queryKey: ['ai-history', variables.sessionId] });
+      }
+      // Refresh session list just in case a new one was auto-created
+      queryClient.invalidateQueries({ queryKey: ['ai-sessions'] });
+    },
+  });
+}
+
+export function useAISessions() {
+  return useQuery({
+    queryKey: ['ai-sessions'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const { data, error } = await supabase
+        .from('ai_sessions')
+        .select(`
+          *,
+          ai_messages(id)
+        `)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+
+
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+export function useAIChatHistory(sessionId: string | undefined) {
+  return useQuery({
+    queryKey: ['ai-history', sessionId],
+    queryFn: async () => {
+      if (!sessionId) return [];
+      const { data, error } = await supabase
+        .from('ai_messages')
+        .select('*')
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!sessionId,
+  });
+}
+
+export function useCreateAISession() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ gigId, title }: { gigId?: string; title?: string }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('ai_sessions')
+        .insert({
+          user_id: user.id,
+          gig_id: gigId,
+          title: title || 'New Conversation'
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ai-sessions'] });
     },
   });
 }

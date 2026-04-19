@@ -5,7 +5,10 @@ import {
   Music,
   Send,
   UserPlus,
-  X
+  X,
+  History,
+  Plus,
+  Circle
 } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -18,7 +21,10 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Modal,
+  FlatList,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../components/ui/Button';
 import { GlassCard } from '../components/ui/GlassCard';
 import {
@@ -28,7 +34,10 @@ import {
   useGigSetlist,
   useInviteMusician,
   useSetlistAI,
-  useSetlistSongs
+  useSetlistSongs,
+  useAISessions,
+  useAIChatHistory,
+  useCreateAISession
 } from '../utils/hooks/useMusician';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -141,6 +150,7 @@ function ProposalCard({ action, onApprove, onCancel, isApplied }: any) {
           variant="glass" 
           style={styles.approveBtn}
           onPress={onApprove} 
+          isLoading={false}
         />
       </View>
     </GlassCard>
@@ -151,7 +161,7 @@ function ProposalCard({ action, onApprove, onCancel, isApplied }: any) {
 function TypingIndicator() {
   const [dots, setDots] = useState('');
   
-  React.useEffect(() => {
+  useEffect(() => {
     const interval = setInterval(() => {
       setDots(prev => (prev.length < 3 ? prev + '.' : ''));
     }, 400);
@@ -177,54 +187,112 @@ export default function AIAgentScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [isHistoryVisible, setIsHistoryVisible] = useState(false);
+  const [lastSyncedSessionId, setLastSyncedSessionId] = useState<string | null>(null);
+  const isCreatingSession = useRef(false);
+  const autoCreatedSessionRef = useRef<string | null>(null);
+  const insets = useSafeAreaInsets();
 
   // 1. Data Hooks
   const { data: gig } = useGigDetails(gigId as string);
   const { data: setlist } = useGigSetlist(gigId as string);
   const { data: currentSongs } = useSetlistSongs(setlist?.id);
   
+  const { data: sessions, isLoading: isLoadingSessions } = useAISessions();
+  const { data: historyMessages, isLoading: isLoadingHistory } = useAIChatHistory(sessionId || undefined);
+  const createSession = useCreateAISession();
   const aiMutation = useSetlistAI();
   const addSong = useAddSongToSetlist();
   const createGig = useCreateGig();
   const inviteMusician = useInviteMusician();
 
-  // Scroll to bottom whenever messages or isPending change
-  React.useEffect(() => {
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-  }, [messages, aiMutation.isPending]);
+  // 2. Sync history to local state
+  useEffect(() => {
+    if (historyMessages && !isLoadingHistory && !isCreatingSession.current) {
+      const isInitialLoad = !lastSyncedSessionId && messages.length === 0;
+      const isSessionSwitch = sessionId && sessionId !== lastSyncedSessionId;
+      
+      const isFirstLoadForSession = sessionId && sessionId === lastSyncedSessionId && messages.length === 0 && historyMessages.length > 0;
 
-  // Initialize welcome message
-  React.useEffect(() => {
-    if (gigId && gig) {
-      setMessages([
-        {
-          id: '1',
-          role: 'assistant',
-          segments: rich([
-            `Hey rockstar! 🎸 I'm ready to help with your setlist for `,
-            { h: gig.name },
-            `. What's the vibe today?`,
-          ]),
-          isAnimating: true
-        }
-      ]);
-    } else if (!gigId) {
-      setMessages([
-        {
-          id: '1',
-          role: 'assistant',
-          segments: rich([
-            `Welcome to your AI Gig Assistant! ✦ I can help you plan new gigs, find band members, or build setlists. What are we working on?`,
-          ]),
-          isAnimating: true
-        }
-      ]);
+      if (isInitialLoad || isSessionSwitch || isFirstLoadForSession) {
+        const mapped: Message[] = historyMessages.map((m: any) => {
+          const { text, actions } = parseAIMessage(m.content);
+          return {
+            id: m.id,
+            role: m.role as 'user' | 'assistant',
+            segments: [{ text }],
+            actions,
+            isAnimating: false,
+          };
+        });
+        setMessages(mapped);
+        setLastSyncedSessionId(sessionId);
+      } else if (isSessionSwitch && historyMessages.length === 0) {
+        setMessages([]);
+        setLastSyncedSessionId(sessionId);
+      }
     }
-  }, [gigId, gig]);
+  }, [historyMessages, isLoadingHistory, sessionId, lastSyncedSessionId, messages.length]);
+
+  // 3. Auto-select or Auto-create session on mount
+  useEffect(() => {
+    if (!sessionId && sessions !== undefined && !isLoadingSessions) {
+      // Find latest session for this gig
+      const gigSessions = (sessions as any[] || []).filter((s: any) => s.gig_id === gigId);
+      
+      if (gigSessions.length > 0) {
+        setSessionId(gigSessions[0].id);
+      } else if (!autoCreatedSessionRef.current) {
+        // Create a new session ONLY ONCE if none exist for this gig
+        const autoCreate = async () => {
+          if (isCreatingSession.current) return;
+          isCreatingSession.current = true;
+          try {
+            const newSession = await createSession.mutateAsync({ 
+              gigId: gigId as string,
+              title: gig ? `Chat for ${gig.name}` : 'New Planning Session'
+            });
+            autoCreatedSessionRef.current = newSession.id;
+            setSessionId(newSession.id);
+            setLastSyncedSessionId(newSession.id);
+          } catch (e) {
+            console.error("Auto-session creation failed:", e);
+          } finally {
+            isCreatingSession.current = false;
+          }
+        };
+        autoCreate();
+      }
+    }
+  }, [sessions, isLoadingSessions, gigId, sessionId, gig]);
+
+  // Scroll to bottom
+  useEffect(() => {
+    if (messages.length > 0 || aiMutation.isPending) {
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    }
+  }, [messages.length, aiMutation.isPending]);
+
+  const showWelcome = messages.length === 0 && !isLoadingHistory && !isLoadingSessions && sessionId;
+
+  const handleNewChat = async () => {
+    try {
+      const newSession = await createSession.mutateAsync({ 
+        gigId: gigId as string,
+        title: gig ? `Chat for ${gig.name}` : 'New Planning Session'
+      });
+      setSessionId(newSession.id);
+      setLastSyncedSessionId(newSession.id);
+      setMessages([]);
+    } catch (e) {
+      console.error("Failed to create session:", e);
+    }
+  };
 
   const handleSend = async (overrideMsg?: string) => {
     const text = overrideMsg || input.trim();
-    if (!text) return;
+    if (!text || !sessionId) return;
 
     const userMsg: Message = {
       id: Date.now().toString(),
@@ -240,6 +308,7 @@ export default function AIAgentScreen() {
         gigId: gigId as string,
         setlistId: setlist?.id,
         message: text,
+        sessionId: sessionId
       });
 
       const { text: cleanReply, actions } = parseAIMessage(response.reply);
@@ -290,7 +359,6 @@ export default function AIAgentScreen() {
         });
       }
 
-      // Remove specific action from the message list after approval
       setMessages(prev => prev.map(m => 
         m.id === msgId ? { 
           ...m, 
@@ -303,12 +371,14 @@ export default function AIAgentScreen() {
     }
   };
 
+  // Filter sessions to only show those WITH messages in the history UI
+  const filteredSessions = (sessions as any[] || []).filter((s: any) => s.ai_messages && s.ai_messages.length > 0);
+
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* ── Header ── */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + (Platform.OS === 'ios' ? 10 : 20), height: 74 + insets.top }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
           <ChevronLeft size={20} color="rgba(255,255,255,0.7)" />
           <Text style={styles.backText}>Back</Text>
@@ -323,16 +393,84 @@ export default function AIAgentScreen() {
             <View style={styles.statusRow}>
               <View style={styles.onlineDot} />
               <Text style={styles.headerStatus}>
-                {gigId ? `In Gig: ${gig?.name || '...'}` : 'General Planning Mode'}
+                {sessionId ? `Active Session` : 'Creating Session...'}
               </Text>
             </View>
           </View>
         </View>
+
+        <TouchableOpacity 
+          style={styles.historyBtn} 
+          onPress={() => setIsHistoryVisible(true)}
+        >
+          <History size={20} color="rgba(255,255,255,0.7)" />
+        </TouchableOpacity>
       </View>
+
+      <Modal
+        visible={isHistoryVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsHistoryVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <GlassCard intensity={40} style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Chat History</Text>
+              <TouchableOpacity onPress={() => setIsHistoryVisible(false)}>
+                <X size={24} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity 
+              style={styles.newChatBtn} 
+              onPress={() => {
+                setIsHistoryVisible(false);
+                handleNewChat();
+              }}
+            >
+              <Plus size={20} color="#00D4FF" />
+              <Text style={styles.newChatText}>Start New Conversation</Text>
+            </TouchableOpacity>
+
+            {isLoadingSessions ? (
+              <ActivityIndicator color="#00D4FF" style={{ marginTop: 40 }} />
+            ) : (
+              <FlatList
+                data={filteredSessions}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity 
+                    style={[styles.sessionItem, sessionId === item.id && styles.activeSessionItem]}
+                    onPress={() => {
+                      setSessionId(item.id);
+                      setIsHistoryVisible(false);
+                    }}
+                  >
+                    <View style={styles.sessionInfo}>
+                      <Text style={styles.sessionTitle} numberOfLines={1}>{item.title}</Text>
+                      <Text style={styles.sessionDate}>
+                        {new Date(item.created_at).toLocaleDateString()}
+                      </Text>
+                    </View>
+                    {sessionId === item.id && <Circle size={8} color="#00D4FF" fill="#00D4FF" />}
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <View style={styles.emptySessionsWrapper}>
+                    <Text style={styles.emptySessions}>No past conversations found.</Text>
+                    <Text style={styles.emptySessionsSub}>Start a conversation to see it here.</Text>
+                  </View>
+                }
+              />
+            )}
+          </GlassCard>
+        </View>
+      </Modal>
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 74 + insets.top : 0}
         style={{ flex: 1 }}
       >
         <ScrollView
@@ -340,6 +478,24 @@ export default function AIAgentScreen() {
           style={styles.chatArea}
           contentContainerStyle={styles.chatContent}
         >
+          {showWelcome && (
+            <View style={styles.welcomeContainer}>
+              <View style={styles.agentAvatarLarge}>
+                <Text style={styles.agentAvatarIconLarge}>✦</Text>
+              </View>
+              <Text style={styles.welcomeTitle}>
+                {gig ? `Planning for ${gig.name}` : 'How can I help today?'}
+              </Text>
+              <Text style={styles.welcomeSub}>
+                I can help you build setlists, hire musicians, or plan your next performance.
+              </Text>
+            </View>
+          )}
+
+          {isLoadingHistory && sessionId && (
+             <ActivityIndicator color="#00D4FF" style={{ marginTop: 20 }} />
+          )}
+
           {messages.map((msg) => (
             <View key={msg.id}>
               <View style={[styles.msgWrapper, msg.role === 'user' ? styles.msgWrapperUser : styles.msgWrapperAI]}>
@@ -369,7 +525,6 @@ export default function AIAgentScreen() {
                 </View>
               </View>
 
-              {/* Action Proposals for this message */}
               {msg.role === 'assistant' && msg.actions && msg.actions.length > 0 && (
                 <View style={styles.proposalsContainer}>
                   {msg.actions.map((action, idx) => (
@@ -392,8 +547,7 @@ export default function AIAgentScreen() {
           {aiMutation.isPending && <TypingIndicator />}
         </ScrollView>
 
-        {/* ── Input Area ── */}
-        <View style={styles.inputOuter}>
+        <View style={[styles.inputOuter, { paddingBottom: insets.bottom > 0 ? insets.bottom : 20 }]}>
           <View style={styles.inputInner}>
             <TextInput
               style={styles.input}
@@ -402,11 +556,12 @@ export default function AIAgentScreen() {
               value={input}
               onChangeText={setInput}
               multiline
+              editable={!aiMutation.isPending && !!sessionId}
             />
             <TouchableOpacity 
-              style={[styles.sendBtn, !input.trim() && { opacity: 0.5 }]} 
+              style={[styles.sendBtn, (!input.trim() || !sessionId) && { opacity: 0.5 }]} 
               onPress={() => handleSend()}
-              disabled={!input.trim() || aiMutation.isPending}
+              disabled={!input.trim() || aiMutation.isPending || !sessionId}
             >
               {aiMutation.isPending ? (
                 <ActivityIndicator size="small" color="#FFF" />
@@ -441,12 +596,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#071420',
   },
   header: {
-    height: 100,
     backgroundColor: 'rgba(7, 20, 32, 0.95)',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 40,
     borderBottomWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.05)',
   },
@@ -459,7 +612,6 @@ const styles = StyleSheet.create({
   backText: {
     color: 'rgba(255,255,255,0.7)',
     fontSize: 14,
-    fontFamily: 'DM Sans',
   },
   headerCenter: {
     flex: 1,
@@ -488,7 +640,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#FFF',
-    fontFamily: 'DM Sans Bold',
   },
   statusRow: {
     flexDirection: 'row',
@@ -504,7 +655,14 @@ const styles = StyleSheet.create({
   headerStatus: {
     fontSize: 11,
     color: 'rgba(255,255,255,0.4)',
-    fontFamily: 'DM Sans',
+  },
+  historyBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   chatArea: {
     flex: 1,
@@ -512,6 +670,40 @@ const styles = StyleSheet.create({
   chatContent: {
     padding: 20,
     paddingBottom: 40,
+  },
+  welcomeContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 40,
+  },
+  agentAvatarLarge: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(139, 92, 246, 0.2)',
+  },
+  agentAvatarIconLarge: {
+    fontSize: 40,
+    color: '#8B5CF6',
+  },
+  welcomeTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#FFF',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  welcomeSub: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.5)',
+    textAlign: 'center',
+    lineHeight: 20,
   },
   msgWrapper: {
     flexDirection: 'row',
@@ -549,7 +741,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     color: 'rgba(255,255,255,0.9)',
-    fontFamily: 'DM Sans',
   },
   msgTextUser: {
     color: '#FFF',
@@ -568,7 +759,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#10B981',
     fontWeight: '700',
-    fontFamily: 'DM Sans Bold',
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  typingText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.4)',
+    fontStyle: 'italic',
   },
   proposalsContainer: {
     paddingLeft: 20,
@@ -607,13 +806,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#FFF',
-    fontFamily: 'DM Sans Bold',
     marginBottom: 2,
   },
   proposalMeta: {
     fontSize: 12,
     color: 'rgba(255,255,255,0.4)',
-    fontFamily: 'DM Sans',
   },
   proposalActions: {
     flexDirection: 'row',
@@ -652,8 +849,9 @@ const styles = StyleSheet.create({
     flex: 1,
     color: '#FFF',
     fontSize: 15,
-    fontFamily: 'DM Sans',
-    maxHeight: 100,
+    maxHeight: 120,
+    paddingTop: 10,
+    paddingBottom: 10,
   },
   sendBtn: {
     width: 40,
@@ -663,15 +861,84 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dotsRow: {
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    height: '70%',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 24,
+  },
+  modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 20,
+    justifyContent: 'space-between',
+    marginBottom: 24,
   },
-  typingText: {
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+  newChatBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(0,212,255,0.1)',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0,212,255,0.2)',
+    marginBottom: 20,
+  },
+  newChatText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#00D4FF',
+  },
+  sessionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    marginBottom: 10,
+    gap: 12,
+  },
+  activeSessionItem: {
+    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(139, 92, 246, 0.2)',
+  },
+  sessionInfo: {
+    flex: 1,
+  },
+  sessionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFF',
+    marginBottom: 4,
+  },
+  sessionDate: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.3)',
+  },
+  emptySessionsWrapper: {
+    alignItems: 'center',
+    paddingTop: 40,
+    opacity: 0.5,
+  },
+  emptySessions: {
+    color: '#FFF',
     fontSize: 14,
-    color: 'rgba(255,255,255,0.5)',
-    fontFamily: 'DM Sans Medium',
-    fontStyle: 'italic',
-  }
+    fontWeight: '600',
+  },
+  emptySessionsSub: {
+    color: '#FFF',
+    fontSize: 12,
+    marginTop: 4,
+  },
 });
