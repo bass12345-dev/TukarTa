@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -11,8 +11,31 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, Send, Sparkles, Zap, Music2, Check } from 'lucide-react-native';
-import { useGigDetails, useGigSetlist, useSetlistAI, useAddSongToSetlist, useSetlistSongs } from '../utils/hooks/useMusician';
+import { 
+  ChevronLeft, 
+  Send, 
+  Sparkles, 
+  Zap, 
+  Music2, 
+  Check, 
+  Calendar, 
+  UserPlus, 
+  Music, 
+  PlusCircle, 
+  X,
+  AlertCircle
+} from 'lucide-react-native';
+import { 
+  useGigDetails, 
+  useGigSetlist, 
+  useSetlistAI, 
+  useAddSongToSetlist, 
+  useSetlistSongs,
+  useCreateGig,
+  useInviteMusician
+} from '../utils/hooks/useMusician';
+import { GlassCard } from '../components/ui/GlassCard';
+import { Button } from '../components/ui/Button';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Segment = { text: string; highlight?: boolean };
@@ -48,23 +71,54 @@ function parseAIMessage(content: string) {
   return { text: cleanText, actions };
 }
 
-const SUGGESTIONS = [
-  { label: 'Suggest high-energy songs', icon: Zap, color: '#F59E0B' },
-  { label: 'Suggest OPM classics', icon: Music2, color: '#8B5CF6' },
-  { label: 'Optimize setlist for 90 mins', icon: Sparkles, color: '#00D4FF' },
-];
+// ─── Proposal Card Component ─────────────────────────────────────────────────
+function ProposalCard({ action, onApprove, onCancel, isApplied }: any) {
+  const isSong = action.type === 'add';
+  const isGig = action.type === 'proposal_create_gig';
+  const isInvite = action.type === 'proposal_invite';
 
-function RichText({ segments, isUser }: { segments: Segment[]; isUser: boolean }) {
+  if (isApplied) return null;
+
   return (
-    <Text style={[styles.msgText, isUser && styles.msgTextUser]}>
-      {segments.map((seg, i) =>
-        seg.highlight ? (
-          <Text key={i} style={styles.highlight}>{seg.text}</Text>
-        ) : (
-          <Text key={i}>{seg.text}</Text>
-        )
-      )}
-    </Text>
+    <GlassCard intensity={20} style={styles.proposalCard}>
+      <View style={styles.proposalHeader}>
+        {isSong && <Music size={18} color="#00D4FF" />}
+        {isGig && <Calendar size={18} color="#F59E0B" />}
+        {isInvite && <UserPlus size={18} color="#8B5CF6" />}
+        <Text style={styles.proposalType}>
+          {isSong ? 'Song Suggestion' : isGig ? 'Gig Proposal' : 'Recruitment Proposal'}
+        </Text>
+      </View>
+      
+      <View style={styles.proposalBody}>
+        {isSong && <Text style={styles.proposalTitle}>{action.title || 'Unknown Song'}</Text>}
+        {isGig && (
+          <>
+            <Text style={styles.proposalTitle}>{action.data.name}</Text>
+            <Text style={styles.proposalMeta}>{action.data.venue} · {action.data.date}</Text>
+          </>
+        )}
+        {isInvite && (
+          <>
+            <Text style={styles.proposalTitle}>Invite Musician</Text>
+            <Text style={styles.proposalMeta}>Proposed to join your band</Text>
+          </>
+        )}
+      </View>
+
+      <View style={styles.proposalActions}>
+        <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
+          <X size={16} color="rgba(255,255,255,0.4)" />
+        </TouchableOpacity>
+        <Button 
+          title="Approve" 
+          size="sm" 
+          variant="glass" 
+          style={styles.approveBtn}
+          onPress={onApprove} 
+        />
+      </View>
+    </GlassCard>
   );
 }
 
@@ -83,10 +137,12 @@ export default function AIAgentScreen() {
   
   const aiMutation = useSetlistAI();
   const addSong = useAddSongToSetlist();
+  const createGig = useCreateGig();
+  const inviteMusician = useInviteMusician();
 
   // Initialize welcome message
   React.useEffect(() => {
-    if (gig) {
+    if (gigId && gig) {
       setMessages([
         {
           id: '1',
@@ -98,14 +154,23 @@ export default function AIAgentScreen() {
           ]),
         }
       ]);
+    } else if (!gigId) {
+      setMessages([
+        {
+          id: '1',
+          role: 'assistant',
+          segments: rich([
+            `Welcome to your AI Gig Assistant! ✦ I can help you plan new gigs, find band members, or build setlists. What are we working on?`,
+          ]),
+        }
+      ]);
     }
-  }, [gig]);
+  }, [gigId, gig]);
 
   const handleSend = async (overrideMsg?: string) => {
     const text = overrideMsg || input.trim();
     if (!text) return;
 
-    // Add user message
     const userMsg: Message = {
       id: Date.now().toString(),
       role: 'user',
@@ -116,7 +181,6 @@ export default function AIAgentScreen() {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
 
     try {
-      // Call AI Agent Edge Function
       const response = await aiMutation.mutateAsync({
         gigId: gigId as string,
         setlistId: setlist?.id,
@@ -130,7 +194,7 @@ export default function AIAgentScreen() {
         role: 'assistant',
         segments: [{ text: cleanReply }],
         actions,
-        badge: actions.length > 0 ? `${actions.length} suggestions ready ✓` : undefined,
+        badge: actions.length > 0 ? `${actions.length} proposals ready ✓` : undefined,
       };
       
       setMessages((prev) => [...prev, aiReply]);
@@ -146,27 +210,40 @@ export default function AIAgentScreen() {
     }
   };
 
-  const applyActions = async (msgId: string, actions: any[]) => {
+  const applySingleAction = async (msgId: string, action: any) => {
     try {
-      let nextPosition = (currentSongs?.length || 0) + 1;
-      
-      for (const action of actions) {
-        if (action.type === 'add') {
-          await addSong.mutateAsync({
-            setlistId: setlist?.id,
-            songId: action.songId,
-            position: nextPosition
-          });
-          nextPosition++;
-        }
+      if (action.type === 'add') {
+        const nextPosition = (currentSongs?.length || 0) + 1;
+        await addSong.mutateAsync({
+          setlistId: setlist?.id || '',
+          songId: action.songId,
+          position: nextPosition
+        });
+      } else if (action.type === 'proposal_create_gig') {
+        await createGig.mutateAsync({
+          bandId: action.data.bandId,
+          name: action.data.name,
+          venue: action.data.venue,
+          date: action.data.date,
+        });
+      } else if (action.type === 'proposal_invite') {
+        await inviteMusician.mutateAsync({
+          bandId: action.data.bandId,
+          musicianId: action.data.musicianId,
+          message: action.data.message
+        });
       }
-      
-      // Update message badge to show success and hide apply button
+
+      // Remove specific action from the message list after approval
       setMessages(prev => prev.map(m => 
-        m.id === msgId ? { ...m, badge: 'Changes applied! ✓', actions: [] } : m
+        m.id === msgId ? { 
+          ...m, 
+          actions: m.actions?.filter(a => a !== action),
+          badge: m.actions?.length === 1 ? 'Action approved! ✓' : m.badge 
+        } : m
       ));
     } catch (error) {
-      console.error('Failed to apply AI actions:', error);
+       console.error('Failed to apply action:', error);
     }
   };
 
@@ -186,10 +263,12 @@ export default function AIAgentScreen() {
             <Text style={styles.agentAvatarIcon}>✦</Text>
           </View>
           <View style={styles.headerInfo}>
-            <Text style={styles.headerTitle}>✦ AI Setlist Agent</Text>
+            <Text style={styles.headerTitle}>✦ AI Gig Assistant</Text>
             <View style={styles.statusRow}>
               <View style={styles.onlineDot} />
-              <Text style={styles.headerStatus}>Online · {gig?.name}</Text>
+              <Text style={styles.headerStatus}>
+                {gigId ? `In Gig: ${gig?.name || '...'}` : 'General Planning Mode'}
+              </Text>
             </View>
           </View>
         </View>
@@ -198,104 +277,70 @@ export default function AIAgentScreen() {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
-        keyboardVerticalOffset={0}
       >
         <ScrollView
           ref={scrollRef}
           style={styles.chatArea}
           contentContainerStyle={styles.chatContent}
-          showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
         >
-          {messages.map((msg) => {
-            const isUser = msg.role === 'user';
-            return (
-              <View
-                key={msg.id}
-                style={[styles.msgRow, isUser ? styles.msgRowUser : styles.msgRowAI]}
-              >
-                <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAI]}>
-                  <RichText segments={msg.segments} isUser={isUser} />
-                  
-                  {msg.actions && msg.actions.length > 0 && (
-                    <View style={styles.actionsContainer}>
-                      {msg.actions.map((act, idx) => (
-                        <View key={idx} style={styles.actionItem}>
-                          <Music2 size={12} color="#00D4FF" />
-                          <Text style={styles.actionItemText}>{act.title}</Text>
-                        </View>
-                      ))}
-                      <TouchableOpacity 
-                        style={styles.applyBtn}
-                        onPress={() => applyActions(msg.id, msg.actions!)}
-                        disabled={addSong.isPending}
-                      >
-                        {addSong.isPending ? (
-                          <ActivityIndicator size="small" color="#FFF" />
-                        ) : (
-                          <>
-                            <Check size={14} color="#FFF" />
-                            <Text style={styles.applyBtnText}>Apply to Setlist</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    </View>
+          {messages.map((msg) => (
+            <View key={msg.id}>
+              <View style={[styles.msgWrapper, msg.role === 'user' ? styles.msgWrapperUser : styles.msgWrapperAI]}>
+                <View style={[styles.msgBubble, msg.role === 'user' ? styles.msgBubbleUser : styles.msgBubbleAI]}>
+                  {msg.role === 'assistant' && (
+                    <Text style={styles.aiLabel}>GIG ASSISTANT</Text>
                   )}
-
+                  <RichText segments={msg.segments} isUser={msg.role === 'user'} />
+                  
                   {msg.badge && (
-                    <Text style={styles.badgeText}>{msg.badge}</Text>
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>{msg.badge}</Text>
+                    </View>
                   )}
                 </View>
               </View>
-            );
-          })}
+
+              {/* Action Proposals for this message */}
+              {msg.role === 'assistant' && msg.actions && msg.actions.length > 0 && (
+                <View style={styles.proposalsContainer}>
+                  {msg.actions.map((action, idx) => (
+                    <ProposalCard 
+                      key={idx} 
+                      action={action} 
+                      onApprove={() => applySingleAction(msg.id, action)}
+                      onCancel={() => {
+                        setMessages(prev => prev.map(m => 
+                          m.id === msg.id ? { ...m, actions: m.actions?.filter((_, i) => i !== idx) } : m
+                        ));
+                      }}
+                    />
+                  ))}
+                </View>
+              )}
+            </View>
+          ))}
         </ScrollView>
 
-        <View style={styles.suggestionsWrap}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.suggestionsScroll}
-          >
-            {SUGGESTIONS.map((s) => {
-              const Icon = s.icon;
-              return (
-                <TouchableOpacity
-                  key={s.label}
-                  style={styles.suggestionChip}
-                  activeOpacity={0.7}
-                  onPress={() => handleSend(s.label)}
-                >
-                  <Icon size={12} color={s.color} />
-                  <Text style={styles.suggestionText}>{s.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        <View style={styles.inputBar}>
-          <View style={styles.inputRow}>
+        {/* ── Input Area ── */}
+        <View style={styles.inputOuter}>
+          <View style={styles.inputInner}>
             <TextInput
-              placeholder="Ask the AI to change your setlist..."
-              placeholderTextColor="rgba(255,255,255,0.28)"
-              style={styles.textInput}
+              style={styles.input}
+              placeholder="e.g. 'Plan a bar gig for next Friday'"
+              placeholderTextColor="rgba(255,255,255,0.3)"
               value={input}
               onChangeText={setInput}
-              onSubmitEditing={() => handleSend()}
-              returnKeyType="send"
-              multiline={false}
+              multiline
             />
-            <TouchableOpacity
+            <TouchableOpacity 
+              style={[styles.sendBtn, !input.trim() && { opacity: 0.5 }]} 
               onPress={() => handleSend()}
-              style={[styles.sendBtn, (!input.trim() || aiMutation.isPending) && styles.sendBtnDisabled]}
-              activeOpacity={0.8}
-              disabled={aiMutation.isPending}
+              disabled={!input.trim() || aiMutation.isPending}
             >
               {aiMutation.isPending ? (
-                <ActivityIndicator size="small" color="#071420" />
+                <ActivityIndicator size="small" color="#FFF" />
               ) : (
-                <Send size={17} color="#071420" strokeWidth={2.5} />
+                <Send size={20} color="#FFF" />
               )}
             </TouchableOpacity>
           </View>
@@ -305,56 +350,73 @@ export default function AIAgentScreen() {
   );
 }
 
+function RichText({ segments, isUser }: { segments: Segment[]; isUser: boolean }) {
+  return (
+    <Text style={[styles.msgText, isUser && styles.msgTextUser]}>
+      {segments.map((seg, i) =>
+        seg.highlight ? (
+          <Text key={i} style={styles.highlight}>{seg.text}</Text>
+        ) : (
+          <Text key={i}>{seg.text}</Text>
+        )
+      )}
+    </Text>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A0F1E',
+    backgroundColor: '#071420',
   },
   header: {
-    paddingTop: Platform.OS === 'ios' ? 56 : 32,
-    paddingHorizontal: 20,
-    paddingBottom: 14,
+    height: 100,
+    backgroundColor: 'rgba(7, 20, 32, 0.95)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 40,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.07)',
-    gap: 12,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
   },
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    alignSelf: 'flex-start',
+    paddingRight: 12,
   },
   backText: {
+    color: 'rgba(255,255,255,0.7)',
     fontSize: 14,
-    color: '#00D4FF',
     fontFamily: 'DM Sans',
   },
   headerCenter: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
   agentAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: 'rgba(139,92,246,0.25)',
-    borderWidth: 1,
-    borderColor: 'rgba(139,92,246,0.4)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(139, 92, 246, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(139, 92, 246, 0.3)',
   },
   agentAvatarIcon: {
-    fontSize: 18,
     color: '#8B5CF6',
+    fontSize: 18,
   },
   headerInfo: {
-    gap: 3,
+    gap: 2,
   },
   headerTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#FFF',
     fontFamily: 'DM Sans Bold',
   },
   statusRow: {
@@ -363,178 +425,171 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   onlineDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: '#10B981',
   },
   headerStatus: {
-    fontSize: 12,
-    color: '#10B981',
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.4)',
     fontFamily: 'DM Sans',
   },
   chatArea: {
     flex: 1,
   },
   chatContent: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 12,
-    gap: 12,
+    padding: 20,
+    paddingBottom: 40,
   },
-  msgRow: {
+  msgWrapper: {
     flexDirection: 'row',
+    marginBottom: 20,
   },
-  msgRowAI: {
+  msgWrapperAI: {
     justifyContent: 'flex-start',
   },
-  msgRowUser: {
+  msgWrapperUser: {
     justifyContent: 'flex-end',
   },
-  bubble: {
-    maxWidth: '84%',
+  msgBubble: {
+    maxWidth: '85%',
+    padding: 16,
     borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-    gap: 8,
   },
-  bubbleAI: {
-    backgroundColor: 'rgba(255,255,255,0.07)',
+  msgBubbleAI: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderBottomLeftRadius: 4,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.09)',
-    borderTopLeftRadius: 6,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
-  bubbleUser: {
-    backgroundColor: '#00D4FF',
-    borderTopRightRadius: 6,
+  msgBubbleUser: {
+    backgroundColor: '#8B5CF6',
+    borderBottomRightRadius: 4,
+  },
+  aiLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#8B5CF6',
+    marginBottom: 6,
+    letterSpacing: 1.5,
   },
   msgText: {
-    fontSize: 14.5,
+    fontSize: 15,
     lineHeight: 22,
-    color: 'rgba(255,255,255,0.88)',
+    color: 'rgba(255,255,255,0.9)',
     fontFamily: 'DM Sans',
   },
   msgTextUser: {
-    color: '#071420',
-    fontWeight: '600',
+    color: '#FFF',
   },
   highlight: {
     color: '#00D4FF',
-    fontWeight: '600',
-    fontFamily: 'DM Sans',
+    fontWeight: '700',
+  },
+  badge: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.05)',
   },
   badgeText: {
-    fontSize: 13,
+    fontSize: 11,
+    color: '#10B981',
     fontWeight: '700',
-    color: '#00D4FF',
     fontFamily: 'DM Sans Bold',
-    marginTop: 6,
   },
-  actionsContainer: {
-    marginTop: 10,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderRadius: 12,
-    padding: 10,
-    gap: 8,
+  proposalsContainer: {
+    paddingLeft: 20,
+    marginBottom: 24,
+    gap: 12,
   },
-  actionItem: {
+  proposalCard: {
+    padding: 16,
+    borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 16,
   },
-  actionItemText: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.7)',
-    fontFamily: 'DM Sans',
-  },
-  applyBtn: {
-    backgroundColor: '#00D4FF',
-    height: 36,
-    borderRadius: 8,
-    flexDirection: 'row',
+  proposalHeader: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.05)',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    marginTop: 4,
   },
-  applyBtnText: {
-    fontSize: 13,
+  proposalType: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.4)',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    position: 'absolute',
+    top: -20,
+    left: 0,
+  },
+  proposalBody: {
+    flex: 1,
+  },
+  proposalTitle: {
+    fontSize: 14,
     fontWeight: '700',
     color: '#FFF',
     fontFamily: 'DM Sans Bold',
+    marginBottom: 2,
   },
-  suggestionsWrap: {
-    height: 48,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.06)',
+  proposalMeta: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.4)',
+    fontFamily: 'DM Sans',
   },
-  suggestionsScroll: {
-    paddingHorizontal: 16,
+  proposalActions: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    height: 48,
   },
-  suggestionChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  approveBtn: {
+    height: 32,
+    paddingHorizontal: 12,
+  },
+  cancelBtn: {
+    height: 32,
+    width: 32,
+    borderRadius: 8,
     backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  suggestionText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.6)',
-    fontFamily: 'DM Sans',
+  inputOuter: {
+    padding: 20,
+    paddingTop: 0,
+    backgroundColor: '#071420',
   },
-  inputBar: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 16,
-    backgroundColor: '#0A0F1E',
-  },
-  inputRow: {
+  inputInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 24,
     paddingLeft: 20,
     paddingRight: 6,
-    height: 56,
-    gap: 10,
-    shadowColor: '#00D4FF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
-  textInput: {
+  input: {
     flex: 1,
-    fontSize: 14,
-    color: '#FFFFFF',
+    color: '#FFF',
+    fontSize: 15,
     fontFamily: 'DM Sans',
+    maxHeight: 100,
   },
   sendBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#00D4FF',
+    backgroundColor: '#8B5CF6',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#00D4FF',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  sendBtnDisabled: {
-    opacity: 0.4,
-  },
+  }
 });

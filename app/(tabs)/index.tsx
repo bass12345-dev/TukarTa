@@ -156,8 +156,8 @@ export default function DashboardScreen() {
         </View>
         <View style={styles.actionList}>
           <ActionCard 
-            title="AI Setlist Agent" 
-            subtitle="Chat to build your set" 
+            title="AI Gig Assistant" 
+            subtitle="Plan gigs & build setlists" 
             orbVariant="purple" 
             icon={<MessageSquare size={20} color="#8B5CF6" />} 
             onPress={() => router.push('/ai-agent')}

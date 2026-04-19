@@ -3,7 +3,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0"
 
 const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY')
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
-const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -26,61 +25,85 @@ serve(async (req) => {
     const token = authHeader.replace('Bearer ', '')
     const payload = JSON.parse(atob(token.split('.')[1]))
     const userId = payload.sub
+    const displayName = payload.user_metadata?.full_name || 'the musician'
 
-    // 2. Fetch Context
-    // Gig & Band info
-    const { data: gig, error: gigError } = await supabase
-      .from('gigs')
-      .select('*, band:bands(*)')
-      .eq('id', gigId)
-      .single()
+    // 2. Fetch Global Context (Bands user leads & Top available musicians)
+    const { data: myBands } = await supabase
+      .from('bands')
+      .select('*')
+      .eq('leader_id', userId)
 
-    if (gigError || !gig) {
-      throw new Error(`Gig not found: ${gigError?.message || 'Unknown error'}`)
+    const { data: discoverMusicians } = await supabase
+      .from('users')
+      .select('id, display_name, musician_profiles(roles, genres)')
+      .limit(15)
+
+    // 3. Fetch Gig-Specific Context (if gigId provided)
+    let gigContext = ""
+    let repertoireContext = ""
+    
+    if (gigId) {
+      const { data: gig } = await supabase
+        .from('gigs')
+        .select('*, band:bands(*)')
+        .eq('id', gigId)
+        .single()
+
+      if (gig) {
+        gigContext = `
+          CURRENT GIG:
+          - Name: ${gig.name}
+          - Venue: ${gig.venue}
+          - Band: ${gig.band?.name || 'Independent'}
+          - Focus: ${gig.genre_focus || 'N/A'}
+        `
+      }
+
+      const { data: repertoire } = await supabase
+        .from('musician_song_knowledge')
+        .select('song:songs(*)')
+        .eq('musician_id', userId)
+
+      repertoireContext = repertoire?.map((r: any) => `- ${r.song.title} (${r.song.artist}) [ID: ${r.song.id}]`).join('\n') || "No songs in repertoire."
     }
 
-    // User's known songs
-    const { data: repertoire } = await supabase
-      .from('musician_song_knowledge')
-      .select('song:songs(*)')
-      .eq('musician_id', userId)
+    const bandList = myBands?.map(b => `- ${b.name} [ID: ${b.id}]`).join('\n') || "No bands found."
+    const musicianList = discoverMusicians?.map(m => `- ${m.display_name} (${m.musician_profiles?.[0]?.roles?.join(', ') || 'Musician'}) [ID: ${m.id}]`).join('\n') || "No musicians found."
 
-    // Current setlist
-    const { data: currentSongs } = await supabase
-      .from('setlist_songs')
-      .select('song:songs(*)')
-      .eq('setlist_id', setlistId)
-
-    const knownSongs = repertoire?.map((r: any) => `${r.song.title} by ${r.song.artist} [id: ${r.song.id}]`).join('\n')
-    const currentList = currentSongs?.map((s: any) => s.song.title).join(', ')
-    const displayName = payload.user_metadata?.full_name || 'the user'
-
-    // 2. Construct Prompt
+    // 4. Construct Multi-Purpose Prompt
     const systemPrompt = `
-      You are a professional Music Director and Setlist Consultant for a musician named ${displayName}.
-      Your job is to help them build the perfect setlist for their upcoming gig.
+      You are the "TukarTa Gig Assistant", a professional Music Director and Band Coordinator for ${displayName}.
+      Your goal is to help them manage their entire music career: planning gigs, building setlists, and finding band members.
 
       CONTEXT:
-      - Gig: ${gig.name}
-      - Venue: ${gig.venue}
-      - Band: ${gig.band?.name || 'Independent'} (Genres: ${gig.band?.genres?.join(', ') || 'N/A'})
-      - Current Setlist: ${currentList || 'Empty'}
+      ${gigContext}
+      
+      USER'S BANDS (User is the leader):
+      ${bandList}
 
-      REPERTOIRE (The only songs this musician knows and can play):
-      ${knownSongs || 'No songs in repertoire yet.'}
+      AVAILABLE MUSICIANS (Discovery DB):
+      ${musicianList}
+
+      REPERTOIRE (If in a gig context):
+      ${repertoireContext}
+
+      YOUR CAPABILITIES (Action Proposals):
+      1. CREATE_GIG: If user wants to plan an event. Requires: name, venue, date (YYYY-MM-DD), bandId.
+      2. INVITE_MUSICIAN: If user needs a specific role. Requires: musicianId, bandId, message.
+      3. ADD_SONG: If user is editing a setlist. Requires: songId, title.
 
       INSTRUCTIONS:
-      1. Respond to the user's message in a helpful, encouraging "gig-ready" tone.
-      2. If they ask for suggestions, pick the best songs from their REPERTOIRE that fit the gig venue and band style.
-      3. ONLY suggest songs from the REPERTOIRE list provided above.
-      4. If you suggest adding songs, return a structured JSON block at the end of your message.
+      - Be encouraging, organized, and proactive.
+      - If pieces of information are missing (e.g., date for a gig), ASK for them first.
+      - When you are ready to perform an action, append it in the ACTIONS section at the end.
+      - ONLY use IDs provided in the context for actions.
 
       OUTPUT FORMAT:
-      Your response should be natural text. If you suggest songs to add, include a JSON block like this:
-      ACTIONS: [{"type": "add", "songId": "uuid", "title": "Song Title"}]
+      Your response should be natural text. If you want to propose an action, end with:
+      ACTIONS: [{"type": "proposal_create_gig", "data": {...}}, {"type": "proposal_invite", "data": {...}}, {"type": "add", "songId": "uuid", "title": "Song Title"}]
     `
 
-    // 3. Call Groq
+    // 5. Call Groq
     const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -103,11 +126,6 @@ serve(async (req) => {
     }
 
     const result = await groqRes.json()
-    
-    if (!result.choices || result.choices.length === 0) {
-      throw new Error('Groq returned no choices. Please try again.')
-    }
-
     const aiMessage = result.choices[0].message.content
 
     return new Response(JSON.stringify({ reply: aiMessage }), {
