@@ -1,22 +1,21 @@
+import { LinearGradient } from 'expo-linear-gradient';
+import { Stack, useRouter } from 'expo-router';
+import { Users, Plus, Music } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
+  Dimensions,
+  Platform,
   ScrollView,
   StyleSheet,
+  Text,
   TouchableOpacity,
-  Dimensions,
-  Image,
-  Platform,
+  View
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
-import { Users, Plus, ChevronRight, Music, MapPin, Settings } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { CreateBandModal } from '../../components/bands/CreateBandModal';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Pill } from '../../components/ui/Pill';
-import { useMyBands } from '../../utils/hooks/useMusician';
 import { useAuth } from '../../context/auth';
-import { CreateBandModal } from '../../components/bands/CreateBandModal';
+import { useMyBands } from '../../utils/hooks/useMusician';
 
 const { width } = Dimensions.get('window');
 
@@ -129,22 +128,6 @@ function BandManagementCard({ band, role, onPress }: any) {
           />
         </View>
 
-        <View style={styles.cardDivider} />
-
-        <View style={styles.bandFooter}>
-          <View style={styles.locationRow}>
-            <MapPin size={12} color={THEME.textDim} />
-            <Text style={styles.locationText}>{band.city || 'Cebu City'}</Text>
-          </View>
-          <View style={styles.footerActions}>
-            {isLeader && (
-              <TouchableOpacity style={styles.iconAction}>
-                <Settings size={16} color={THEME.textSec} />
-              </TouchableOpacity>
-            )}
-            <ChevronRight size={20} color={isLeader ? THEME.cyan : THEME.purple} />
-          </View>
-        </View>
       </GlassCard>
     </TouchableOpacity>
   );
@@ -206,7 +189,7 @@ const styles = StyleSheet.create({
   },
   bandCard: {
     borderRadius: 24,
-    padding: 16,
+    padding: 10,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
   },
@@ -255,39 +238,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: THEME.textDim,
     fontFamily: 'DM Sans',
-  },
-  cardDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    marginVertical: 14,
-  },
-  bandFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  locationText: {
-    fontSize: 12,
-    color: THEME.textDim,
-    fontFamily: 'DM Sans',
-  },
-  footerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  iconAction: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   emptyState: {
     alignItems: 'center',

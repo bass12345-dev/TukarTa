@@ -166,7 +166,8 @@ export function useMyInvites() {
           band:bands (
             id,
             name,
-            avatar_url
+            avatar_url,
+            city
           )
         `)
         .eq('to_musician_id', user.id)
@@ -175,6 +176,111 @@ export function useMyInvites() {
       if (error) throw error;
       return data;
     },
+  });
+}
+
+export function useAcceptInvite() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (inviteId: string) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // 1. Get invite details
+      const { data: invite, error: fetchError } = await supabase
+        .from('musician_invites')
+        .select('*')
+        .eq('id', inviteId)
+        .single();
+      
+      if (fetchError) throw fetchError;
+
+      // 2. Update invite status
+      const { error: inviteError } = await supabase
+        .from('musician_invites')
+        .update({ status: 'accepted', responded_at: new Date().toISOString() })
+        .eq('id', inviteId);
+
+      if (inviteError) throw inviteError;
+
+      // 3. Add to band members
+      const { error: memberError } = await supabase
+        .from('band_members')
+        .insert({
+          band_id: invite.from_band_id,
+          user_id: user.id,
+          status: 'active'
+        });
+
+      if (memberError) throw memberError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-invites'] });
+      queryClient.invalidateQueries({ queryKey: ['my-bands'] });
+    },
+  });
+}
+
+export function useDeclineInvite() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (inviteId: string) => {
+      const { error } = await supabase
+        .from('musician_invites')
+        .update({ status: 'declined', responded_at: new Date().toISOString() })
+        .eq('id', inviteId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-invites'] });
+    },
+  });
+}
+
+export function useBandDetails(bandId: string | undefined) {
+  return useQuery({
+    queryKey: ['band', bandId],
+    queryFn: async () => {
+      if (!bandId) return null;
+      const { data, error } = await supabase
+        .from('bands')
+        .select('*')
+        .eq('id', bandId)
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!bandId,
+  });
+}
+
+export function useBandMembers(bandId: string | undefined) {
+  return useQuery({
+    queryKey: ['band-members', bandId],
+    queryFn: async () => {
+      if (!bandId) return [];
+      const { data, error } = await supabase
+        .from('band_members')
+        .select(`
+          *,
+          user:users (
+            id,
+            display_name,
+            avatar_url,
+            city
+          )
+        `)
+        .eq('band_id', bandId)
+        .eq('status', 'active');
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!bandId,
   });
 }
 
