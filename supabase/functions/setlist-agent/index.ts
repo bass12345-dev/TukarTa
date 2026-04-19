@@ -17,13 +17,17 @@ serve(async (req) => {
   }
 
   try {
-    const supabase = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
-      global: { headers: { Authorization: req.headers.get('Authorization')! } },
-    })
+    const supabase = createClient(SUPABASE_URL!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
     const { gigId, message, setlistId } = await req.json()
 
-    // 1. Fetch Context
+    // 1. Get User ID from JWT (Gateway already verified it, but we need the sub claim)
+    const authHeader = req.headers.get('Authorization')!
+    const token = authHeader.replace('Bearer ', '')
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    const userId = payload.sub
+
+    // 2. Fetch Context
     // Gig & Band info
     const { data: gig } = await supabase
       .from('gigs')
@@ -32,11 +36,10 @@ serve(async (req) => {
       .single()
 
     // User's known songs
-    const { data: { user } } = await supabase.auth.getUser()
     const { data: repertoire } = await supabase
       .from('musician_song_knowledge')
       .select('song:songs(*)')
-      .eq('musician_id', user!.id)
+      .eq('musician_id', userId)
 
     // Current setlist
     const { data: currentSongs } = await supabase
@@ -46,10 +49,11 @@ serve(async (req) => {
 
     const knownSongs = repertoire?.map((r: any) => `${r.song.title} by ${r.song.artist} [id: ${r.song.id}]`).join('\n')
     const currentList = currentSongs?.map((s: any) => s.song.title).join(', ')
+    const displayName = payload.user_metadata?.full_name || 'the user'
 
     // 2. Construct Prompt
     const systemPrompt = `
-      You are a professional Music Director and Setlist Consultant for a musician named ${user?.user_metadata?.full_name || 'the user'}.
+      You are a professional Music Director and Setlist Consultant for a musician named ${displayName}.
       Your job is to help them build the perfect setlist for their upcoming gig.
 
       CONTEXT:

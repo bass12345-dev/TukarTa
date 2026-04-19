@@ -89,7 +89,14 @@ export default function SetlistDetailsScreen() {
            <Text style={styles.btnText}>Add Song</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.stageBtn} activeOpacity={0.8} onPress={() => router.push('/stage-mode')}>
+        <TouchableOpacity 
+          style={styles.stageBtn} 
+          activeOpacity={0.8} 
+          onPress={() => router.push({ 
+            pathname: '/stage-mode', 
+            params: { setlistId: setlist?.id } 
+          })}
+        >
            <Play size={18} color="#FFF" fill="#FFF" />
         </TouchableOpacity>
       </View>
@@ -105,7 +112,15 @@ export default function SetlistDetailsScreen() {
           </View>
         ) : (
           songs?.map((item: any, index: number) => (
-            <TouchableOpacity key={item.id} style={styles.songRow} activeOpacity={0.7} onPress={() => router.push('/stage-mode')}>
+            <TouchableOpacity 
+              key={item.id} 
+              style={styles.songRow} 
+              activeOpacity={0.7} 
+              onPress={() => router.push({ 
+                pathname: '/stage-mode', 
+                params: { setlistId: setlist?.id, initialSongId: item.song.id } 
+              })}
+            >
                <Text style={styles.songIndex}>{String(index + 1).padStart(2, '0')}</Text>
                
                <Orb variant={getSongVariant(index)} size={40} style={styles.orb}>

@@ -1,6 +1,47 @@
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { supabase } from '../supabase';
-import { searchSongs, getArtistMetadata, SongResult } from '../musicApi';
+import { searchSongs, getArtistMetadata, SongResult, getLyrics } from '../musicApi';
+
+// ... (existing hooks)
+
+export function useSongLyrics(songId: string, artist: string, title: string) {
+  return useQuery({
+    queryKey: ['lyrics', songId],
+    queryFn: async () => {
+      // 1. Check Cache
+      const { data: cached, error: cacheError } = await supabase
+        .from('lyrics_cache')
+        .select('*')
+        .eq('song_id', songId)
+        .maybeSingle();
+
+      if (cached && new Date(cached.expires_at) > new Date()) {
+        return cached;
+      }
+
+      // 2. Fetch from LRCLIB
+      const lyricsData = await getLyrics(artist, title);
+      
+      if (!lyricsData) return null;
+
+      const result = {
+        song_id: songId,
+        plain_lyrics: lyricsData.plainLyrics,
+        synced_lyrics: lyricsData.syncedLyrics,
+        provider: 'lrclib',
+        expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+      };
+
+      // 3. Update Cache
+      await supabase
+        .from('lyrics_cache')
+        .upsert(result, { onConflict: 'song_id' });
+
+      return result;
+    },
+    enabled: !!songId && !!artist && !!title,
+  });
+}
 
 export function useSearchSongs(query: string) {
   return useQuery({

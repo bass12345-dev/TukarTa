@@ -74,6 +74,22 @@ export async function getArtistMetadata(artist: string) {
 }
 
 /**
+ * Fetches lyrics from LRCLIB.
+ */
+export async function getLyrics(artist: string, title: string) {
+  try {
+    const url = `${LRCLIB_URL}/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(title)}`;
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    
+    return await response.json();
+  } catch (error) {
+    console.error('LRCLIB Lyrics Error:', error);
+    return null;
+  }
+}
+
+/**
  * Combines search results with metadata for a better UI experience.
  * (Optional: can be called individually for performance)
  */
