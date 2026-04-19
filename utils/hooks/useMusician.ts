@@ -400,3 +400,214 @@ export function useCreateGig() {
     },
   });
 }
+
+export function useGigDetails(gigId: string | undefined) {
+  return useQuery({
+    queryKey: ['gig', gigId],
+    queryFn: async () => {
+      if (!gigId) return null;
+      const { data, error } = await supabase
+        .from('gigs')
+        .select(`
+          *,
+          band:bands (*)
+        `)
+        .eq('id', gigId)
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!gigId,
+  });
+}
+
+export function useGigSetlist(gigId: string | undefined) {
+  return useQuery({
+    queryKey: ['gig-setlist', gigId],
+    queryFn: async () => {
+      if (!gigId) return null;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // 1. Try to find existing setlist
+      let { data, error } = await supabase
+        .from('setlists')
+        .select('*')
+        .eq('gig_id', gigId)
+        .eq('name', 'Main Setlist')
+        .maybeSingle();
+
+      // 2. If not found, create it
+      if (!data && !error) {
+        const { data: newSetlist, error: createError } = await supabase
+          .from('setlists')
+          .insert({
+            gig_id: gigId,
+            band_id: (await supabase.from('gigs').select('band_id').eq('id', gigId).single()).data?.band_id,
+            name: 'Main Setlist',
+            created_by: user.id
+          })
+          .select()
+          .single();
+        
+        if (createError) throw createError;
+        data = newSetlist;
+      }
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!gigId,
+  });
+}
+
+export function useSetlistSongs(setlistId: string | undefined) {
+  return useQuery({
+    queryKey: ['setlist-songs', setlistId],
+    queryFn: async () => {
+      if (!setlistId) return [];
+      const { data, error } = await supabase
+        .from('setlist_songs')
+        .select(`
+          *,
+          song:songs (*)
+        `)
+        .eq('setlist_id', setlistId)
+        .order('position', { ascending: true });
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!setlistId,
+  });
+}
+
+export function useMyKnownSongs() {
+  return useQuery({
+    queryKey: ['my-known-songs'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const { data, error } = await supabase
+        .from('musician_song_knowledge')
+        .select(`
+          *,
+          song:songs (*)
+        `)
+        .eq('musician_id', user.id);
+
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+export function useAddSongToSetlist() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ setlistId, songId, position }: { setlistId: string; songId: string; position: number }) => {
+      const { error } = await supabase
+        .from('setlist_songs')
+        .insert({
+          setlist_id: setlistId,
+          song_id: songId,
+          position
+        });
+      
+      if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['setlist-songs', variables.setlistId] });
+    },
+  });
+}
+
+export function useSetlistAI() {
+  return useMutation({
+    mutationFn: async ({ gigId, message, setlistId }: { gigId: string; message: string; setlistId: string }) => {
+      const { data, error } = await supabase.functions.invoke('setlist-agent', {
+        body: { gigId, message, setlistId }
+      });
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+export function useDiscoverMusicians() {
+  return useQuery({
+    queryKey: ['discover-musicians'],
+    queryFn: async () => {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) throw new Error('Not authenticated');
+
+      // 1. Fetch current user's song knowledge IDs
+      const { data: mySongs, error: mySongsError } = await supabase
+        .from('musician_song_knowledge')
+        .select('song_id')
+        .eq('musician_id', currentUser.id);
+      
+      if (mySongsError) throw mySongsError;
+      const mySongIds = mySongs?.map(s => s.song_id) || [];
+
+      // 2. Fetch all musicians (profiles + users)
+      // Exclude current user
+      const { data: profiles, error: profileError } = await supabase
+        .from('users')
+        .select('*, musician_profiles(*)')
+        .neq('id', currentUser.id);
+
+      if (profileError) throw profileError;
+
+      // 3. Efficient Match Score Calculation
+      // Fetch all knowledge entries for other musicians that match our song IDs
+      const { data: matches, error: matchesError } = await supabase
+        .from('musician_song_knowledge')
+        .select('musician_id')
+        .neq('musician_id', currentUser.id)
+        .in('song_id', mySongIds);
+
+      if (matchesError) throw matchesError;
+
+      // Count occurrences of each musician_id (number of shared songs)
+      const counts = matches?.reduce((acc, match) => {
+        acc[match.musician_id] = (acc[match.musician_id] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>) || {};
+
+      // 4. Enrich and Filter (only show if they have a musician profile)
+      const enrichedProfiles = profiles
+        .filter(p => p.musician_profiles && p.musician_profiles.length > 0)
+        .map(p => ({
+          ...p,
+          musician_profile: p.musician_profiles[0], // Flatten the array from the join
+          match_score: counts[p.id] || 0
+        }));
+
+      // Sort by match score descending
+      return enrichedProfiles.sort((a, b) => b.match_score - a.match_score);
+    },
+  });
+}
+export function useMusicianSongs(userId: string | undefined) {
+  return useQuery({
+    queryKey: ['musician-songs', userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      const { data, error } = await supabase
+        .from('musician_song_knowledge')
+        .select(`
+          *,
+          song:songs (*)
+        `)
+        .eq('musician_id', userId);
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!userId,
+  });
+}

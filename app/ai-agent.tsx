@@ -8,9 +8,11 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
-import { ChevronLeft, Send, Sparkles, Zap, Music2 } from 'lucide-react-native';
+import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import { ChevronLeft, Send, Sparkles, Zap, Music2, Check } from 'lucide-react-native';
+import { useGigDetails, useGigSetlist, useSetlistAI, useAddSongToSetlist, useSetlistSongs } from '../utils/hooks/useMusician';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Segment = { text: string; highlight?: boolean };
@@ -19,67 +21,39 @@ type Message = {
   role: 'assistant' | 'user';
   segments: Segment[];
   badge?: string;
+  actions?: any[];
 };
 
-// ─── Rich text helper ─────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function rich(parts: (string | { h: string })[]): Segment[] {
   return parts.map((p) =>
     typeof p === 'string' ? { text: p } : { text: p.h, highlight: true }
   );
 }
 
-// ─── Initial conversation ──────────────────────────────────────────────────────
-const INITIAL_MESSAGES: Message[] = [
-  {
-    id: '1',
-    role: 'assistant',
-    segments: rich([
-      'Hey Marco 🎸 I\'m working on your setlist for ',
-      { h: 'Handuraw Café' },
-      '. What would you like to change?',
-    ]),
-  },
-  {
-    id: '2',
-    role: 'user',
-    segments: rich(['Make it more OPM heavy. We want to connect with the local crowd tonight.']),
-  },
-  {
-    id: '3',
-    role: 'assistant',
-    segments: rich([
-      'Got it. Adding more OPM songs that ',
-      { h: 'everyone in the band knows' },
-      '. Moving Kundiman to slot 2, Paraluman to slot 3. Hotel California stays as opener.',
-    ]),
-    badge: 'Updated: 7 OPM · 4 international ✓',
-  },
-  {
-    id: '4',
-    role: 'user',
-    segments: rich(['Remove the slow songs in the middle.']),
-  },
-  {
-    id: '5',
-    role: 'assistant',
-    segments: rich([
-      'Removed Tadhana and More Than Words. Replaced with ',
-      { h: 'Narda' },
-      ' and ',
-      { h: 'Harana' },
-      ' — both known by all 4 members, higher energy.',
-    ]),
-    badge: 'Duration: 91 min ✓',
-  },
-];
+function parseAIMessage(content: string) {
+  const actionRegex = /ACTIONS:\s*(\[.*\])/s;
+  const match = content.match(actionRegex);
+  let cleanText = content.replace(actionRegex, '').trim();
+  let actions = [];
+  
+  if (match) {
+    try {
+      actions = JSON.parse(match[1]);
+    } catch (e) {
+      console.error('Failed to parse AI actions:', e);
+    }
+  }
+  
+  return { text: cleanText, actions };
+}
 
 const SUGGESTIONS = [
-  { label: 'Draft 90min Setlist', icon: Sparkles, color: '#00D4FF' },
-  { label: 'Optimize for Energy', icon: Zap, color: '#F59E0B' },
-  { label: 'Check Song Availability', icon: Music2, color: '#8B5CF6' },
+  { label: 'Suggest high-energy songs', icon: Zap, color: '#F59E0B' },
+  { label: 'Suggest OPM classics', icon: Music2, color: '#8B5CF6' },
+  { label: 'Optimize setlist for 90 mins', icon: Sparkles, color: '#00D4FF' },
 ];
 
-// ─── Rich text renderer ───────────────────────────────────────────────────────
 function RichText({ segments, isUser }: { segments: Segment[]; isUser: boolean }) {
   return (
     <Text style={[styles.msgText, isUser && styles.msgTextUser]}>
@@ -97,36 +71,100 @@ function RichText({ segments, isUser }: { segments: Segment[]; isUser: boolean }
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export default function AIAgentScreen() {
   const router = useRouter();
+  const { gigId } = useLocalSearchParams();
   const scrollRef = useRef<ScrollView>(null);
-  const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
 
-  const handleSend = () => {
-    if (!input.trim()) return;
+  // 1. Data Hooks
+  const { data: gig } = useGigDetails(gigId as string);
+  const { data: setlist } = useGigSetlist(gigId as string);
+  const { data: currentSongs } = useSetlistSongs(setlist?.id);
+  
+  const aiMutation = useSetlistAI();
+  const addSong = useAddSongToSetlist();
+
+  // Initialize welcome message
+  React.useEffect(() => {
+    if (gig) {
+      setMessages([
+        {
+          id: '1',
+          role: 'assistant',
+          segments: rich([
+            `Hey rockstar! 🎸 I'm ready to help with your setlist for `,
+            { h: gig.name },
+            `. What's the vibe today?`,
+          ]),
+        }
+      ]);
+    }
+  }, [gig]);
+
+  const handleSend = async (overrideMsg?: string) => {
+    const text = overrideMsg || input.trim();
+    if (!text) return;
+
+    // Add user message
     const userMsg: Message = {
       id: Date.now().toString(),
       role: 'user',
-      segments: [{ text: input.trim() }],
+      segments: [{ text }],
     };
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
 
-    setTimeout(() => {
+    try {
+      // Call AI Agent Edge Function
+      const response = await aiMutation.mutateAsync({
+        gigId: gigId as string,
+        setlistId: setlist?.id,
+        message: text,
+      });
+
+      const { text: cleanReply, actions } = parseAIMessage(response.reply);
+
       const aiReply: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        segments: rich([
-          'I\'ve updated the setlist based on your request. Check out the new arrangement — ',
-          { h: '8 OPM songs' },
-          ' now lead the set.',
-        ]),
-        badge: 'Setlist ready ✓',
+        segments: [{ text: cleanReply }],
+        actions,
+        badge: actions.length > 0 ? `${actions.length} suggestions ready ✓` : undefined,
       };
+      
       setMessages((prev) => [...prev, aiReply]);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-    }, 900);
+    } catch (error) {
+      console.error('AI error:', error);
+      const errorMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        segments: [{ text: "Sorry, I'm having trouble connecting right now. 🎤 Catching my breath!" }],
+      };
+      setMessages((prev) => [...prev, errorMsg]);
+    }
+  };
 
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+  const applyActions = async (msgId: string, actions: any[]) => {
+    try {
+      for (const action of actions) {
+        if (action.type === 'add') {
+          await addSong.mutateAsync({
+            setlistId: setlist?.id,
+            songId: action.songId,
+            position: (currentSongs?.length || 0) + 1
+          });
+        }
+      }
+      
+      // Update message badge to show success and hide apply button
+      setMessages(prev => prev.map(m => 
+        m.id === msgId ? { ...m, badge: 'Changes applied! ✓', actions: [] } : m
+      ));
+    } catch (error) {
+      console.error('Failed to apply AI actions:', error);
+    }
   };
 
   return (
@@ -141,7 +179,6 @@ export default function AIAgentScreen() {
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          {/* AI avatar bubble */}
           <View style={styles.agentAvatar}>
             <Text style={styles.agentAvatarIcon}>✦</Text>
           </View>
@@ -149,7 +186,7 @@ export default function AIAgentScreen() {
             <Text style={styles.headerTitle}>✦ AI Setlist Agent</Text>
             <View style={styles.statusRow}>
               <View style={styles.onlineDot} />
-              <Text style={styles.headerStatus}>Online · Acoustic Vibes Mix</Text>
+              <Text style={styles.headerStatus}>Online · {gig?.name}</Text>
             </View>
           </View>
         </View>
@@ -160,7 +197,6 @@ export default function AIAgentScreen() {
         style={{ flex: 1 }}
         keyboardVerticalOffset={0}
       >
-        {/* ── Chat ── */}
         <ScrollView
           ref={scrollRef}
           style={styles.chatArea}
@@ -177,6 +213,32 @@ export default function AIAgentScreen() {
               >
                 <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAI]}>
                   <RichText segments={msg.segments} isUser={isUser} />
+                  
+                  {msg.actions && msg.actions.length > 0 && (
+                    <View style={styles.actionsContainer}>
+                      {msg.actions.map((act, idx) => (
+                        <View key={idx} style={styles.actionItem}>
+                          <Music2 size={12} color="#00D4FF" />
+                          <Text style={styles.actionItemText}>{act.title}</Text>
+                        </View>
+                      ))}
+                      <TouchableOpacity 
+                        style={styles.applyBtn}
+                        onPress={() => applyActions(msg.id, msg.actions!)}
+                        disabled={addSong.isPending}
+                      >
+                        {addSong.isPending ? (
+                          <ActivityIndicator size="small" color="#FFF" />
+                        ) : (
+                          <>
+                            <Check size={14} color="#FFF" />
+                            <Text style={styles.applyBtnText}>Apply to Setlist</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
                   {msg.badge && (
                     <Text style={styles.badgeText}>{msg.badge}</Text>
                   )}
@@ -186,7 +248,6 @@ export default function AIAgentScreen() {
           })}
         </ScrollView>
 
-        {/* ── Suggestion chips ── */}
         <View style={styles.suggestionsWrap}>
           <ScrollView
             horizontal
@@ -200,7 +261,7 @@ export default function AIAgentScreen() {
                   key={s.label}
                   style={styles.suggestionChip}
                   activeOpacity={0.7}
-                  onPress={() => setInput(s.label)}
+                  onPress={() => handleSend(s.label)}
                 >
                   <Icon size={12} color={s.color} />
                   <Text style={styles.suggestionText}>{s.label}</Text>
@@ -210,7 +271,6 @@ export default function AIAgentScreen() {
           </ScrollView>
         </View>
 
-        {/* ── Input bar ── */}
         <View style={styles.inputBar}>
           <View style={styles.inputRow}>
             <TextInput
@@ -219,16 +279,21 @@ export default function AIAgentScreen() {
               style={styles.textInput}
               value={input}
               onChangeText={setInput}
-              onSubmitEditing={handleSend}
+              onSubmitEditing={() => handleSend()}
               returnKeyType="send"
               multiline={false}
             />
             <TouchableOpacity
-              onPress={handleSend}
-              style={[styles.sendBtn, !input.trim() && styles.sendBtnDisabled]}
+              onPress={() => handleSend()}
+              style={[styles.sendBtn, (!input.trim() || aiMutation.isPending) && styles.sendBtnDisabled]}
               activeOpacity={0.8}
+              disabled={aiMutation.isPending}
             >
-              <Send size={17} color="#071420" strokeWidth={2.5} />
+              {aiMutation.isPending ? (
+                <ActivityIndicator size="small" color="#071420" />
+              ) : (
+                <Send size={17} color="#071420" strokeWidth={2.5} />
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -237,14 +302,11 @@ export default function AIAgentScreen() {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0A0F1E',
   },
-
-  /* Header */
   header: {
     paddingTop: Platform.OS === 'ios' ? 56 : 32,
     paddingHorizontal: 20,
@@ -308,8 +370,6 @@ const styles = StyleSheet.create({
     color: '#10B981',
     fontFamily: 'DM Sans',
   },
-
-  /* Chat */
   chatArea: {
     flex: 1,
   },
@@ -328,8 +388,6 @@ const styles = StyleSheet.create({
   msgRowUser: {
     justifyContent: 'flex-end',
   },
-
-  /* Bubbles */
   bubble: {
     maxWidth: '84%',
     borderRadius: 20,
@@ -367,10 +425,41 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#00D4FF',
     fontFamily: 'DM Sans Bold',
-    marginTop: 2,
+    marginTop: 6,
   },
-
-  /* Suggestions */
+  actionsContainer: {
+    marginTop: 10,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 12,
+    padding: 10,
+    gap: 8,
+  },
+  actionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  actionItemText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.7)',
+    fontFamily: 'DM Sans',
+  },
+  applyBtn: {
+    backgroundColor: '#00D4FF',
+    height: 36,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  applyBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFF',
+    fontFamily: 'DM Sans Bold',
+  },
   suggestionsWrap: {
     height: 48,
     borderTopWidth: 1,
@@ -400,8 +489,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.6)',
     fontFamily: 'DM Sans',
   },
-
-  /* Input bar */
   inputBar: {
     paddingHorizontal: 16,
     paddingTop: 14,
@@ -430,7 +517,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#FFFFFF',
     fontFamily: 'DM Sans',
-    ...Platform.select({ web: { outline: 'none' } as any }),
   },
   sendBtn: {
     width: 40,

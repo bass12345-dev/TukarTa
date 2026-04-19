@@ -7,7 +7,8 @@ import {
   Image, 
   TouchableOpacity, 
   Dimensions,
-  Platform 
+  Platform,
+  ActivityIndicator
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,75 +22,80 @@ import {
   MessageCircle,
   Heart,
   Music2,
-  XCircle
+  AlertCircle
 } from 'lucide-react-native';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Pill } from '../../components/ui/Pill';
 import { Button } from '../../components/ui/Button';
 import { cn } from '../../utils/cn';
+import { 
+  useMusicianProfile, 
+  useMusicianSongs, 
+  useMyKnownSongs, 
+  useSongStats,
+  useInviteMusician
+} from '../../utils/hooks/useMusician';
 
 const { width } = Dimensions.get('window');
 
-// Mock data matching the screenshot specifically for "Lara Cruz"
-const MUSICIANS_DATA: Record<string, any> = {
-  '1': {
-    id: '1',
-    name: 'Lara Cruz',
-    handle: '@laracruz',
-    location: 'Cebu City, PH',
-    initials: 'LC',
-    role: 'Singer',
-    rate: '₱2,000 / gig',
-    matchCount: 9,
-    totalMatch: 11,
-    stats: {
-      songs: '38',
-      gigs: '28',
-      rating: '4.9',
-      exp: '5'
-    },
-    about: 'OPM and pop vocalist based in Cebu City. 5 years performing in bars, cafés, and weddings. Known for strong high notes and crowd engagement. Available most weekday evenings and weekends.',
-    genres: ['OPM', 'Pop', 'Rock', 'Acoustic', 'R&B'],
-    matchingSongs: [
-      { id: 's1', title: 'Hotel California', artist: 'Eagles', match: true },
-      { id: 's2', title: 'Paraluman', artist: 'Adie', match: true },
-      { id: 's3', title: 'Faithfully', artist: 'Journey', match: true },
-      { id: 's4', title: 'Tadhana', artist: 'Up Dharma Down', match: false },
-    ],
-    reviews: [
-      {
-        id: 'r1',
-        name: 'Rico Band',
-        initials: 'RB',
-        date: '3 weeks ago',
-        rating: 5,
-        text: 'Lara is an absolute pro. Knew every song in our setlist and even harmonized perfectly without rehearsal.'
-      },
-      {
-        id: 'r2',
-        name: 'Mia Lim',
-        initials: 'ML',
-        date: '1 month ago',
-        rating: 5,
-        text: 'Hired Lara for a café gig as a last-minute replacement. She showed up prepared, connected with the crowd immediately.'
-      }
-    ]
-  }
-};
-
 export default function MusicianProfileScreen() {
-  const { id } = useLocalSearchParams();
+  const { id: musicianId } = useLocalSearchParams();
   const router = useRouter();
   const [inviteSent, setInviteSent] = useState(false);
   const [isFavorited, setIsFavorited] = useState(false);
 
-  // Fallback to Lara Cruz if ID not found for demo purposes
-  const musician = MUSICIANS_DATA[id as string] || MUSICIANS_DATA['1'];
+  // Real Data Hooks
+  const { data: musicianData, isLoading: isMusicianLoading, error: musicianError } = useMusicianProfile(musicianId as string);
+  const { data: musicianSongs, isLoading: isSongsLoading } = useMusicianSongs(musicianId as string);
+  const { data: mySongs } = useMyKnownSongs();
+  const { data: stats } = useSongStats(musicianId as string);
+  const { mutate: inviteMusician, isPending: isInviting } = useInviteMusician();
 
   const handleInvite = () => {
+    if (!musicianId) return;
     setInviteSent(true);
-    // Auto-hide after some time or keep it persistent as per screenshot
   };
+
+  const getInitials = (name: string) => {
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
+
+  if (isMusicianLoading) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color="#00D4FF" />
+      </View>
+    );
+  }
+
+  if (musicianError || !musicianData) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <AlertCircle size={48} color="#EF4444" />
+        <Text style={{ color: '#FFF', marginTop: 12 }}>Musician not found</Text>
+        <Button title="Go Back" onPress={() => router.back()} className="mt-4" />
+      </View>
+    );
+  }
+
+  const user = musicianData;
+  const profile = user.musician_profiles?.[0];
+  const name = user.display_name || 'Anonymous';
+  const handle = `@${user.display_name?.toLowerCase().replace(/\s/g, '') || 'user'}`;
+  const location = user.city || 'Cebu City';
+  const initials = getInitials(name);
+  const roles = profile?.roles || [];
+  const genres = profile?.genres || [];
+  const rate = profile?.rate_amount ? `₱${profile.rate_amount} / gig` : 'Rate on request';
+  
+  // Calculate matching songs
+  const matchingSongs = musicianSongs?.map(ms => ({
+    ...ms.song,
+    match: mySongs?.some(my => my.song_id === ms.song_id)
+  })) || [];
+  
+  const matchCount = matchingSongs.filter(s => s.match).length;
+  const totalMatchCount = matchingSongs.length;
 
   return (
     <View style={styles.container}>
@@ -108,7 +114,7 @@ export default function MusicianProfileScreen() {
           
           <View style={styles.topActions}>
             <TouchableOpacity onPress={() => router.back()} style={styles.glassHeaderBtn}>
-              <View className="flex-row items-center gap-1">
+              <View style={styles.backBtnRow}>
                 <ChevronLeft size={18} color="#FFF" />
                 <Text style={styles.headerBtnText}>Back</Text>
               </View>
@@ -122,7 +128,11 @@ export default function MusicianProfileScreen() {
           {/* Avatar Area */}
           <View style={styles.avatarContainer}>
              <View style={styles.avatar}>
-               <Text style={styles.avatarText}>{musician.initials}</Text>
+               {user.avatar_url ? (
+                 <Image source={{ uri: user.avatar_url }} style={{ width: '100%', height: '100%' }} />
+               ) : (
+                 <Text style={styles.avatarText}>{initials}</Text>
+               )}
              </View>
           </View>
         </View>
@@ -130,50 +140,51 @@ export default function MusicianProfileScreen() {
         {/* Identity Section */}
         <View style={styles.content}>
           <View style={styles.identity}>
-            <Text style={styles.name}>{musician.name}</Text>
+            <Text style={styles.name}>{name}</Text>
             <View style={styles.handleRow}>
-              <Text style={styles.handleText}>{musician.handle}</Text>
+              <Text style={styles.handleText}>{handle}</Text>
               <Text style={styles.dot}>·</Text>
-              <Text style={styles.locationText}>{musician.location}</Text>
+              <Text style={styles.locationText}>{location}</Text>
             </View>
           </View>
 
           <View style={styles.tagRow}>
-            <Pill label={musician.role} variant="cyan" />
-            <Pill label="Available" variant="green" dotColor="#10B981" />
-            <Pill label={musician.rate} variant="gold" />
+            {roles.map((role: string) => <Pill key={role} label={role} variant="cyan" />)}
+            {profile?.is_available && <Pill label="Available" variant="green" dotColor="#10B981" />}
+            <Pill label={rate} variant="gold" />
           </View>
 
           {/* Match Context Card */}
-          <GlassCard intensity={25} className="bg-[#00D4FF]/5 border-[#00D4FF]/20 mt-4 mb-2">
+          <GlassCard intensity={25} style={styles.matchCard}>
             <View style={styles.matchCardRow}>
               <View style={styles.matchIconCircle}>
                 <Music2 size={16} color="#10B981" />
               </View>
               <View>
                 <Text style={styles.matchTitle}>
-                  <Text style={{ color: '#10B981' }}>{musician.matchCount} of {musician.totalMatch} songs</Text> match your setlist
+                  <Text style={{ color: '#10B981' }}>{matchCount} of {totalMatchCount} songs</Text> shared with you
                 </Text>
-                <Text style={styles.matchSubtitle}>Acoustic Vibes Mix · Handuraw Café</Text>
+                <Text style={styles.matchSubtitle}>Based on your known songs list</Text>
               </View>
             </View>
           </GlassCard>
 
           {/* Stats Row */}
           <View style={styles.statsContainer}>
-            <StatItem value={musician.stats.songs} label="Songs" hasBorder />
-            <StatItem value={musician.stats.gigs} label="Gigs" hasBorder />
-            <StatItem value={musician.stats.rating} label="Rating" hasBorder isRating />
-            <StatItem value={musician.stats.exp} label="Yrs Exp" />
+            <StatItem value={stats?.total || 0} label="Songs" hasBorder />
+            <StatItem value={profile?.gig_count || 0} label="Gigs" hasBorder />
+            <StatItem value={profile?.avg_rating || '5.0'} label="Rating" hasBorder isRating />
+            <StatItem value={profile?.years_exp || '1+'} label="Yrs Exp" />
           </View>
 
           {/* Action Row */}
           <View style={styles.actionRow}>
             <Button 
-              title="Invite to Gig" 
-              variant="cyan" 
+              title={inviteSent ? "Invite Sent" : "Invite to Gig"} 
+              variant={inviteSent ? "glass" : "cyan"} 
               className="flex-1 rounded-2xl h-[56px]" 
               onPress={handleInvite}
+              disabled={inviteSent}
             />
             <TouchableOpacity style={styles.squareActionBtn}>
               <MessageCircle size={22} color="rgba(255,255,255,0.7)" />
@@ -195,8 +206,8 @@ export default function MusicianProfileScreen() {
             <View style={styles.confirmationPill}>
               <CheckCircle2 size={18} color="#10B981" />
               <View>
-                <Text style={styles.confirmationTitle}>Invite sent to {musician.name}!</Text>
-                <Text style={styles.confirmationSub}>She'll be notified for Handuraw Café · Tomorrow</Text>
+                <Text style={styles.confirmationTitle}>Invite sent to {name}!</Text>
+                <Text style={styles.confirmationSub}>They will be notified to join your gig.</Text>
               </View>
             </View>
           )}
@@ -204,34 +215,35 @@ export default function MusicianProfileScreen() {
           {/* About Section */}
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>ABOUT</Text>
-            <Text style={styles.bioText}>{musician.about}</Text>
+            <Text style={styles.bioText}>{user.bio || `No bio provided yet. Just a talented ${roles[0] || 'musician'} ready to play!`}</Text>
           </View>
 
           {/* Genres Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>GENRES</Text>
-            <View style={styles.genreList}>
-              {musician.genres.map((g: string, i: number) => (
-                <Pill 
-                  key={g} 
-                  label={g} 
-                  variant={i < 3 ? "cyan" : i === 3 ? "gold" : "green"} 
-                  className={cn("px-4", i >= 3 && "bg-opacity-20")}
-                />
-              ))}
+          {genres.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>GENRES</Text>
+              <View style={styles.genreList}>
+                {genres.map((g: string, i: number) => (
+                  <Pill 
+                    key={g} 
+                    label={g} 
+                    variant={i < 3 ? "cyan" : i === 3 ? "gold" : "green"} 
+                  />
+                ))}
+              </View>
             </View>
-          </View>
+          )}
 
           <View style={styles.hr} />
 
           {/* Songs Matching Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionLabel}>SONGS MATCHING YOUR SETLIST <Text style={{ color: '#10B981' }}>({musician.matchCount})</Text></Text>
+              <Text style={styles.sectionLabel}>SONGS SHARED WITH YOU <Text style={{ color: '#10B981' }}>({matchCount})</Text></Text>
             </View>
             
             <View style={styles.songList}>
-              {musician.matchingSongs.map((s: any) => (
+              {matchingSongs.slice(0, 5).map((s: any) => (
                 <View key={s.id} style={styles.songRow}>
                   <View style={[styles.songMiniIcon, { backgroundColor: s.match ? '#00D4FF15' : 'rgba(255,255,255,0.05)' }]}>
                     <Music size={14} color={s.match ? '#00D4FF' : 'rgba(255,255,255,0.3)'} />
@@ -247,43 +259,32 @@ export default function MusicianProfileScreen() {
                   </View>
                 </View>
               ))}
+              {matchingSongs.length === 0 && (
+                <Text style={styles.emptySubtitle}>No songs listed yet.</Text>
+              )}
             </View>
 
-            <TouchableOpacity style={styles.viewAllBtn}>
-              <Text style={styles.viewAllText}>View all {musician.stats.songs} of her songs →</Text>
-            </TouchableOpacity>
+            {matchingSongs.length > 5 && (
+              <TouchableOpacity style={styles.viewAllBtn}>
+                <Text style={styles.viewAllText}>View all {matchingSongs.length} songs →</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <View style={styles.hr} />
 
           {/* Recent Reviews Section */}
           <View style={styles.section}>
-            <View className="flex-row items-center gap-2 mb-4">
+            <View style={styles.reviewHeaderRow}>
               <Text style={styles.sectionLabel}>RECENT REVIEWS</Text>
-              <View className="flex-row items-center gap-1">
+              <View style={styles.ratingInlineRow}>
                 <Star size={12} color="#F59E0B" fill="#F59E0B" />
-                <Text style={styles.ratingInline}>{musician.stats.rating}</Text>
+                <Text style={styles.ratingInline}>{profile?.avg_rating || '5.0'}</Text>
               </View>
             </View>
             
             <View style={{ gap: 12 }}>
-              {musician.reviews.map((r: any) => (
-                <GlassCard key={r.id} style={styles.reviewCard} intensity={15}>
-                  <View style={styles.reviewHeader}>
-                    <View style={styles.reviewerAvatar}>
-                      <Text style={styles.reviewerInitials}>{r.initials}</Text>
-                    </View>
-                    <View style={styles.reviewMeta}>
-                      <Text style={styles.reviewerName}>{r.name}</Text>
-                      <Text style={styles.reviewDate}>{r.date}</Text>
-                    </View>
-                    <View style={styles.reviewStars}>
-                      {[1,2,3,4,5].map(i => <Star key={i} size={10} color="#F59E0B" fill="#F59E0B" />)}
-                    </View>
-                  </View>
-                  <Text style={styles.reviewBody}>{r.text}</Text>
-                </GlassCard>
-              ))}
+              <Text style={styles.emptySubtitle}>No reviews yet.</Text>
             </View>
           </View>
 
@@ -306,6 +307,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#071420',
+  },
+  center: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   scroll: {
     flex: 1,
@@ -336,11 +341,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  backBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   headerBtnText: {
     color: '#FFF',
     fontSize: 14,
     fontWeight: '700',
-    fontFamily: 'DM Sans Bold',
   },
   avatarContainer: {
     position: 'absolute',
@@ -362,7 +371,7 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 34,
     color: '#FFF',
-    fontFamily: 'DM Sans Bold',
+    fontWeight: 'bold',
   },
   content: {
     paddingHorizontal: 20,
@@ -374,7 +383,7 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 30,
     color: '#F0F4FF',
-    fontFamily: 'DM Sans Bold',
+    fontWeight: 'bold',
     marginBottom: 4,
   },
   handleRow: {
@@ -385,7 +394,6 @@ const styles = StyleSheet.create({
   handleText: {
     fontSize: 14,
     color: 'rgba(150, 175, 200, 0.8)',
-    fontFamily: 'DM Sans',
   },
   dot: {
     color: 'rgba(150, 175, 200, 0.4)',
@@ -393,20 +401,28 @@ const styles = StyleSheet.create({
   locationText: {
     fontSize: 14,
     color: 'rgba(150, 175, 200, 0.8)',
-    fontFamily: 'DM Sans',
   },
   tagRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 8,
     marginBottom: 20,
+    flexWrap: 'wrap',
+  },
+  matchCard: {
+    backgroundColor: 'rgba(0, 212, 255, 0.05)',
+    borderColor: 'rgba(0, 212, 255, 0.2)',
+    borderWidth: 1,
+    borderRadius: 16,
+    marginTop: 4,
+    marginBottom: 12,
   },
   matchCardRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
     paddingVertical: 10,
-    paddingHorizontal: 4,
+    paddingHorizontal: 12,
   },
   matchIconCircle: {
     width: 40,
@@ -421,13 +437,12 @@ const styles = StyleSheet.create({
   matchTitle: {
     fontSize: 15,
     color: '#F0F4FF',
-    fontFamily: 'DM Sans Bold',
+    fontWeight: 'bold',
     marginBottom: 2,
   },
   matchSubtitle: {
     fontSize: 13,
     color: 'rgba(150, 175, 200, 0.6)',
-    fontFamily: 'DM Sans',
   },
   statsContainer: {
     flexDirection: 'row',
@@ -448,13 +463,12 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 24,
     color: '#F0F4FF',
-    fontFamily: 'DM Sans Bold',
+    fontWeight: 'bold',
     marginBottom: 2,
   },
   statLabel: {
     fontSize: 11,
     color: 'rgba(150, 175, 200, 0.5)',
-    fontFamily: 'DM Sans Medium',
     textTransform: 'uppercase',
   },
   actionRow: {
@@ -486,12 +500,11 @@ const styles = StyleSheet.create({
   confirmationTitle: {
     fontSize: 14,
     color: '#10B981',
-    fontFamily: 'DM Sans Bold',
+    fontWeight: 'bold',
   },
   confirmationSub: {
     fontSize: 12,
     color: 'rgba(16, 185, 129, 0.6)',
-    fontFamily: 'DM Sans',
   },
   section: {
     marginBottom: 35,
@@ -501,18 +514,32 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: 'rgba(200, 215, 235, 0.5)',
     letterSpacing: 1.2,
-    fontFamily: 'DM Sans Bold',
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  reviewHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  ratingInlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   ratingInline: {
     fontSize: 13,
     color: '#F59E0B',
-    fontFamily: 'DM Sans Bold',
+    fontWeight: 'bold',
   },
   bioText: {
     fontSize: 15,
     color: 'rgba(200, 215, 235, 0.8)',
     lineHeight: 24,
-    fontFamily: 'DM Sans',
     marginTop: 10,
   },
   genreList: {
@@ -549,12 +576,11 @@ const styles = StyleSheet.create({
   songTitle: {
     fontSize: 16,
     color: '#F0F4FF',
-    fontFamily: 'DM Sans Bold',
+    fontWeight: 'bold',
   },
   songSubtitle: {
     fontSize: 13,
     color: 'rgba(150, 175, 200, 0.6)',
-    fontFamily: 'DM Sans',
   },
   matchBadge: {
     paddingHorizontal: 10,
@@ -572,7 +598,7 @@ const styles = StyleSheet.create({
   },
   matchBadgeText: {
     fontSize: 11,
-    fontFamily: 'DM Sans Bold',
+    fontWeight: 'bold',
   },
   matchBadgeTextActive: {
     color: '#10B981',
@@ -587,53 +613,12 @@ const styles = StyleSheet.create({
   viewAllText: {
     fontSize: 14,
     color: '#00D4FF',
-    fontFamily: 'DM Sans Bold',
+    fontWeight: 'bold',
   },
-  reviewCard: {
-    borderRadius: 16,
-    padding: 16,
-  },
-  reviewHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 12,
-  },
-  reviewerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#3b82f6',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  reviewerInitials: {
-    fontSize: 14,
-    color: '#FFF',
-    fontWeight: '700',
-  },
-  reviewMeta: {
-    flex: 1,
-  },
-  reviewerName: {
-    fontSize: 14,
-    color: '#F0F4FF',
-    fontFamily: 'DM Sans Bold',
-  },
-  reviewDate: {
-    fontSize: 11,
+  emptySubtitle: {
+    fontSize: 13,
     color: 'rgba(150, 175, 200, 0.4)',
-    fontFamily: 'DM Sans',
-  },
-  reviewStars: {
-    flexDirection: 'row',
-    gap: 2,
-  },
-  reviewBody: {
-    fontSize: 14,
-    color: 'rgba(200, 215, 235, 0.8)',
-    lineHeight: 22,
-    fontFamily: 'DM Sans',
     fontStyle: 'italic',
+    marginTop: 8,
   }
 });

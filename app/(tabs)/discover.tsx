@@ -7,73 +7,17 @@ import {
   TextInput,
   StyleSheet,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { Search, MapPin, Star, Music2 } from 'lucide-react-native';
+import { Search, MapPin, Star, Music2, AlertCircle } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-
-const MOCK_MUSICIANS = [
-  {
-    id: '1',
-    name: 'Lara Cruz',
-    initials: 'LC',
-    role: 'Singer',
-    genres: ['OPM', 'Pop', 'Rock'],
-    location: 'Cebu City',
-    match: 9,
-    rating: 4.9,
-    reviews: 28,
-    avatarColor: '#1E40AF',
-    avatarGlow: 'rgba(30,64,175,0.4)',
-    available: true,
-  },
-  {
-    id: '2',
-    name: 'Karl Mendoza',
-    initials: 'KM',
-    role: 'Singer',
-    genres: ['Rock', 'OPM', 'Acoustic'],
-    location: 'Mandaue',
-    match: 7,
-    rating: 4.7,
-    reviews: 15,
-    avatarColor: '#065F46',
-    avatarGlow: 'rgba(6,95,70,0.4)',
-    available: true,
-  },
-  {
-    id: '3',
-    name: 'Anna Torres',
-    initials: 'AT',
-    role: 'Singer',
-    genres: ['OPM', 'Jazz', 'Soul'],
-    location: 'Cebu City',
-    match: 6,
-    rating: 4.8,
-    reviews: 42,
-    avatarColor: '#7C3AED',
-    avatarGlow: 'rgba(124,58,237,0.4)',
-    available: false,
-  },
-  {
-    id: '4',
-    name: 'Diego Reyes',
-    initials: 'DR',
-    role: 'Guitarist',
-    genres: ['Blues', 'Rock', 'Funk'],
-    location: 'Lapu-Lapu',
-    match: 5,
-    rating: 4.6,
-    reviews: 19,
-    avatarColor: '#B45309',
-    avatarGlow: 'rgba(180,83,9,0.4)',
-    available: true,
-  },
-];
+import { useDiscoverMusicians } from '../../utils/hooks/useMusician';
 
 const FILTERS = ['All', 'Singer', 'Guitarist', 'Bassist', 'Drummer', 'Keys'];
 
 function StarRating({ value }: { value: number }) {
+  const rating = value || 0;
   return (
     <View style={styles.starsRow}>
       {[1, 2, 3, 4, 5].map((s) => (
@@ -81,7 +25,7 @@ function StarRating({ value }: { value: number }) {
           key={s}
           size={10}
           color="#F59E0B"
-          fill={s <= Math.round(value) ? '#F59E0B' : 'transparent'}
+          fill={s <= Math.round(rating) ? '#F59E0B' : 'transparent'}
           style={{ marginRight: 1 }}
         />
       ))}
@@ -90,7 +34,8 @@ function StarRating({ value }: { value: number }) {
 }
 
 function MatchBar({ value }: { value: number }) {
-  const pct = (value / 10) * 100;
+  const cappedValue = Math.min(value, 10);
+  const pct = (cappedValue / 10) * 100;
   const color =
     value >= 8 ? '#10B981' : value >= 5 ? '#00D4FF' : 'rgba(255,255,255,0.25)';
   return (
@@ -105,36 +50,54 @@ export default function DiscoverScreen() {
   const [activeFilter, setActiveFilter] = useState('All');
   const [query, setQuery] = useState('');
 
-  const filtered = MOCK_MUSICIANS.filter((m) => {
-    const matchFilter = activeFilter === 'All' || m.role === activeFilter;
+  const { data: musicians, isLoading, error } = useDiscoverMusicians();
+
+  const filtered = (musicians || []).filter((m) => {
+    const roles = m.musician_profile?.roles || [];
+    const matchFilter = activeFilter === 'All' || roles.includes(activeFilter);
+    
+    const musicianName = m.display_name || '';
+    const genres = m.musician_profile?.genres || [];
+    
     const matchQuery =
       query === '' ||
-      m.name.toLowerCase().includes(query.toLowerCase()) ||
-      m.genres.some((g) => g.toLowerCase().includes(query.toLowerCase()));
+      musicianName.toLowerCase().includes(query.toLowerCase()) ||
+      genres.some((g: string) => g.toLowerCase().includes(query.toLowerCase()));
     return matchFilter && matchQuery;
   });
+
+  const getInitials = (name: string) => {
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
+
+  const getAvatarColor = (id: string) => {
+    const colors = ['#1E40AF', '#065F46', '#7C3AED', '#B45309', '#BE123C'];
+    const index = parseInt(id.slice(-1), 16) % colors.length;
+    return colors[isNaN(index) ? 0 : index];
+  };
 
   return (
     <View style={styles.container}>
       <LinearGradient colors={['#071420', '#0d2d45']} style={StyleSheet.absoluteFill} />
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* ── Header ── */}
       <View style={styles.header}>
         <View>
           <Text style={styles.eyebrow}>EXPLORE</Text>
           <Text style={styles.title}>Discover Musicians</Text>
         </View>
-        <View style={styles.headerBadge}>
+        <TouchableOpacity 
+          style={styles.headerBadge}
+          onPress={() => router.push('/(tabs)')}
+        >
           <Music2 size={18} color="#00D4FF" />
-        </View>
+        </TouchableOpacity>
       </View>
 
-      {/* ── Search ── */}
       <View style={styles.searchWrapper}>
         <Search size={16} color="rgba(255,255,255,0.35)" style={styles.searchIcon} />
         <TextInput
-          placeholder="Search by name, genre, or song..."
+          placeholder="Search by name, genre..."
           placeholderTextColor="rgba(255,255,255,0.22)"
           style={styles.searchInput}
           value={query}
@@ -142,106 +105,131 @@ export default function DiscoverScreen() {
         />
       </View>
 
-      {/* ── Filter Pills ── */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterScroll}
-        style={styles.filterRow}
-        alwaysBounceVertical={false}
-      >
-        {FILTERS.map((f) => {
-          const active = activeFilter === f;
-          return (
-            <TouchableOpacity
-              key={f}
-              style={[styles.filterPill, active && styles.filterPillActive]}
-              onPress={() => setActiveFilter(f)}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.filterText, active && styles.filterTextActive]}>{f}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      <View style={styles.filterRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterScroll}
+          alwaysBounceVertical={false}
+        >
+          {FILTERS.map((f) => {
+            const active = activeFilter === f;
+            return (
+              <TouchableOpacity
+                key={f}
+                style={[styles.filterPill, active && styles.filterPillActive]}
+                onPress={() => setActiveFilter(f)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.filterText, active && styles.filterTextActive]}>{f}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
 
-      {/* ── Sorting label ── */}
-      <Text style={styles.sortLabel}>
-        {filtered.length} musicians near Cebu City · sorted by song match
-      </Text>
+      {!isLoading && !error && (
+        <Text style={styles.sortLabel}>
+          {filtered.length} musicians · sorted by song match
+        </Text>
+      )}
 
-      {/* ── Musician Cards ── */}
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {filtered.map((m) => (
-          <TouchableOpacity
-            key={m.id}
-            style={styles.card}
-            activeOpacity={0.8}
-            onPress={() => router.push(`/musician/${m.id}`)}
-          >
-            {/* Avatar */}
-            <View style={[styles.avatar, { backgroundColor: m.avatarColor }]}>
-              <Text style={styles.avatarText}>{m.initials}</Text>
-              {m.available && <View style={styles.availableDot} />}
-            </View>
+        {isLoading && (
+          <View style={styles.centerState}>
+            <ActivityIndicator size="large" color="#00D4FF" />
+            <Text style={styles.emptyText}>Finding talent...</Text>
+          </View>
+        )}
 
-            {/* Info */}
-            <View style={styles.cardBody}>
-              <View style={styles.cardTopRow}>
-                <Text style={styles.musicianName}>{m.name}</Text>
-                <View
-                  style={[
-                    styles.matchBadge,
-                    {
-                      backgroundColor:
-                        m.match >= 8
-                          ? 'rgba(16,185,129,0.12)'
-                          : 'rgba(0,212,255,0.08)',
-                      borderColor:
-                        m.match >= 8
-                          ? 'rgba(16,185,129,0.45)'
-                          : 'rgba(0,212,255,0.3)',
-                    },
-                  ]}
-                >
-                  <Text
+        {error && (
+          <View style={styles.centerState}>
+            <AlertCircle size={40} color="#EF4444" />
+            <Text style={styles.emptyText}>Something went wrong</Text>
+          </View>
+        )}
+
+        {!isLoading && !error && filtered.map((m) => {
+          const profile = m.musician_profile;
+          const matchScore = m.match_score || 0;
+          const initials = getInitials(m.display_name || 'M');
+          const avatarColor = getAvatarColor(m.id);
+          const primaryRole = profile?.roles?.[0] || 'Musician';
+          const genres = profile?.genres || [];
+
+          return (
+            <TouchableOpacity
+              key={m.id}
+              style={styles.card}
+              activeOpacity={0.8}
+              onPress={() => router.push(`/musician/${m.id}`)}
+            >
+              <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
+                {m.avatar_url ? (
+                   <View style={styles.avatarPlaceholder} />
+                ) : (
+                  <Text style={styles.avatarText}>{initials}</Text>
+                )}
+                {profile?.is_available && <View style={styles.availableDot} />}
+              </View>
+
+              <View style={styles.cardBody}>
+                <View style={styles.cardTopRow}>
+                  <Text style={styles.musicianName} numberOfLines={1}>{m.display_name}</Text>
+                  <View
                     style={[
-                      styles.matchText,
-                      { color: m.match >= 8 ? '#10B981' : '#00D4FF' },
+                      styles.matchBadge,
+                      {
+                        backgroundColor:
+                          matchScore >= 8
+                            ? 'rgba(16,185,129,0.12)'
+                            : 'rgba(0,212,255,0.08)',
+                        borderColor:
+                          matchScore >= 8
+                            ? 'rgba(16,185,129,0.45)'
+                            : 'rgba(0,212,255,0.3)',
+                      },
                     ]}
                   >
-                    ♪ {m.match}/10
-                  </Text>
+                    <Text
+                      style={[
+                        styles.matchText,
+                        { color: matchScore >= 8 ? '#10B981' : '#00D4FF' },
+                      ]}
+                    >
+                      ♪ {matchScore}
+                    </Text>
+                  </View>
                 </View>
+
+                <Text style={styles.musicianRole} numberOfLines={1}>
+                  {primaryRole} ·{' '}
+                  <Text style={styles.genreText}>{genres.slice(0, 3).join(', ')}</Text>
+                </Text>
+
+                <View style={styles.cardBottom}>
+                  <View style={styles.ratingPart}>
+                    <StarRating value={profile?.avg_rating || 5} />
+                    <Text style={styles.ratingVal}>{profile?.avg_rating || '5.0'}</Text>
+                    <Text style={styles.ratingCount}>({profile?.rating_count || 0})</Text>
+                  </View>
+                  <View style={styles.locationPart}>
+                    <MapPin size={10} color="rgba(255,255,255,0.3)" />
+                    <Text style={styles.locationText}>{m.city || 'Cebu'}</Text>
+                  </View>
+                </View>
+
+                <MatchBar value={matchScore} />
               </View>
+            </TouchableOpacity>
+          );
+        })}
 
-              <Text style={styles.musicianRole}>
-                {m.role} ·{' '}
-                <Text style={styles.genreText}>{m.genres.join(', ')}</Text>
-              </Text>
-
-              <View style={styles.cardBottom}>
-                <View style={styles.ratingPart}>
-                  <StarRating value={m.rating} />
-                  <Text style={styles.ratingVal}>{m.rating}</Text>
-                  <Text style={styles.ratingCount}>({m.reviews})</Text>
-                </View>
-                <View style={styles.locationPart}>
-                  <MapPin size={10} color="rgba(255,255,255,0.3)" />
-                  <Text style={styles.locationText}>{m.location}</Text>
-                </View>
-              </View>
-
-              <MatchBar value={m.match} />
-            </View>
-          </TouchableOpacity>
-        ))}
-
-        {filtered.length === 0 && (
+        {!isLoading && !error && filtered.length === 0 && (
           <View style={styles.emptyState}>
             <Music2 size={40} color="rgba(255,255,255,0.1)" />
             <Text style={styles.emptyText}>No musicians found</Text>
@@ -257,8 +245,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0A0F1E',
   },
-
-  /* Header */
   header: {
     paddingTop: Platform.OS === 'ios' ? 56 : 32,
     paddingHorizontal: 20,
@@ -273,14 +259,12 @@ const styles = StyleSheet.create({
     color: '#00D4FF',
     letterSpacing: 1.8,
     marginBottom: 4,
-    fontFamily: 'DM Sans',
     opacity: 0.8,
   },
   title: {
     fontSize: 28,
     fontWeight: '700',
     color: '#FFFFFF',
-    fontFamily: 'DM Sans Bold',
   },
   headerBadge: {
     width: 44,
@@ -293,8 +277,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 4,
   },
-
-  /* Search */
   searchWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -314,16 +296,10 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     color: '#FFFFFF',
-    fontFamily: 'DM Sans',
-    ...Platform.select({ web: { outline: 'none' } as any }),
   },
-
-  /* Filters */
   filterRow: {
     height: 44,
     marginBottom: 10,
-    flexGrow: 0,
-    flexShrink: 0,
   },
   filterScroll: {
     paddingHorizontal: 16,
@@ -336,7 +312,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
     paddingHorizontal: 16,
-    paddingVertical: 0,
     height: 34,
     borderRadius: 17,
     alignItems: 'center',
@@ -350,22 +325,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: 'rgba(255,255,255,0.45)',
-    fontFamily: 'DM Sans',
   },
   filterTextActive: {
     color: '#00D4FF',
   },
-
-  /* Sort label */
   sortLabel: {
     fontSize: 11,
     color: 'rgba(255,255,255,0.2)',
     paddingHorizontal: 20,
     marginBottom: 12,
-    fontFamily: 'DM Sans',
   },
-
-  /* Scroll */
   scroll: {
     flex: 1,
   },
@@ -374,8 +343,6 @@ const styles = StyleSheet.create({
     paddingBottom: 110,
     gap: 10,
   },
-
-  /* Card */
   card: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -386,8 +353,6 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 14,
   },
-
-  /* Avatar */
   avatar: {
     width: 52,
     height: 52,
@@ -400,7 +365,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF',
-    fontFamily: 'DM Sans Bold',
+  },
+  avatarPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
   availableDot: {
     position: 'absolute',
@@ -413,8 +382,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#0A0F1E',
   },
-
-  /* Card body */
   cardBody: {
     flex: 1,
     gap: 3,
@@ -429,19 +396,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#FFFFFF',
-    fontFamily: 'DM Sans Bold',
   },
   musicianRole: {
     fontSize: 12,
     color: 'rgba(255,255,255,0.4)',
-    fontFamily: 'DM Sans',
     marginBottom: 6,
   },
   genreText: {
     color: 'rgba(255,255,255,0.25)',
   },
-
-  /* Match badge */
   matchBadge: {
     paddingVertical: 3,
     paddingHorizontal: 9,
@@ -451,10 +414,7 @@ const styles = StyleSheet.create({
   matchText: {
     fontSize: 10,
     fontWeight: '700',
-    fontFamily: 'DM Sans',
   },
-
-  /* Bottom row */
   cardBottom: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -474,12 +434,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#F59E0B',
-    fontFamily: 'DM Sans Bold',
   },
   ratingCount: {
     fontSize: 11,
     color: 'rgba(255,255,255,0.25)',
-    fontFamily: 'DM Sans',
   },
   locationPart: {
     flexDirection: 'row',
@@ -489,10 +447,7 @@ const styles = StyleSheet.create({
   locationText: {
     fontSize: 11,
     color: 'rgba(255,255,255,0.25)',
-    fontFamily: 'DM Sans',
   },
-
-  /* Match bar */
   matchBarTrack: {
     height: 3,
     borderRadius: 2,
@@ -503,8 +458,12 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 2,
   },
-
-  /* Empty */
+  centerState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 60,
+    gap: 12,
+  },
   emptyState: {
     alignItems: 'center',
     paddingTop: 60,
@@ -513,6 +472,5 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: 'rgba(255,255,255,0.2)',
-    fontFamily: 'DM Sans',
   },
 });
