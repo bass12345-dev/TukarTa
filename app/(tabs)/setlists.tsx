@@ -203,10 +203,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
-    shadowColor: '#00D4FF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
+    boxShadow: [{
+      color: 'rgba(0, 212, 255, 0.4)',
+      offsetX: 0,
+      offsetY: 4,
+      blurRadius: 10,
+    }],
     elevation: 8,
   },
 

@@ -43,15 +43,13 @@ serve(async (req) => {
       throw new Error(`Failed to download file: ${downloadError.message}`)
     }
 
-    // 3. Convert blob to base64 for Groq
+    // 3. Convert blob to base64 for Groq (More efficient way in Deno)
     const arrayBuffer = await fileData.arrayBuffer()
-    const uint8Array = new Uint8Array(arrayBuffer)
-    let binary = ''
-    const chunk_size = 8192
-    for (let i = 0; i < uint8Array.length; i += chunk_size) {
-      binary += String.fromCharCode(...uint8Array.slice(i, i + chunk_size))
-    }
-    const base64Image = btoa(binary)
+    const base64Image = btoa(
+      Array.from(new Uint8Array(arrayBuffer))
+        .map((b) => String.fromCharCode(b))
+        .join('')
+    )
 
     // 4. Call Groq Llama 3.2 Vision
     const prompt = `
@@ -76,6 +74,8 @@ serve(async (req) => {
       Only return the JSON, no other text.
     `
 
+    console.log(`Sending image of size ${arrayBuffer.byteLength} bytes to Groq...`)
+
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -83,7 +83,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'llama-3.2-11b-vision-preview',
+        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
         messages: [
           {
             role: 'user',
@@ -103,17 +103,24 @@ serve(async (req) => {
       })
     })
 
-
     const result = await response.json()
-    console.log('Groq Result:', JSON.stringify(result))
-
+    
     if (!response.ok) {
+      console.error('Groq API Error Response:', JSON.stringify(result))
       throw new Error(`Groq API error: ${result.error?.message || response.statusText}`)
     }
 
     const content = result.choices?.[0]?.message?.content
-    const parsedData = JSON.parse(content || '{"songs": []}')
-    const songs = parsedData.songs || []
+    console.log('Raw content from Groq:', content)
+    
+    let songs = []
+    try {
+      const parsedData = JSON.parse(content || '{"songs": []}')
+      songs = parsedData.songs || []
+    } catch (parseErr) {
+      console.error('Failed to parse Groq response as JSON:', content)
+      throw new Error('Failed to parse song list from AI response')
+    }
 
     return new Response(JSON.stringify({ songs }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -122,7 +129,7 @@ serve(async (req) => {
 
 
   } catch (error) {
-    console.error('Error:', error.message)
+    console.error('Final Catch Error:', error.message)
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,

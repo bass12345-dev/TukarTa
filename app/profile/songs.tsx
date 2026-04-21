@@ -294,10 +294,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#00D4FF',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#00D4FF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    boxShadow: [{
+      color: 'rgba(0, 212, 255, 0.3)',
+      offsetX: 0,
+      offsetY: 4,
+      blurRadius: 8,
+    }],
     elevation: 5,
   },
   statsRow: {

@@ -9,7 +9,7 @@ import { supabase } from '../../utils/supabase';
 import { useAnalyzeScreenshot } from '../../utils/hooks/useSongs';
 import { ActivityIndicator, Alert } from 'react-native';
 import { useRef } from 'react';
-import * as FileSystem from 'expo-file-system';
+import { readAsArrayBuffer } from '../../utils/file';
 
 interface SongUploadProps {
   onBack: () => void;
@@ -33,7 +33,7 @@ export function SongUpload({ onBack, onAnalyze, onSearch }: SongUploadProps) {
 
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      allowsEditing: images.length === 0, // Disable editing for multi-select feel
+      allowsEditing: false, // Must be false when allowsMultipleSelection is true
       allowsMultipleSelection: true,
       selectionLimit: 5 - images.length,
       quality: 0.7,
@@ -80,9 +80,8 @@ export function SongUpload({ onBack, onAnalyze, onSearch }: SongUploadProps) {
         const fileName = `${Date.now()}-${i}-${Math.random().toString(36).substring(7)}.jpg`;
         const filePath = `${user.id}/${fileName}`;
         
-        // 2. Read file as ArrayBuffer (Modern Expo 54 way)
-        const file = new FileSystem.File(imageUri);
-        const arrayBuffer = await file.arrayBuffer();
+        // 2. Read file as ArrayBuffer safely (Universal helper)
+        const arrayBuffer = await readAsArrayBuffer(imageUri);
 
         // 3. Upload to Supabase Storage
         const { error: uploadError } = await supabase.storage
@@ -329,10 +328,12 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0, 212, 255, 0.3)',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#00D4FF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 24,
+    boxShadow: [{
+      color: 'rgba(0, 212, 255, 0.6)',
+      offsetX: 0,
+      offsetY: 0,
+      blurRadius: 24,
+    }],
     elevation: 8,
     marginBottom: 8,
   },

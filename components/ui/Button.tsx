@@ -52,10 +52,12 @@ export const Button: React.FC<ButtonProps> = ({
           end={{ x: 1, y: 1 }}
           className={containerClasses}
           style={{ 
-            shadowColor: '#00b4dc', 
-            shadowOffset: { width: 0, height: 4 }, 
-            shadowOpacity: 0.35, 
-            shadowRadius: 24, 
+            boxShadow: [{
+              color: 'rgba(0, 180, 220, 0.35)', 
+              offsetX: 0, 
+              offsetY: 4, 
+              blurRadius: 24 
+            }],
             elevation: 8 
           }}
         >

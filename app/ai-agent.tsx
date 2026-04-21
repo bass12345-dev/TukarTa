@@ -17,6 +17,8 @@ import {
 } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
+import { readAsArrayBuffer } from '../utils/file';
+import * as ImageManipulator from 'expo-image-manipulator';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -374,28 +376,29 @@ export default function AIAgentScreen() {
   const processExtraction = async (uri: string) => {
     setIsExtracting(true);
     try {
+      // 1. Resize Image (Critical for memory and upload speed)
+      const manipulated = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 1600 } }], // Reasonable resolution for AI extraction
+        { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+      );
+
       const fileName = `${Date.now()}.jpg`;
       const filePath = `extractions/${fileName}`;
-      
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const reader = new FileReader();
-      
-      const base64Promise = new Promise<string>((resolve) => {
-        reader.onloadend = () => {
-          const base64String = reader.result as string;
-          resolve(base64String.split(',')[1]);
-        };
-      });
-      reader.readAsDataURL(blob);
-      const base64 = await base64Promise;
+      // 2. Read file as ArrayBuffer safely (Universal helper)
+      const arrayBuffer = await readAsArrayBuffer(manipulated.uri);
 
+      // 3. Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from('song-screenshots')
-        .upload(filePath, decode(base64), { contentType: 'image/jpeg' });
+        .upload(filePath, arrayBuffer, { 
+          contentType: 'image/jpeg',
+          upsert: true
+        });
 
       if (uploadError) throw uploadError;
 
+      // 4. Trigger AI Analysis
       const { data, error } = await supabase.functions.invoke('extract-songs', {
         body: { filePath }
       });
@@ -408,9 +411,13 @@ export default function AIAgentScreen() {
       } else {
         handleSend("I uploaded an image but couldn't find any songs. Can you help me check if it's clear enough?");
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Extraction failed:", e);
-      handleSend("Sorry, I had trouble reading that image. Could you try uploading it again?");
+      // Enhanced feedback for troubleshooting
+      const errorMsg = e.message?.includes('status 500') 
+        ? "The analysis service is currently overwhelmed. Could you try again in a moment?"
+        : "Sorry, I had trouble reading that image. Could you try uploading it again?";
+      handleSend(errorMsg);
     } finally {
       setIsExtracting(false);
     }

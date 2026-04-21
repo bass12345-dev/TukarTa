@@ -167,10 +167,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#00D4FF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
+    boxShadow: [{
+      color: 'rgba(0, 212, 255, 0.3)',
+      offsetX: 0,
+      offsetY: 4,
+      blurRadius: 10,
+    }],
     elevation: 8,
   },
   chatBtnText: {
