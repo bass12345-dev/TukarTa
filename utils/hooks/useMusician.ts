@@ -530,8 +530,14 @@ export function useSetlistAI() {
 
   return useMutation({
     mutationFn: async ({ gigId, message, setlistId, sessionId }: { gigId: string; message: string; setlistId: string; sessionId?: string }) => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+
       const { data, error } = await supabase.functions.invoke('setlist-agent', {
-        body: { gigId, message, setlistId, sessionId }
+        body: { gigId, message, setlistId, sessionId },
+        headers: {
+          'X-Auth-Token': token || ''
+        }
       });
       
       if (error) throw error;

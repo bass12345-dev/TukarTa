@@ -6,7 +6,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-auth-token',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 }
 
@@ -39,11 +39,13 @@ serve(async (req) => {
 
     const { gigId, message, setlistId, sessionId } = await req.json()
 
-    // 1. Get User ID from JWT
+    // 1. Get User ID from JWT (Robust check for ES256 algorithm issues)
     const authHeader = req.headers.get('Authorization')
-    if (!authHeader) throw new Error('Missing Authorization header')
+    const customAuthHeader = req.headers.get('X-Auth-Token')
     
-    const token = authHeader.replace('Bearer ', '')
+    const token = (customAuthHeader || authHeader || '').replace('Bearer ', '')
+    if (!token) throw new Error('Missing authentication token')
+    
     const payload = decodeSafe(token)
     if (!payload?.sub) throw new Error('Invalid or expired token')
     

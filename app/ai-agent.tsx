@@ -432,8 +432,14 @@ export default function AIAgentScreen() {
       if (uploadError) throw uploadError;
 
       // 4. Trigger AI Analysis
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+
       const { data, error } = await supabase.functions.invoke('extract-songs', {
-        body: { filePath }
+        body: { filePath },
+        headers: {
+          'X-Auth-Token': token || ''
+        }
       });
 
       if (error) throw error;

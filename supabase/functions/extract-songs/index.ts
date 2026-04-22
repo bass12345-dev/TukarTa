@@ -7,7 +7,22 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-auth-token',
+}
+
+// Helper to decode JWT without external dependencies
+function decodeSafe(token: string) {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    console.error("JWT Decode Error:", e);
+    return null;
+  }
 }
 
 serve(async (req) => {
@@ -25,6 +40,15 @@ serve(async (req) => {
         status: 400,
       })
     }
+
+    // 1. Get User ID from JWT (Robust check for ES256 algorithm issues)
+    const authHeader = req.headers.get('Authorization')
+    const customAuthHeader = req.headers.get('X-Auth-Token')
+    
+    const token = (customAuthHeader || authHeader || '').replace('Bearer ', '')
+    // userId is not strictly needed for extraction logic currently but good for logging/RLS in future
+    const payload = token ? decodeSafe(token) : null;
+    const userId = payload?.sub;
 
     if (!GROQ_API_KEY) {
       throw new Error('GROQ_API_KEY is not set')
