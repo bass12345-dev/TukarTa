@@ -532,6 +532,7 @@ export function useAddSongToSetlist() {
 
   return useMutation({
     mutationFn: async ({ setlistId, songId, position }: { setlistId: string; songId: string; position: number }) => {
+      // 1. Try to upsert directly
       const { error } = await supabase
         .from('setlist_songs')
         .upsert({
@@ -540,7 +541,41 @@ export function useAddSongToSetlist() {
           position
         }, { onConflict: 'setlist_id, song_id' });
       
-      if (error) throw error;
+      // 2. Handle position conflict (23505)
+      if (error && error.code === '23505' && error.message.includes('position')) {
+        // Find who is occupying that spot
+        const { data: occupant } = await supabase
+          .from('setlist_songs')
+          .select('song_id')
+          .eq('setlist_id', setlistId)
+          .eq('position', position)
+          .single();
+
+        if (occupant && occupant.song_id !== songId) {
+          // Temporarily move the occupant to a high number to free the spot
+          // We use 999 + current position to avoid further conflicts
+          await supabase
+            .from('setlist_songs')
+            .update({ position: 900 + position })
+            .eq('setlist_id', setlistId)
+            .eq('song_id', occupant.song_id);
+
+          // Retry the target move
+          const { error: retryError } = await supabase
+            .from('setlist_songs')
+            .upsert({
+              setlist_id: setlistId,
+              song_id: songId,
+              position
+            }, { onConflict: 'setlist_id, song_id' });
+
+          if (retryError) throw retryError;
+        } else {
+           throw error;
+        }
+      } else if (error) {
+        throw error;
+      }
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['setlist-songs', variables.setlistId] });
