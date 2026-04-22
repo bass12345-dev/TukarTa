@@ -46,8 +46,10 @@ import {
   useAISessions,
   useAIChatHistory,
   useCreateAISession,
-  useAddSongToKnowledge
+  useAddSongToKnowledge,
+  useAddSongsToSetlistBulk
 } from '../utils/hooks/useMusician';
+import { useAddMultipleSongs } from '../utils/hooks/useSongs';
 import { supabase } from '../utils/supabase';
 import { decode } from 'base64-arraybuffer';
 
@@ -226,6 +228,8 @@ export default function AIAgentScreen() {
   const addSongToKnowledge = useAddSongToKnowledge();
   const createGig = useCreateGig();
   const inviteMusician = useInviteMusician();
+  const addSongsBulk = useAddSongsToSetlistBulk();
+  const addMultipleSongs = useAddMultipleSongs();
 
   // 2. Sync history to local state
   useEffect(() => {
@@ -325,10 +329,54 @@ export default function AIAgentScreen() {
           setMessages(prev => [...prev, userMsg]);
           setInput('');
 
-          // Batch apply actions
-          for (const action of unappliedActions) {
+          // Batch apply actions (Optimized for O(1) requests where possible)
+          const songActions = unappliedActions.filter(a => {
+            const t = a.type?.toLowerCase();
+            return t === 'add' || t === 'add_song' || t === 'proposal_add_song';
+          });
+          const dictActions = unappliedActions.filter(a => {
+            const t = a.type?.toLowerCase();
+            return t === 'proposal_add_to_dictionary' || t === 'add_to_dictionary';
+          });
+          const otherActions = unappliedActions.filter(a => !songActions.includes(a) && !dictActions.includes(a));
+
+          // 1. Bulk Songs
+          if (songActions.length > 0 && setlist?.id) {
+            await addSongsBulk.mutateAsync({
+              setlistId: setlist.id,
+              songs: songActions.map((a, i) => ({
+                songId: a.songId,
+                position: (currentSongs?.length || 0) + i + 1
+              }))
+            });
+          }
+
+          // 2. Bulk Dictionary
+          if (dictActions.length > 0) {
+            await addMultipleSongs.mutateAsync(
+              dictActions.map(a => ({
+                title: a.data?.title || a.title || '',
+                artist: a.data?.artist || a.artist || '',
+                genre: a.data?.genre || 'Music'
+              }))
+            );
+          }
+
+          // 3. Others (One by one)
+          for (const action of otherActions) {
             await applySingleAction(lastAssistantMsg.id, action);
           }
+
+          // Mark all as applied in local state
+          setMessages(prev => prev.map(m => 
+            m.id === lastAssistantMsg.id ? { 
+              ...m, 
+              actions: m.actions?.map(a => 
+                unappliedActions.includes(a) ? { ...a, isApplied: true } : a
+              ),
+              badge: 'All actions approved! ✓' 
+            } : m
+          ));
 
           // Confirmation
           const aiReply: Message = {

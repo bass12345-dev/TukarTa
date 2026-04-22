@@ -504,6 +504,29 @@ export function useMyKnownSongs() {
   });
 }
 
+export function useAddSongsToSetlistBulk() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ setlistId, songs }: { setlistId: string; songs: Array<{ songId: string; position: number }> }) => {
+      const dataToUpsert = songs.map(s => ({
+        setlist_id: setlistId,
+        song_id: s.songId,
+        position: s.position
+      }));
+
+      const { error } = await supabase
+        .from('setlist_songs')
+        .upsert(dataToUpsert, { onConflict: 'setlist_id, song_id' });
+      
+      if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['setlist-songs', variables.setlistId] });
+    },
+  });
+}
+
 export function useAddSongToSetlist() {
   const queryClient = useQueryClient();
 
