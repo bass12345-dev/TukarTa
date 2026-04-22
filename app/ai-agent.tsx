@@ -118,10 +118,11 @@ function parseAIMessage(content: string) {
 
 // ─── Proposal Card Component ─────────────────────────────────────────────────
 function ProposalCard({ action, onApprove, onCancel }: any) {
-  const isSong = action.type === 'add';
-  const isGig = action.type === 'proposal_create_gig';
-  const isInvite = action.type === 'proposal_invite';
-  const isDictionary = action.type === 'proposal_add_to_dictionary';
+  const type = action.type?.toLowerCase() || '';
+  const isSong = type === 'add' || type === 'add_song' || type === 'proposal_add_song';
+  const isGig = type === 'proposal_create_gig' || type === 'create_gig';
+  const isInvite = type === 'proposal_invite' || type === 'invite_musician';
+  const isDictionary = type === 'proposal_add_to_dictionary' || type === 'add_to_dictionary' || type === 'proposal_add_to_dictionary';
   const isApplied = action.isApplied;
 
   return (
@@ -131,18 +132,25 @@ function ProposalCard({ action, onApprove, onCancel }: any) {
       noPadding
     >
       <View style={styles.proposalContent}>
-        <View style={[styles.proposalIconBox, { backgroundColor: isSong ? 'rgba(0,212,255,0.06)' : isGig ? 'rgba(245,158,11,0.06)' : 'rgba(139,92,246,0.06)' }]}>
+        <View style={[styles.proposalIconBox, { backgroundColor: isSong ? 'rgba(0,212,255,0.06)' : isGig ? 'rgba(245,158,11,0.06)' : isDictionary ? 'rgba(16,185,129,0.06)' : 'rgba(139,92,246,0.06)' }]}>
           {isSong && <Music size={18} color="#00D4FF" />}
           {isGig && <Calendar size={18} color="#F59E0B" />}
           {isInvite && <UserPlus size={18} color="#8B5CF6" />}
+          {isDictionary && <Check size={18} color="#10B981" />}
         </View>
         
         <View style={styles.proposalTextContainer}>
           <Text style={styles.proposalTitle} numberOfLines={1}>
-            {isSong ? (action.data?.title || action.title || 'SONG SUGGESTION') : isGig ? 'GIG PROPOSAL' : isDictionary ? 'ADD TO DICTIONARY' : 'RECRUITMENT'}
+            {isSong ? (action.data?.title || action.title || 'SONG SUGGESTION') : 
+             isGig ? (action.data?.name || 'GIG PROPOSAL') : 
+             isDictionary ? (action.data?.title || 'ADD TO DICTIONARY') : 
+             isInvite ? (action.data?.musicianName || 'RECRUITMENT') : 'PROPOSAL'}
           </Text>
           <Text style={styles.proposalSubtitle} numberOfLines={1}>
-            {isSong ? (action.data?.artist || action.artist || 'Song Suggestion') : isGig ? action.data.venue : isDictionary ? `${action.data.artist} • ${action.data.genre || 'Music'}` : 'Proposed recruitment'}
+            {isSong ? (action.data?.artist || action.artist || 'Proposed addition') : 
+             isGig ? (action.data?.venue || 'Proposed event') : 
+             isDictionary ? `${action.data?.artist || ''} • ${action.data?.genre || 'Music'}` : 
+             isInvite ? (action.data?.message || 'Proposed recruitment') : 'AI Suggestion'}
           </Text>
         </View>
 

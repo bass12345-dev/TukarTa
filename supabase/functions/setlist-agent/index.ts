@@ -147,7 +147,7 @@ serve(async (req) => {
 
       OUTPUT FORMAT:
       Your response should be natural text. If you want to propose an action, end with:
-      ACTIONS: [{"type": "proposal_create_gig", "data": {"name": "...", "venue": "...", "date": "...", "bandId": "..."}}, {"type": "proposal_invite", "data": {"musicianId": "...", "musicianName": "...", "bandId": "...", "message": "..."}}, {"type": "add", "songId": "uuid", "data": {"title": "Song Title", "artist": "Artist Name"}}, {"type": "reorder", "songId": "uuid", "position": 1}]
+      ACTIONS: [{"type": "proposal_create_gig", "data": {"name": "...", "venue": "...", "date": "...", "bandId": "..."}}, {"type": "proposal_invite", "data": {"musicianId": "...", "musicianName": "...", "bandId": "...", "message": "..."}}, {"type": "add", "songId": "uuid", "data": {"title": "Song Title", "artist": "Artist Name"}}, {"type": "reorder", "songId": "uuid", "position": 1}, {"type": "proposal_add_to_dictionary", "data": {"title": "Song Title", "artist": "Artist Name", "genre": "..."}}]
     `
 
     // 5. Fetch History
