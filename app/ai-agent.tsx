@@ -319,7 +319,9 @@ export default function AIAgentScreen() {
     if (!text || !sessionId) return;
 
     // INTERCEPT: Approve All Command
-    if (text.toLowerCase() === 'approve all' || text.toLowerCase() === 'add all') {
+    const cleanText = text.toLowerCase().trim().replace(/[.!?]$/, '');
+    const approveAllTriggers = ['approve all', 'add all', 'yes please', 'sure', 'go ahead', 'do it', 'approved'];
+    if (approveAllTriggers.includes(cleanText)) {
       const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant' && m.actions && m.actions.length > 0);
       if (lastAssistantMsg) {
         const unappliedActions = lastAssistantMsg.actions?.filter(a => !a.isApplied) || [];
@@ -414,7 +416,9 @@ export default function AIAgentScreen() {
         role: 'assistant',
         segments: [{ text: cleanReply }],
         actions,
-        badge: actions.length > 0 ? `${actions.length} proposals ready ✓` : undefined,
+        badge: actions.length > 0 
+          ? `${actions.length} proposals ready ✓ ${actions.length > 1 ? '(Type "Approve All" to add all)' : ''}` 
+          : undefined,
         isAnimating: true
       };
       
