@@ -139,10 +139,10 @@ function ProposalCard({ action, onApprove, onCancel }: any) {
         
         <View style={styles.proposalTextContainer}>
           <Text style={styles.proposalTitle} numberOfLines={1}>
-            {isSong ? 'SONG SUGGESTION' : isGig ? 'GIG PROPOSAL' : isDictionary ? 'ADD TO DICTIONARY' : 'RECRUITMENT'}
+            {isSong ? (action.data?.title || action.title || 'SONG SUGGESTION') : isGig ? 'GIG PROPOSAL' : isDictionary ? 'ADD TO DICTIONARY' : 'RECRUITMENT'}
           </Text>
           <Text style={styles.proposalSubtitle} numberOfLines={1}>
-            {isSong ? 'Song Suggestion' : isGig ? action.data.venue : isDictionary ? `${action.data.artist} • ${action.data.genre || 'Music'}` : 'Proposed recruitment'}
+            {isSong ? (action.data?.artist || action.artist || 'Song Suggestion') : isGig ? action.data.venue : isDictionary ? `${action.data.artist} • ${action.data.genre || 'Music'}` : 'Proposed recruitment'}
           </Text>
         </View>
 
@@ -306,6 +306,34 @@ export default function AIAgentScreen() {
     const text = overrideMsg || input.trim();
     if (!text || !sessionId) return;
 
+    // INTERCEPT: Approve All Command
+    if (text.toLowerCase() === 'approve all' || text.toLowerCase() === 'add all') {
+      const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant' && m.actions && m.actions.length > 0);
+      if (lastAssistantMsg) {
+        const unappliedActions = lastAssistantMsg.actions?.filter(a => !a.isApplied) || [];
+        if (unappliedActions.length > 0) {
+          // Show user message
+          const userMsg: Message = { id: Date.now().toString(), role: 'user', segments: [{ text }] };
+          setMessages(prev => [...prev, userMsg]);
+          setInput('');
+
+          // Batch apply actions
+          for (const action of unappliedActions) {
+            await applySingleAction(lastAssistantMsg.id, action);
+          }
+
+          // Confirmation
+          const aiReply: Message = {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            segments: [{ text: `Done! I've approved all ${unappliedActions.length} suggestions for you. 🎸` }],
+          };
+          setMessages(prev => [...prev, aiReply]);
+          return;
+        }
+      }
+    }
+
     const userMsg: Message = {
       id: Date.now().toString(),
       role: 'user',
@@ -425,12 +453,15 @@ export default function AIAgentScreen() {
 
   const applySingleAction = async (msgId: string, action: any) => {
     try {
-      if (action.type === 'add') {
+      if (action.type === 'add' || action.type === 'reorder') {
+        const isReorder = action.type === 'reorder';
         const nextPosition = (currentSongs?.length || 0) + 1;
+        const targetPosition = action.position || (isReorder ? 1 : nextPosition); // Default to start if reorder, end if add
+
         await addSongToSetlist.mutateAsync({
           setlistId: setlist?.id || '',
           songId: action.songId,
-          position: nextPosition
+          position: targetPosition
         });
       } else if (action.type === 'proposal_create_gig') {
         await createGig.mutateAsync({

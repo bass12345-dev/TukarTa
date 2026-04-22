@@ -511,11 +511,11 @@ export function useAddSongToSetlist() {
     mutationFn: async ({ setlistId, songId, position }: { setlistId: string; songId: string; position: number }) => {
       const { error } = await supabase
         .from('setlist_songs')
-        .insert({
+        .upsert({
           setlist_id: setlistId,
           song_id: songId,
           position
-        });
+        }, { onConflict: 'setlist_id, song_id' });
       
       if (error) throw error;
     },
