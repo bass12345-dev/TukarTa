@@ -75,7 +75,7 @@ serve(async (req) => {
         .join('')
     )
 
-    // 4. Call Groq Llama 3.2 Vision
+    // 4. Call Groq Llama 4 Scout Vision
     const prompt = `
       Extract a list of songs from this image. 
       The image might be:
@@ -107,7 +107,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'llama-3.2-11b-vision-preview',
+        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
         messages: [
           {
             role: 'user',

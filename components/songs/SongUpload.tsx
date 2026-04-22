@@ -153,7 +153,7 @@ export function SongUpload({ onBack, onAnalyze, onSearch }: SongUploadProps) {
           </TouchableOpacity>
           <Text style={styles.title}>Upload screenshots</Text>
           <Text style={styles.subtitle}>
-            Drop in photos of your song list. Gemini AI reads handwriting, typed text, even blurry photos.
+            Drop in photos of your song list. AI reads handwriting, typed text, even blurry photos.
           </Text>
         </View>
 
