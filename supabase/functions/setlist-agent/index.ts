@@ -73,6 +73,7 @@ serve(async (req) => {
     // 3. Fetch Gig-Specific Context
     let gigContext = ""
     let repertoireContext = ""
+    let setlistContext = ""
     
     if (gigId) {
       const { data: gig } = await supabase
@@ -97,6 +98,30 @@ serve(async (req) => {
         .eq('musician_id', userId)
 
       repertoireContext = repertoire?.map((r: any) => `- ${r.song.title} (${r.song.artist}) [RefKey: ${r.song.id}]`).join('\n') || "No songs in repertoire."
+
+      // Fetch Current Setlist
+      const { data: setlist } = await supabase
+        .from('setlists')
+        .select('id')
+        .eq('gig_id', gigId)
+        .single();
+
+      if (setlist) {
+        const { data: setlistSongs } = await supabase
+          .from('setlist_songs')
+          .select('song:songs(*)')
+          .eq('setlist_id', setlist.id)
+          .order('position', { ascending: true });
+
+        if (setlistSongs && setlistSongs.length > 0) {
+          setlistContext = `
+            CURRENT SETLIST:
+            ${setlistSongs.map((s: any, idx: number) => `${idx + 1}. ${s.song.title} (${s.song.artist}) [ID: ${s.song.id}]`).join('\n')}
+          `
+        } else {
+          setlistContext = "CURRENT SETLIST: Empty."
+        }
+      }
     }
 
     const bandNames = myBands?.map((b: any) => `- ${b.name} (${b.city || 'Unknown City'})`).join('\n') || "No bands found."
@@ -112,6 +137,7 @@ serve(async (req) => {
 
       CONTEXT:
       ${gigContext}
+      ${setlistContext}
       
       USER'S BANDS:
       ${bandNames}
