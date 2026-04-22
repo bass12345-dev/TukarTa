@@ -55,7 +55,9 @@ export default function StageModeScreen() {
   // 4. Handle Web Search
   const handleWebSearch = async (baseUrl: string) => {
     if (!currentSetlistSong) return;
-    const query = `${currentSetlistSong.song.title} ${currentSetlistSong.song.artist}`;
+    const artist = currentSetlistSong.song.artist;
+    const cleanArtist = (artist && artist.toLowerCase() !== 'unknown artist') ? artist : '';
+    const query = `${currentSetlistSong.song.title} ${cleanArtist}`.trim();
     const fullUrl = `${baseUrl}${encodeURIComponent(query)}`;
     await WebBrowser.openBrowserAsync(fullUrl, {
       presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,

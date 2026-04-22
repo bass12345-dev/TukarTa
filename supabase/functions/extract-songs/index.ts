@@ -83,7 +83,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        model: 'llama-3.2-11b-vision-preview',
         messages: [
           {
             role: 'user',
@@ -128,9 +128,9 @@ serve(async (req) => {
     })
 
 
-  } catch (error) {
-    console.error('Final Catch Error:', error.message)
-    return new Response(JSON.stringify({ error: error.message }), {
+  } catch (error: any) {
+    console.error('Final Catch Error:', error.message || error)
+    return new Response(JSON.stringify({ error: error.message || String(error) }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
     })
