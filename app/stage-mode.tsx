@@ -5,15 +5,17 @@ import {
   ScrollView, 
   TouchableOpacity, 
   StyleSheet, 
-  Dimensions, 
   Platform,
-  ActivityIndicator
+  Dimensions, 
+  ActivityIndicator,
+  Modal,
+  TextInput
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Music, Search, Globe, ExternalLink } from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Music, Search, Globe, ExternalLink, Edit2 } from 'lucide-react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useSetlistSongs } from '../utils/hooks/useMusician';
-import { useSongLyrics } from '../utils/hooks/useSongs';
+import { useSongLyrics, useUpdateSongArtist } from '../utils/hooks/useSongs';
 import { GlassCard } from '../components/ui/GlassCard';
 
 const { width } = Dimensions.get('window');
@@ -33,6 +35,11 @@ export default function StageModeScreen() {
   
   // 2. State for current song index within the setlist
   const [currentIndex, setCurrentIndex] = useState(0);
+  
+  // 2.1 State for Artist Correction
+  const [isEditingArtist, setIsEditingArtist] = useState(false);
+  const [newArtist, setNewArtist] = useState('');
+  const updateArtistMutation = useUpdateSongArtist();
 
   // Initialize index when setlist loads
   React.useEffect(() => {
@@ -66,7 +73,27 @@ export default function StageModeScreen() {
       showTitle: true,
     });
   };
+  // 5. Handle Artist Update
+  const handleUpdateArtist = async () => {
+    if (!currentSetlistSong || !newArtist.trim()) return;
+    try {
+      await updateArtistMutation.mutateAsync({
+        songId: currentSetlistSong.song.id,
+        artist: newArtist.trim(),
+        title: currentSetlistSong.song.title,
+        setlistId: setlistId as string,
+        position: currentSetlistSong.position
+      });
+      setIsEditingArtist(false);
+    } catch (e) {
+      console.error('Failed to update artist:', e);
+    }
+  };
 
+  const openEditArtist = () => {
+    setNewArtist(currentSetlistSong?.song?.artist || '');
+    setIsEditingArtist(true);
+  };
   // 5. Parse plain lyrics into the UI format
   const hasLyrics = !!lyricsData?.plain_lyrics;
   const songData = useMemo(() => {
@@ -188,6 +215,17 @@ export default function StageModeScreen() {
                       <Text style={styles.searchBtnText}>Search on {provider.name}</Text>
                     </TouchableOpacity>
                   ))}
+
+                  <TouchableOpacity 
+                    style={[styles.searchBtn, styles.editArtistBtn]} 
+                    onPress={openEditArtist}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.searchBtnIcon, { backgroundColor: 'rgba(168, 85, 247, 0.15)' }]}>
+                      <Edit2 size={14} color="#A855F7" />
+                    </View>
+                    <Text style={[styles.searchBtnText, { color: '#A855F7' }]}>Correct Artist & Retry</Text>
+                  </TouchableOpacity>
                 </View>
 
                 <View style={styles.manualInfo}>
@@ -220,6 +258,51 @@ export default function StageModeScreen() {
         
         <View style={{ height: 150 }} />
       </ScrollView>
+
+      {/* ── Artist Correction Modal ── */}
+      <Modal
+        visible={isEditingArtist}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsEditingArtist(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <GlassCard intensity={20} style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Correct Artist</Text>
+            <Text style={styles.modalSubtitle}>Lyrics search is more accurate with the right artist name.</Text>
+            
+            <TextInput
+              style={styles.input}
+              value={newArtist}
+              onChangeText={setNewArtist}
+              placeholder="Artist name"
+              placeholderTextColor="rgba(255,255,255,0.3)"
+              autoFocus
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity 
+                style={styles.modalCancel} 
+                onPress={() => setIsEditingArtist(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.modalSubmit, updateArtistMutation.isPending && { opacity: 0.5 }]} 
+                onPress={handleUpdateArtist}
+                disabled={updateArtistMutation.isPending}
+              >
+                {updateArtistMutation.isPending ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Text style={styles.modalSubmitText}>Save & Retry</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </GlassCard>
+        </View>
+      </Modal>
 
       {/* ── Bottom Controls ── */}
       <View style={styles.bottomBar}>
@@ -434,6 +517,80 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFF',
     fontFamily: 'DM Sans',
+  },
+  editArtistBtn: {
+    backgroundColor: 'rgba(168, 85, 247, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.2)',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    padding: 24,
+    borderRadius: 24,
+    gap: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFF',
+    fontFamily: 'DM Sans Bold',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.4)',
+    lineHeight: 20,
+    fontFamily: 'DM Sans',
+  },
+  input: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    height: 56,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    color: '#FFF',
+    fontSize: 16,
+    fontFamily: 'DM Sans',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  modalCancel: {
+    flex: 1,
+    height: 52,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  modalCancelText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 15,
+    fontWeight: '600',
+    fontFamily: 'DM Sans',
+  },
+  modalSubmit: {
+    flex: 2,
+    height: 52,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#A855F7',
+  },
+  modalSubmitText: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: '700',
+    fontFamily: 'DM Sans Bold',
   },
   manualInfo: {
     flexDirection: 'row',

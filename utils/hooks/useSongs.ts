@@ -208,3 +208,56 @@ export function useAnalyzeScreenshot() {
     },
   });
 }
+export function useUpdateSongArtist() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ songId, artist, title, setlistId, position }: { songId: string; artist: string; title: string; setlistId?: string; position?: number }) => {
+      // 1. Ensure the song with the correct title/artist exists in the catalog
+      // This will either return the existing song or create a new one
+      const { data: targetSong, error: songError } = await supabase
+        .from('songs')
+        .upsert({ title, artist }, { onConflict: 'title, artist' })
+        .select('id')
+        .single();
+
+      if (songError) throw songError;
+      if (!targetSong) throw new Error('Failed to resolve song');
+
+      // 2. If it's for a setlist, update the setlist reference
+      if (setlistId) {
+        // If the solved song ID is different from the current one, we need to swap them
+        if (targetSong.id !== songId) {
+          // 1. Remove the old (incorrect/unknown) song from this setlist FIRST
+          // to free up its position in the database constraint
+          await supabase
+            .from('setlist_songs')
+            .delete()
+            .eq('setlist_id', setlistId)
+            .eq('song_id', songId);
+
+          // 2. Now add/update the correct song to that position
+          const { error: upsertError } = await supabase
+            .from('setlist_songs')
+            .upsert({
+              setlist_id: setlistId,
+              song_id: targetSong.id,
+              position: position || 1
+            }, { onConflict: 'setlist_id, song_id' });
+
+          if (upsertError) throw upsertError;
+        } else {
+          // If IDs are the same, the update already happened via upsert on 'songs'
+          // (though technically upsert on same ID with same values does nothing)
+        }
+      }
+
+      return { success: true, songId: targetSong.id };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-songs'] });
+      queryClient.invalidateQueries({ queryKey: ['setlist-songs'] });
+      queryClient.invalidateQueries({ queryKey: ['lyrics'] });
+    },
+  });
+}
