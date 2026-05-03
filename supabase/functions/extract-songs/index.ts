@@ -87,11 +87,11 @@ serve(async (req) => {
       - IGNORE all UI elements: Battery percentage, Time/Clock, Network icons, "Play", "Shuffle", "Download", "Repeat", "Library", "Search" buttons.
       - IGNORE navigation text: "Playlist", "Album", "Followers", "Artist Info", "Lyrics".
       - IGNORE handwritten "noise": "Set 1", "Break", "Don't forget", "Check mic", or page numbers.
-      - FOCUS ONLY on Song Titles and Artist Names.
-      - For handwritten notes, do your best to decipher messy handwriting.
-      - If the artist is not explicitly mentioned but you can infer it from a well-known song title, please include the most likely artist.
-      - If the artist is truly unknown, use "Unknown Artist".
-      - For "genre", identify if it fits one of these: OPM, Rock, Pop, Acoustic, Worship, Ballad, Hip-Hop, R&B, Electronic, Country, Jazz, Classical, Blues, Folk, Metal, Punk, Reggae, Soul, or Latin. If it doesn't fit, provide a short 1-word genre.
+      - SPELL CHECK: Use your internal knowledge to CORRECT any obvious misspellings or OCR errors in song titles and artist names.
+      - IDENTIFY ARTISTS: If the artist is NOT explicitly mentioned in the image but the song title is well-known, you MUST provide the most likely original artist name instead of "Unknown Artist".
+      - GENRE DETECTION: You MUST provide an accurate genre for every song. If the genre is not in the image, use your musical knowledge to assign the most appropriate one.
+      - GENRE CATEGORIES: Prioritize these categories: OPM (for any Filipino songs), Rock, Pop, Acoustic, Worship, Ballad, Hip-Hop, R&B, Electronic, Country, Jazz, Classical, Blues, Folk, Metal, Punk, Reggae, Soul, or Latin. If it doesn't fit these, provide a concise 1-word genre.
+      - ARTIST ACCURACY: For well-known covers, prefer the most popular or original artist.
 
       Return the results STRICTLY as a JSON object with a "songs" key containing an array of objects with "title", "artist", and "genre" keys.
       Example format: {"songs": [{"title": "With or Without You", "artist": "U2", "genre": "Rock"}, {"title": "Ang Huling El Bimbo", "artist": "Eraserheads", "genre": "OPM"}]}
@@ -107,7 +107,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        model: 'llama-3.2-90b-vision-preview',
         messages: [
           {
             role: 'user',
@@ -123,7 +123,7 @@ serve(async (req) => {
           }
         ],
         response_format: { type: "json_object" },
-        temperature: 0.1,
+        temperature: 0,
       })
     })
 
