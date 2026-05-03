@@ -5,14 +5,16 @@ import {
   Music,
   Plus,
   Search,
-  Star
+  Star,
+  Trash2
 } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { Dimensions, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator, FlatList } from 'react-native';
+import { ActivityIndicator, Dimensions, FlatList, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Alert } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
+import { Button } from '../../components/ui/Button';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Pill } from '../../components/ui/Pill';
-import { Button } from '../../components/ui/Button';
-import { useInfiniteMySongs } from '../../utils/hooks/useSongs';
+import { useInfiniteMySongs, useDeleteMySong } from '../../utils/hooks/useSongs';
 
 const { width } = Dimensions.get('window');
 
@@ -220,31 +222,67 @@ function SongListItem({ item }: { item: any }) {
   const isLive = item.can_perform_live;
   const iconColor = isLive ? '#00D4FF' : '#F59E0B';
   const bgColor = isLive ? 'rgba(0, 212, 255, 0.1)' : 'rgba(245, 158, 11, 0.1)';
+  const { mutate: deleteSong } = useDeleteMySong();
+
+  const handleDelete = () => {
+    Alert.alert(
+      "Delete Song",
+      `Are you sure you want to remove "${song.title}" from your dictionary?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Delete", 
+          style: "destructive", 
+          onPress: () => deleteSong(song.id) 
+        }
+      ]
+    );
+  };
+
+  const renderRightActions = () => {
+    return (
+      <TouchableOpacity 
+        style={styles.deleteAction} 
+        onPress={handleDelete}
+        activeOpacity={0.7}
+      >
+        <Trash2 size={20} color="#FFF" />
+        <Text style={styles.deleteActionText}>Delete</Text>
+      </TouchableOpacity>
+    );
+  };
 
   return (
-    <TouchableOpacity style={styles.songItem}>
-      <View style={[styles.songIcon, { backgroundColor: bgColor }]}>
-        <Music size={18} color={iconColor} />
-      </View>
-      <View style={styles.songInfo}>
-        <Text style={styles.songTitle}>{song.title}</Text>
-        <Text style={styles.songSubtitle}>{song.artist} · {item.genre || song.genre || 'General'}</Text>
-        <View style={styles.starsRow}>
-          {[1,2,3,4,5].map(i => (
-            <Star key={i} size={10} color="#F59E0B" fill={i <= item.confidence_level ? "#F59E0B" : "transparent"} />
-          ))}
+    <Swipeable 
+      renderRightActions={renderRightActions}
+      friction={2}
+      rightThreshold={40}
+      containerStyle={styles.swipeContainer}
+    >
+      <TouchableOpacity style={styles.songItem} activeOpacity={0.7}>
+        <View style={[styles.songIcon, { backgroundColor: bgColor }]}>
+          <Music size={18} color={iconColor} />
         </View>
-      </View>
-      <View style={styles.songMeta}>
-        <View style={styles.metaTop}>
-          {song.original_key && <Pill label={song.original_key} variant="cyan" />}
-          {song.bpm && <Text style={styles.timeText}>{song.bpm} BPM</Text>}
+        <View style={styles.songInfo}>
+          <Text style={styles.songTitle} numberOfLines={1}>{song.title}</Text>
+          <Text style={styles.songSubtitle} numberOfLines={1}>{song.artist} · {item.genre || song.genre || 'General'}</Text>
+          <View style={styles.starsRow}>
+            {[1,2,3,4,5].map(i => (
+              <Star key={i} size={10} color="#F59E0B" fill={i <= item.confidence_level ? "#F59E0B" : "transparent"} />
+            ))}
+          </View>
         </View>
-        {isLive && (
-          <Text style={styles.liveTag}>LIVE</Text>
-        )}
-      </View>
-    </TouchableOpacity>
+        <View style={styles.songMeta}>
+          <View style={styles.metaTop}>
+            {song.original_key && <Pill label={song.original_key} variant="cyan" />}
+            {song.bpm && <Text style={styles.timeText}>{song.bpm} BPM</Text>}
+          </View>
+          {isLive && (
+            <Text style={styles.liveTag}>LIVE</Text>
+          )}
+        </View>
+      </TouchableOpacity>
+    </Swipeable>
   );
 }
 
@@ -325,6 +363,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   scrollContent: {
+    paddingTop: 10,
     paddingBottom: 40,
   },
   searchSection: {
@@ -433,12 +472,33 @@ const styles = StyleSheet.create({
     fontFamily: 'DM Sans Bold',
     letterSpacing: 1,
   },
+  swipeContainer: {
+    marginHorizontal: 15,
+    marginBottom: 12,
+  },
   songItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 20,
+    paddingHorizontal: 15,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderRadius: 16,
     gap: 15,
+  },
+  deleteAction: {
+    backgroundColor: '#EF4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    height: '100%',
+    borderRadius: 16,
+    marginLeft: 10,
+    gap: 4,
+  },
+  deleteActionText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontFamily: 'DM Sans Bold',
   },
   songIcon: {
     width: 48,

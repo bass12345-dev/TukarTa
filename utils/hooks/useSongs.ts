@@ -261,3 +261,25 @@ export function useUpdateSongArtist() {
     },
   });
 }
+
+export function useDeleteMySong() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (songId: string) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { error } = await supabase
+        .from('musician_song_knowledge')
+        .delete()
+        .eq('musician_id', user.id)
+        .eq('song_id', songId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-songs'] });
+    },
+  });
+}
