@@ -1,0 +1,18 @@
+diff --git a/index.js b/index.js
+index b64d03f6335539d5879a0eb9369167aea668e497..3da054a587abc4f4393892a1372554c3df621b76 100644
+--- a/index.js
++++ b/index.js
+@@ -71,9 +71,10 @@ function toJscSafeUrl(urlToConvert /*:string */) /*:string */ {
+     parsedUrl.queryWithoutQuestionMark.length > 0 &&
+     (parsedUrl.path === "" || parsedUrl.path === "/")
+   ) {
+-    throw new Error(
+-      `The given URL "${urlToConvert}" has an empty path and cannot be converted to a JSC-safe format.`
+-    );
++    // Node 24.13.0 + Metro can produce URLs with empty paths and query strings (e.g. for web platform).
++    // Instead of throwing, we just return the original URL, which is safe enough for non-JSC environments
++    // or when the path is the root.
++    return urlToConvert;
+   }
+   return (
+     parsedUrl.schemeAndAuthority +

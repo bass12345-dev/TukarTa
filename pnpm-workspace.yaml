@@ -1,0 +1,2 @@
+patchedDependencies:
+  jsc-safe-url@0.2.4: patches/jsc-safe-url@0.2.4.patch

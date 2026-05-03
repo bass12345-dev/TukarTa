@@ -12,11 +12,12 @@ import {
   TextInput
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Music, Search, Globe, ExternalLink, Edit2 } from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Music, Search, Globe, ExternalLink, Edit2, Play } from 'lucide-react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useSetlistSongs } from '../utils/hooks/useMusician';
 import { useSongLyrics, useUpdateSongArtist } from '../utils/hooks/useSongs';
 import { GlassCard } from '../components/ui/GlassCard';
+import { WebView } from 'react-native-webview';
 
 const { width } = Dimensions.get('window');
 
@@ -40,6 +41,9 @@ export default function StageModeScreen() {
   const [isEditingArtist, setIsEditingArtist] = useState(false);
   const [newArtist, setNewArtist] = useState('');
   const updateArtistMutation = useUpdateSongArtist();
+  
+  // 2.2 State for Minus 1 Player
+  const [isMinusOneVisible, setIsMinusOneVisible] = useState(false);
 
   // Initialize index when setlist loads
   React.useEffect(() => {
@@ -60,11 +64,11 @@ export default function StageModeScreen() {
   );
 
   // 4. Handle Web Search
-  const handleWebSearch = async (baseUrl: string) => {
+  const handleWebSearch = async (baseUrl: string, isPractice = false) => {
     if (!currentSetlistSong) return;
     const artist = currentSetlistSong.song.artist;
     const cleanArtist = (artist && artist.toLowerCase() !== 'unknown artist') ? artist : '';
-    const query = `${currentSetlistSong.song.title} ${cleanArtist}`.trim();
+    const query = `${currentSetlistSong.song.title} ${cleanArtist}${isPractice ? ' minus 1' : ''}`.trim();
     const fullUrl = `${baseUrl}${encodeURIComponent(query)}`;
     await WebBrowser.openBrowserAsync(fullUrl, {
       presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
@@ -179,6 +183,30 @@ export default function StageModeScreen() {
         </View>
       </View>
 
+      {/* ── Embedded Minus 1 Player ── */}
+      {isMinusOneVisible && currentSetlistSong && (
+        <View style={styles.playerContainer}>
+          <WebView
+            style={styles.webview}
+            source={{ 
+              uri: `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(
+                `${currentSetlistSong.song.artist} ${currentSetlistSong.song.title} minus 1`
+              )}` 
+            }}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            allowsFullscreenVideo={true}
+            startInLoadingState={true}
+            renderLoading={() => (
+              <View style={styles.playerLoading}>
+                <ActivityIndicator color="#00D4FF" />
+                <Text style={styles.loadingText}>Syncing Track...</Text>
+              </View>
+            )}
+          />
+        </View>
+      )}
+
       {/* ── Main Performance View ── */}
       <ScrollView 
         style={styles.scroll} 
@@ -186,8 +214,19 @@ export default function StageModeScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.songHeader}>
-          <Text style={styles.songTitle}>{songData?.title}</Text>
-          <Text style={styles.songMeta}>{songData?.artist} · {songData?.meta}</Text>
+          <View style={styles.songHeaderMain}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.songTitle}>{songData?.title}</Text>
+              <Text style={styles.songMeta}>{songData?.artist} · {songData?.meta}</Text>
+            </View>
+            <TouchableOpacity 
+              style={[styles.minusOneBtn, isMinusOneVisible && styles.minusOneBtnActive]}
+              onPress={() => setIsMinusOneVisible(!isMinusOneVisible)}
+            >
+              <Play size={18} color="#FFF" fill={isMinusOneVisible ? "#FFF" : "none"} />
+              <Text style={styles.minusOneText}>{isMinusOneVisible ? 'CLOSE TRACK' : 'MINUS 1'}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {isLoadingLyrics ? (
@@ -423,6 +462,75 @@ const styles = StyleSheet.create({
   },
   songHeader: {
     marginBottom: 40,
+  },
+  songHeaderMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 15,
+  },
+  minusOneBtn: {
+    backgroundColor: '#00D4FF',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    boxShadow: [{
+      color: 'rgba(0, 212, 255, 0.4)',
+      offsetX: 0,
+      offsetY: 4,
+      blurRadius: 12,
+    }],
+    elevation: 8,
+  },
+  minusOneText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '800',
+    fontFamily: 'DM Sans Bold',
+    letterSpacing: 0.5,
+  },
+  minusOneBtnActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderWidth: 1,
+  },
+  playerContainer: {
+    width: '100%',
+    height: 220,
+    backgroundColor: '#000',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 212, 255, 0.3)',
+    boxShadow: [{
+      color: 'rgba(0, 212, 255, 0.25)',
+      offsetX: 0,
+      offsetY: 4,
+      blurRadius: 15,
+    }],
+    elevation: 10,
+  },
+  webview: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  playerLoading: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#000',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    color: '#00D4FF',
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: 'DM Sans',
+    letterSpacing: 1,
   },
   songTitle: {
     fontSize: 42,

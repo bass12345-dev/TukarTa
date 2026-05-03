@@ -1,12 +1,12 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeft, MoreVertical, Music, Sparkles, Play, Plus } from 'lucide-react-native';
+import * as WebBrowser from 'expo-web-browser';
+import { ChevronLeft, MoreVertical, Music, Sparkles, Play, Plus, Video } from 'lucide-react-native';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Orb } from '../../components/ui/Orb';
 import { useGigDetails, useGigSetlist, useSetlistSongs } from '../../utils/hooks/useMusician';
 import { SongPickerModal } from '../../components/setlists/SongPickerModal';
-import { ActivityIndicator } from 'react-native';
 
 const THEME = {
   bg: '#071420',
@@ -27,6 +27,12 @@ export default function SetlistDetailsScreen() {
   const { data: gig, isLoading: loadingGig } = useGigDetails(id as string);
   const { data: setlist, isLoading: loadingSetlist } = useGigSetlist(id as string);
   const { data: songs, isLoading: loadingSongs } = useSetlistSongs(setlist?.id);
+
+  const handleYoutubeSearch = async (title: string, artist: string) => {
+    const query = encodeURIComponent(`${artist} ${title} minus 1`);
+    const url = `https://www.youtube.com/results?search_query=${query}`;
+    await WebBrowser.openBrowserAsync(url);
+  };
 
   if (loadingGig || loadingSetlist) {
     return (
@@ -112,33 +118,41 @@ export default function SetlistDetailsScreen() {
           </View>
         ) : (
           songs?.map((item: any, index: number) => (
-            <TouchableOpacity 
-              key={item.id} 
-              style={styles.songRow} 
-              activeOpacity={0.7} 
-              onPress={() => router.push({ 
-                pathname: '/stage-mode', 
-                params: { setlistId: setlist?.id, initialSongId: item.song.id } 
-              })}
-            >
-               <Text style={styles.songIndex}>{String(index + 1).padStart(2, '0')}</Text>
-               
-               <Orb variant={getSongVariant(index)} size={40} style={styles.orb}>
-                  <Music size={16} color={getSongColor(index)} />
-               </Orb>
+            <View key={item.id} style={styles.songRowContainer}>
+              <TouchableOpacity 
+                style={styles.songRow} 
+                activeOpacity={0.7} 
+                onPress={() => router.push({ 
+                  pathname: '/stage-mode', 
+                  params: { setlistId: setlist?.id, initialSongId: item.song.id } 
+                })}
+              >
+                 <Text style={styles.songIndex}>{String(index + 1).padStart(2, '0')}</Text>
+                 
+                 <Orb variant={getSongVariant(index)} size={40} style={styles.orb}>
+                    <Music size={16} color={getSongColor(index)} />
+                 </Orb>
 
-               <View style={styles.songInfo}>
-                  <Text style={styles.songTitle}>{item.song.title}</Text>
-                  <Text style={styles.songArtist}>{item.song.artist}</Text>
-               </View>
+                 <View style={styles.songInfo}>
+                    <Text style={styles.songTitle}>{item.song.title}</Text>
+                    <Text style={styles.songArtist}>{item.song.artist}</Text>
+                 </View>
 
-               <View style={styles.songMeta}>
-                  <View style={styles.keyBadge}>
-                     <Text style={styles.keyText}>{item.song.original_key || '?'}</Text>
-                  </View>
-                  <Text style={styles.durationText}>{Math.floor((item.song.duration_sec || 0) / 60)}:{(item.song.duration_sec || 0) % 60}</Text>
-               </View>
-            </TouchableOpacity>
+                 <View style={styles.songMeta}>
+                    <View style={styles.keyBadge}>
+                       <Text style={styles.keyText}>{item.song.original_key || '?'}</Text>
+                    </View>
+                    <Text style={styles.durationText}>{Math.floor((item.song.duration_sec || 0) / 60)}:{(item.song.duration_sec || 0) % 60}</Text>
+                 </View>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.youtubeBtn}
+                onPress={() => handleYoutubeSearch(item.song.title, item.song.artist)}
+              >
+                <Video size={20} color="#FF0000" />
+              </TouchableOpacity>
+            </View>
           ))
         )}
       </ScrollView>
@@ -292,13 +306,23 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 60,
   },
+  songRowContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.04)',
+  },
   songRow: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 14,
     paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  youtubeBtn: {
+    paddingHorizontal: 15,
+    height: '100%',
+    justifyContent: 'center',
   },
   songIndex: {
     fontSize: 13,
