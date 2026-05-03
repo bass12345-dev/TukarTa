@@ -191,7 +191,7 @@ function TypingIndicator() {
   return (
     <View style={[styles.msgWrapper, styles.msgWrapperAI]}>
       <GlassCard intensity={15} style={[styles.msgBubble, styles.msgBubbleAI, { paddingVertical: 12, paddingHorizontal: 16 }]}>
-        <Text style={styles.aiLabel}>GIG ASSISTANT IS TYPING</Text>
+        <Text style={styles.aiLabel}>TUKARTA BOT IS TYPING</Text>
         <View style={styles.dotsRow}>
           <Text style={styles.typingText}>Thinking{dots}</Text>
         </View>
@@ -588,7 +588,7 @@ export default function AIAgentScreen() {
             <Text style={styles.agentAvatarIcon}>✦</Text>
           </View>
           <View style={styles.headerInfo}>
-            <Text style={styles.headerTitle}>✦ AI Gig Assistant</Text>
+            <Text style={styles.headerTitle}>✦ TukarTa Bot</Text>
             <View style={styles.statusRow}>
               <View style={styles.onlineDot} />
               <Text style={styles.headerStatus}>
@@ -700,7 +700,7 @@ export default function AIAgentScreen() {
               <View style={[styles.msgWrapper, msg.role === 'user' ? styles.msgWrapperUser : styles.msgWrapperAI]}>
                 <View style={[styles.msgBubble, msg.role === 'user' ? styles.msgBubbleUser : styles.msgBubbleAI]}>
                   {msg.role === 'assistant' && (
-                    <Text style={styles.aiLabel}>GIG ASSISTANT</Text>
+                    <Text style={styles.aiLabel}>TUKARTA BOT</Text>
                   )}
                   
                   {msg.role === 'assistant' && msg.isAnimating ? (

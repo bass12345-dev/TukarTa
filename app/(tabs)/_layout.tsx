@@ -1,13 +1,9 @@
-import React from 'react';
-import { StyleSheet } from 'react-native';
-import { Tabs } from 'expo-router';
-import { Home, Music, Search, User, Users } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
+import { Tabs, useRouter } from 'expo-router';
+import { Home, Music, Search, User, Users } from 'lucide-react-native';
+import React from 'react';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { View, TouchableOpacity, Text } from 'react-native';
-import { useRouter } from 'expo-router';
-import { MessageSquare, Sparkles } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 
 export default function TabLayout() {
   const isDark = true; // Forcing dark mode for the fixed dark theme
@@ -81,23 +77,22 @@ export default function TabLayout() {
         />
       </Tabs>
 
-      {/* Floating AI Agent Button */}
+      {/* Floating AI Robot Mascot */}
       <View style={[styles.floatingContainer, { bottom: 85 + insets.bottom }]}>
         <TouchableOpacity 
-          activeOpacity={0.9} 
+          activeOpacity={0.8} 
           onPress={() => router.push('/ai-agent')}
           style={styles.floatingButton}
         >
-          <LinearGradient
-            colors={['#00D4FF', '#8B5CF6']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.gradient}
-          >
-            <Sparkles size={24} color="#FFF" />
-          </LinearGradient>
+          <View style={styles.robotWrapper}>
+             <Image 
+               source={require('../../assets/images/ai-robot-removebg-preview.png')} 
+               style={styles.robotImage}
+               resizeMode="contain"
+             />
+          </View>
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>AI</Text>
+            <Text style={styles.badgeText}>ASK AI</Text>
           </View>
         </TouchableOpacity>
       </View>
@@ -111,42 +106,50 @@ const styles = StyleSheet.create({
   },
   floatingContainer: {
     position: 'absolute',
-    right: 20,
+    right: 15,
     zIndex: 999,
   },
   floatingButton: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(0, 212, 255, 0.2)',
-    shadowColor: '#00D4FF',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  gradient: {
-    flex: 1,
-    borderRadius: 30,
+    width: 90,
+    height: 90,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  robotWrapper: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: 'rgba(7, 20, 32, 0.6)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(0, 212, 255, 0.3)',
+    shadowColor: '#00D4FF',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  robotImage: {
+    width: 80,
+    height: 80,
+  },
   badge: {
     position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: '#FFF',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: '#8B5CF6',
+    top: 0,
+    right: 0,
+    backgroundColor: '#00D4FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FFF',
+    zIndex: 10,
   },
   badgeText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#8B5CF6',
+    fontSize: 8,
+    fontWeight: '900',
+    color: '#071420',
+    letterSpacing: 0.5,
   }
 });
