@@ -112,7 +112,7 @@ export default function SetlistsScreen() {
             <TouchableOpacity
               key={gig.id}
               activeOpacity={0.8}
-              onPress={() => router.push(`/setlist/${gig.id}`)}
+              onPress={() => router.push({ pathname: '/setlist/[id]', params: { id: gig.id } })}
             >
               <View style={[styles.card, { borderColor }]}>
                 <View style={[styles.topAccent, { backgroundColor: themeColor }]} />

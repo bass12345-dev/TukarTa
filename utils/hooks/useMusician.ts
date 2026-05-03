@@ -422,6 +422,75 @@ export function useGigDetails(gigId: string | undefined) {
   });
 }
 
+export function useGigSetlists(gigId: string | undefined) {
+  return useQuery({
+    queryKey: ['gig-setlists', gigId],
+    queryFn: async () => {
+      if (!gigId) return [];
+      const { data, error } = await supabase
+        .from('setlists')
+        .select('*')
+        .eq('gig_id', gigId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      
+      // If no setlists, create the default "Set 1"
+      if (data && data.length === 0) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
+        
+        const gigRes = await supabase.from('gigs').select('band_id').eq('id', gigId).single();
+        
+        const { data: newSetlist, error: createError } = await supabase
+          .from('setlists')
+          .insert({
+            gig_id: gigId,
+            band_id: gigRes.data?.band_id,
+            name: 'Set 1',
+            created_by: user.id
+          })
+          .select()
+          .single();
+        
+        if (createError) throw createError;
+        return [newSetlist];
+      }
+
+      return data;
+    },
+    enabled: !!gigId,
+  });
+}
+
+export function useCreateSetlist() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ gigId, bandId, name }: { gigId: string; bandId: string; name: string }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('setlists')
+        .insert({
+          gig_id: gigId,
+          band_id: bandId,
+          name,
+          created_by: user.id
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['gig-setlists', variables.gigId] });
+    },
+  });
+}
+
 export function useGigSetlist(gigId: string | undefined) {
   return useQuery({
     queryKey: ['gig-setlist', gigId],
@@ -435,7 +504,8 @@ export function useGigSetlist(gigId: string | undefined) {
         .from('setlists')
         .select('*')
         .eq('gig_id', gigId)
-        .eq('name', 'Main Setlist')
+        .order('created_at', { ascending: true })
+        .limit(1)
         .maybeSingle();
 
       // 2. If not found, create it
@@ -445,7 +515,7 @@ export function useGigSetlist(gigId: string | undefined) {
           .insert({
             gig_id: gigId,
             band_id: (await supabase.from('gigs').select('band_id').eq('id', gigId).single()).data?.band_id,
-            name: 'Main Setlist',
+            name: 'Set 1',
             created_by: user.id
           })
           .select()

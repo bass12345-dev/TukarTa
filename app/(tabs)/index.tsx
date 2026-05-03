@@ -3,22 +3,21 @@ import { ScrollView, View, Text, TouchableOpacity, StyleSheet, Dimensions, Image
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
 import { MessageSquare, Search, Music, Users, LogOut, Bell, UserPlus, Check, X as CloseX } from 'lucide-react-native';
-import { useAuth } from '../../context/auth';
-import { supabase } from '../../utils/supabase';
-import { GlassCard } from '../../components/ui/GlassCard';
-import { Orb } from '../../components/ui/Orb';
-import { Pill } from '../../components/ui/Pill';
-import { Button } from '../../components/ui/Button';
+import { useAuth } from '@/context/auth';
+import { supabase } from '@/utils/supabase';
+import { GlassCard } from '@/components/ui/GlassCard';
+import { Orb } from '@/components/ui/Orb';
+import { Pill } from '@/components/ui/Pill';
+import { Button } from '@/components/ui/Button';
 import { LinearGradient } from 'expo-linear-gradient';
 import { 
   useMyInvites, 
   useMusicianProfile, 
   useMyKnownSongs, 
   useMyBands, 
-  useMyGigs,
-  useGigSetlist,
-  useSetlistSongs
-} from '../../utils/hooks/useMusician';
+  useMyGigs
+} from '@/utils/hooks/useMusician';
+import { useGigSetlist, useSetlistSongs } from '@/utils/hooks/useMusician';
 import { ActivityIndicator } from 'react-native';
 
 const THEME = {
@@ -310,7 +309,7 @@ export default function DashboardScreen() {
         </View>
         
         {upcomingGig ? (
-          <TouchableOpacity onPress={() => router.push(`/setlist/${upcomingGig.id}`)} style={styles.gigWrapper}>
+          <TouchableOpacity onPress={() => router.push({ pathname: '/setlist/[id]', params: { id: upcomingGig.id } })} style={styles.gigWrapper}>
             <GlassCard style={styles.gigCard} intensity={30}>
               <View style={styles.gigHeader}>
                 <View>

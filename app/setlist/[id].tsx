@@ -2,11 +2,11 @@ import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { ChevronLeft, MoreVertical, Music, Sparkles, Play, Plus, Video, BookOpen } from 'lucide-react-native';
-import { GlassCard } from '../../components/ui/GlassCard';
-import { Orb } from '../../components/ui/Orb';
-import { useGigDetails, useGigSetlist, useSetlistSongs, useToggleLearnStatus } from '../../utils/hooks/useMusician';
-import { SongPickerModal } from '../../components/setlists/SongPickerModal';
+import { ChevronLeft, MoreVertical, Music, Sparkles, Play, Plus, Video, BookOpen, Layers } from 'lucide-react-native';
+import { GlassCard } from '@/components/ui/GlassCard';
+import { Orb } from '@/components/ui/Orb';
+import { useGigDetails, useGigSetlists, useSetlistSongs, useToggleLearnStatus, useCreateSetlist } from '@/utils/hooks/useMusician';
+import { SongPickerModal } from '@/components/setlists/SongPickerModal';
 
 const THEME = {
   bg: '#071420',
@@ -15,6 +15,7 @@ const THEME = {
   textDim: 'rgba(150, 175, 200, 0.35)',
   surface: 'rgba(255, 255, 255, 0.04)',
   glassBorder: 'rgba(255, 255, 255, 0.10)',
+  cyan: '#00D4FF',
 };
 
 
@@ -22,12 +23,16 @@ export default function SetlistDetailsScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const [showPicker, setShowPicker] = React.useState(false);
+  const [activeSetlistIdx, setActiveSetlistIdx] = React.useState(0);
 
   // 1. Data Hooks
   const { data: gig, isLoading: loadingGig } = useGigDetails(id as string);
-  const { data: setlist, isLoading: loadingSetlist } = useGigSetlist(id as string);
-  const { data: songs, isLoading: loadingSongs } = useSetlistSongs(setlist?.id);
+  const { data: setlists, isLoading: loadingSetlists } = useGigSetlists(id as string);
+  
+  const currentSetlist = setlists?.[activeSetlistIdx];
+  const { data: songs, isLoading: loadingSongs } = useSetlistSongs(currentSetlist?.id);
   const toggleLearn = useToggleLearnStatus();
+  const createSetlist = useCreateSetlist();
 
   const handleYoutubeSearch = async (title: string, artist: string) => {
     const query = encodeURIComponent(`${artist} ${title} minus 1`);
@@ -36,14 +41,30 @@ export default function SetlistDetailsScreen() {
   };
 
   const handleToggleLearn = (songId: string, currentNotes: string | null) => {
+    if (!currentSetlist) return;
     toggleLearn.mutate({
-      setlistId: setlist?.id,
+      setlistId: currentSetlist.id,
       songId,
       currentNotes
     });
   };
 
-  if (loadingGig || loadingSetlist) {
+  const handleAddSet = async () => {
+    if (!gig) return;
+    const setName = `Set ${ (setlists?.length || 0) + 1 }`;
+    try {
+      await createSetlist.mutateAsync({
+        gigId: id as string,
+        bandId: gig.band_id,
+        name: setName
+      });
+      setActiveSetlistIdx((setlists?.length || 0));
+    } catch (e) {
+      console.error('Failed to add set:', e);
+    }
+  };
+
+  if (loadingGig || loadingSetlists) {
     return (
       <View style={[styles.container, styles.centered]}>
         <ActivityIndicator color="#00D4FF" size="large" />
@@ -62,7 +83,7 @@ export default function SetlistDetailsScreen() {
       <SongPickerModal 
         visible={showPicker} 
         onClose={() => setShowPicker(false)} 
-        setlistId={setlist?.id}
+        setlistId={currentSetlist?.id || ''}
         currentSongCount={songs?.length || 0}
       />
 
@@ -83,6 +104,26 @@ export default function SetlistDetailsScreen() {
           </View>
         </View>
         <Text style={styles.subtitle}>{gig?.venue || 'No Venue'} · {gig?.band?.name} · {dateStr}</Text>
+      </View>
+
+      {/* Sets Tabs */}
+      <View style={styles.tabsContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScroll}>
+          {setlists?.map((sl: any, idx: number) => (
+            <TouchableOpacity 
+              key={sl.id} 
+              style={[styles.tab, activeSetlistIdx === idx && styles.activeTab]}
+              onPress={() => setActiveSetlistIdx(idx)}
+            >
+              <Text style={[styles.tabText, activeSetlistIdx === idx && styles.activeTabText]}>{sl.name}</Text>
+              {activeSetlistIdx === idx && <View style={styles.tabIndicator} />}
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity style={styles.addSetTab} onPress={handleAddSet}>
+            <Plus size={14} color="#00D4FF" />
+            <Text style={styles.addSetText}>Add Set</Text>
+          </TouchableOpacity>
+        </ScrollView>
       </View>
 
       <View style={styles.actionRow}>
@@ -109,7 +150,7 @@ export default function SetlistDetailsScreen() {
           activeOpacity={0.8} 
           onPress={() => router.push({ 
             pathname: '/stage-mode', 
-            params: { setlistId: setlist?.id } 
+            params: { setlistId: currentSetlist?.id } 
           })}
         >
            <Play size={18} color="#FFF" fill="#FFF" />
@@ -136,7 +177,7 @@ export default function SetlistDetailsScreen() {
                   activeOpacity={0.7} 
                   onPress={() => router.push({ 
                     pathname: '/stage-mode', 
-                    params: { setlistId: setlist?.id, initialSongId: item.song.id } 
+                    params: { setlistId: currentSetlist?.id, initialSongId: item.song.id } 
                   })}
                 >
                    <Text style={styles.songIndex}>{String(index + 1).padStart(2, '0')}</Text>
@@ -260,6 +301,61 @@ const styles = StyleSheet.create({
   centered: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  tabsContainer: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  tabsScroll: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  tab: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  activeTab: {
+    backgroundColor: 'rgba(0, 212, 255, 0.1)',
+  },
+  tabText: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: 'DM Sans Medium',
+  },
+  activeTabText: {
+    color: '#00D4FF',
+  },
+  tabIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    width: 20,
+    height: 3,
+    backgroundColor: '#00D4FF',
+    borderRadius: 2,
+  },
+  addSetTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 212, 255, 0.3)',
+    borderStyle: 'dashed',
+    marginLeft: 10,
+  },
+  addSetText: {
+    color: '#00D4FF',
+    fontSize: 13,
+    fontWeight: '600',
+    fontFamily: 'DM Sans Medium',
+    marginLeft: 6,
   },
   actionRow: {
     flexDirection: 'row',

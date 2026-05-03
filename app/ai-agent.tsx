@@ -48,8 +48,8 @@ import {
   useCreateAISession,
   useAddSongToKnowledge,
   useAddSongsToSetlistBulk
-} from '../utils/hooks/useMusician';
-import { useAddMultipleSongs } from '../utils/hooks/useSongs';
+} from '@/utils/hooks/useMusician';
+import { useAddMultipleSongs } from '@/utils/hooks/useSongs';
 import { supabase } from '../utils/supabase';
 import { decode } from 'base64-arraybuffer';
 

@@ -1,0 +1,68 @@
+diff --git a/src/HmrServer.js b/src/HmrServer.js
+index ffdd55956fed85134fea3363fc74e9392aef508a..caf9d7aa6fc08b80077ff232187a90b0b8438d66 100644
+--- a/src/HmrServer.js
++++ b/src/HmrServer.js
+@@ -93,30 +93,40 @@ class HmrServer {
+       transformOptions.platform,
+       resolverOptions,
+     );
+-    const resolvedEntryFilePath = resolutionFn(
+-      (this._config.server.unstable_serverRoot ?? this._config.projectRoot) +
+-        "/.",
+-      {
+-        name: entryFile,
+-        data: {
+-          key: entryFile,
+-          asyncType: null,
+-          isESMImport: false,
+-          locs: [],
++    let resolvedEntryFilePath;
++    let graphId;
++    try {
++      resolvedEntryFilePath = resolutionFn(
++        (this._config.server.unstable_serverRoot ?? this._config.projectRoot) +
++          "/.",
++        {
++          name: entryFile,
++          data: {
++            key: entryFile,
++            asyncType: null,
++            isESMImport: false,
++            locs: [],
++          },
+         },
+-      },
+-    ).filePath;
+-    const graphId = (0, _getGraphId.default)(
+-      resolvedEntryFilePath,
+-      transformOptions,
+-      {
+-        resolverOptions,
+-        shallow: graphOptions.shallow,
+-        lazy: graphOptions.lazy,
+-        unstable_allowRequireContext:
+-          this._config.transformer.unstable_allowRequireContext,
+-      },
+-    );
++      ).filePath;
++      graphId = (0, _getGraphId.default)(
++        resolvedEntryFilePath,
++        transformOptions,
++        {
++          resolverOptions,
++          shallow: graphOptions.shallow,
++          lazy: graphOptions.lazy,
++          unstable_allowRequireContext:
++            this._config.transformer.unstable_allowRequireContext,
++        },
++      );
++    } catch (error) {
++      send([sendFn], {
++        type: "error",
++        body: (0, _formatBundlingError.default)(error),
++      });
++      return;
++    }
+     const revPromise = this._bundler.getRevisionByGraphId(graphId);
+     if (!revPromise) {
+       send([sendFn], {
