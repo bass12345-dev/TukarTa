@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { supabase } from '../supabase';
 import { searchSongs, getArtistMetadata, SongResult, getLyrics } from '../musicApi';
+import { Alert } from 'react-native';
 
 // ... (existing hooks)
 
@@ -279,7 +280,12 @@ export function useDeleteMySong() {
       if (error) throw error;
     },
     onSuccess: () => {
+      console.log('Song deleted successfully, invalidating queries...');
       queryClient.invalidateQueries({ queryKey: ['my-songs'] });
     },
+    onError: (error) => {
+      console.error('Failed to delete song:', error);
+      Alert.alert('Error', 'Failed to remove song. Please try again.');
+    }
   });
 }

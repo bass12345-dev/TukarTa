@@ -222,18 +222,32 @@ function SongListItem({ item }: { item: any }) {
   const isLive = item.can_perform_live;
   const iconColor = isLive ? '#00D4FF' : '#F59E0B';
   const bgColor = isLive ? 'rgba(0, 212, 255, 0.1)' : 'rgba(245, 158, 11, 0.1)';
-  const { mutate: deleteSong } = useDeleteMySong();
+  const { mutate: deleteSong, isPending: isDeleting } = useDeleteMySong();
 
   const handleDelete = () => {
+    console.log('Delete button pressed for song:', song.title, song.id);
+    
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm(`Are you sure you want to remove "${song.title}" from your dictionary?`);
+      if (confirmed) {
+        console.log('Web confirmation accepted, calling deleteSong...');
+        deleteSong(song.id);
+      }
+      return;
+    }
+
     Alert.alert(
       "Delete Song",
       `Are you sure you want to remove "${song.title}" from your dictionary?`,
       [
-        { text: "Cancel", style: "cancel" },
+        { text: "Cancel", style: "cancel", onPress: () => console.log('Delete cancelled') },
         { 
           text: "Delete", 
           style: "destructive", 
-          onPress: () => deleteSong(song.id) 
+          onPress: () => {
+            console.log('Mobile confirmation accepted, calling deleteSong...');
+            deleteSong(song.id);
+          }
         }
       ]
     );
@@ -245,9 +259,16 @@ function SongListItem({ item }: { item: any }) {
         style={styles.deleteAction} 
         onPress={handleDelete}
         activeOpacity={0.7}
+        disabled={isDeleting}
       >
-        <Trash2 size={20} color="#FFF" />
-        <Text style={styles.deleteActionText}>Delete</Text>
+        {isDeleting ? (
+          <ActivityIndicator size="small" color="#FFF" />
+        ) : (
+          <>
+            <Trash2 size={20} color="#FFF" />
+            <Text style={styles.deleteActionText}>Delete</Text>
+          </>
+        )}
       </TouchableOpacity>
     );
   };
