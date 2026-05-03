@@ -15,7 +15,9 @@ import {
   useMusicianProfile, 
   useMyKnownSongs, 
   useMyBands, 
-  useMyGigs 
+  useMyGigs,
+  useGigSetlist,
+  useSetlistSongs
 } from '../../utils/hooks/useMusician';
 import { ActivityIndicator } from 'react-native';
 
@@ -73,6 +75,12 @@ export default function DashboardScreen() {
   const rating = mProfile?.avg_rating || '5.0';
   
   const upcomingGig = gigs?.[0]; // First gig is next one due to order by gig_date
+  const { data: upcomingSetlist } = useGigSetlist(upcomingGig?.id);
+  const { data: upcomingSongs } = useSetlistSongs(upcomingSetlist?.id);
+
+  const gigSongsCount = upcomingSongs?.length || 0;
+  const songsToLearnCount = upcomingSongs?.filter((s: any) => s.notes?.includes('[LEARN]')).length || 0;
+  const gigReadiness = gigSongsCount > 0 ? Math.round(((gigSongsCount - songsToLearnCount) / gigSongsCount) * 100) : 100;
 
   if (isProfileLoading) {
     return (
@@ -165,6 +173,45 @@ export default function DashboardScreen() {
             </View>
           </GlassCard>
         </View>
+
+        {/* Gig Mastery Analytics */}
+        {upcomingGig && (
+          <View style={styles.masteryHub}>
+            <GlassCard style={[styles.masteryCard, { borderColor: 'rgba(245, 158, 11, 0.2)' }]} intensity={15}>
+              <View style={styles.masteryHeader}>
+                <View style={styles.masteryInfo}>
+                  <Text style={[styles.masteryTitle, { fontSize: 16 }]}>Gig Readiness: {upcomingGig.name}</Text>
+                  <Text style={styles.masterySubtitle}>Learning progress for this gig</Text>
+                </View>
+                <View style={[styles.levelBadge, { backgroundColor: THEME.gold + '22', borderColor: THEME.gold + '44' }]}>
+                  <Text style={[styles.levelText, { color: THEME.gold }]}>{gigReadiness}%</Text>
+                </View>
+              </View>
+              
+              <View style={styles.masteryContent}>
+                <View style={styles.chartContainer}>
+                  <View style={[styles.progressCircleBase, { borderColor: THEME.gold + '22' }]}>
+                    <View style={[styles.progressCircleFill, { height: `${gigReadiness}%`, backgroundColor: THEME.gold }]} />
+                    <View style={styles.progressInner}>
+                      <Text style={styles.progressValue}>{gigReadiness}%</Text>
+                    </View>
+                  </View>
+                </View>
+                
+                <View style={styles.statsColumn}>
+                  <View style={styles.miniStat}>
+                    <Text style={styles.miniStatValue}>{gigSongsCount}</Text>
+                    <Text style={styles.miniStatLabel}>Setlist Songs</Text>
+                  </View>
+                  <View style={styles.miniStat}>
+                    <Text style={[styles.miniStatValue, { color: THEME.gold }]}>{songsToLearnCount}</Text>
+                    <Text style={styles.miniStatLabel}>Still to Learn</Text>
+                  </View>
+                </View>
+              </View>
+            </GlassCard>
+          </View>
+        )}
 
         {/* Genre DNA */}
         <View style={styles.genreSection}>

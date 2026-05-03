@@ -816,3 +816,32 @@ export function useAddSongToKnowledge() {
     },
   });
 }
+
+export function useToggleLearnStatus() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ setlistId, songId, currentNotes }: { setlistId: string; songId: string; currentNotes: string | null }) => {
+      const isLearning = currentNotes?.includes('[LEARN]');
+      let newNotes = currentNotes || '';
+      
+      if (isLearning) {
+        newNotes = newNotes.replace('[LEARN]', '').trim();
+      } else {
+        newNotes = `[LEARN] ${newNotes}`.trim();
+      }
+
+      const { error } = await supabase
+        .from('setlist_songs')
+        .update({ notes: newNotes })
+        .eq('setlist_id', setlistId)
+        .eq('song_id', songId);
+      
+      if (error) throw error;
+      return { setlistId, songId, newNotes };
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['setlist-songs', variables.setlistId] });
+    },
+  });
+}

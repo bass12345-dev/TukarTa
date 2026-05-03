@@ -2,10 +2,10 @@ import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { ChevronLeft, MoreVertical, Music, Sparkles, Play, Plus, Video } from 'lucide-react-native';
+import { ChevronLeft, MoreVertical, Music, Sparkles, Play, Plus, Video, BookOpen } from 'lucide-react-native';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Orb } from '../../components/ui/Orb';
-import { useGigDetails, useGigSetlist, useSetlistSongs } from '../../utils/hooks/useMusician';
+import { useGigDetails, useGigSetlist, useSetlistSongs, useToggleLearnStatus } from '../../utils/hooks/useMusician';
 import { SongPickerModal } from '../../components/setlists/SongPickerModal';
 
 const THEME = {
@@ -27,11 +27,20 @@ export default function SetlistDetailsScreen() {
   const { data: gig, isLoading: loadingGig } = useGigDetails(id as string);
   const { data: setlist, isLoading: loadingSetlist } = useGigSetlist(id as string);
   const { data: songs, isLoading: loadingSongs } = useSetlistSongs(setlist?.id);
+  const toggleLearn = useToggleLearnStatus();
 
   const handleYoutubeSearch = async (title: string, artist: string) => {
     const query = encodeURIComponent(`${artist} ${title} minus 1`);
     const url = `https://www.youtube.com/results?search_query=${query}`;
     await WebBrowser.openBrowserAsync(url);
+  };
+
+  const handleToggleLearn = (songId: string, currentNotes: string | null) => {
+    toggleLearn.mutate({
+      setlistId: setlist?.id,
+      songId,
+      currentNotes
+    });
   };
 
   if (loadingGig || loadingSetlist) {
@@ -117,43 +126,63 @@ export default function SetlistDetailsScreen() {
             <Text style={styles.emptySubtitle}>Tap "Add Song" or use the AI Agent to build your set.</Text>
           </View>
         ) : (
-          songs?.map((item: any, index: number) => (
-            <View key={item.id} style={styles.songRowContainer}>
-              <TouchableOpacity 
-                style={styles.songRow} 
-                activeOpacity={0.7} 
-                onPress={() => router.push({ 
-                  pathname: '/stage-mode', 
-                  params: { setlistId: setlist?.id, initialSongId: item.song.id } 
-                })}
-              >
-                 <Text style={styles.songIndex}>{String(index + 1).padStart(2, '0')}</Text>
-                 
-                 <Orb variant={getSongVariant(index)} size={40} style={styles.orb}>
-                    <Music size={16} color={getSongColor(index)} />
-                 </Orb>
+          songs?.map((item: any, index: number) => {
+            const needsLearn = item.notes?.includes('[LEARN]');
+            
+            return (
+              <View key={item.id} style={styles.songRowContainer}>
+                <TouchableOpacity 
+                  style={styles.songRow} 
+                  activeOpacity={0.7} 
+                  onPress={() => router.push({ 
+                    pathname: '/stage-mode', 
+                    params: { setlistId: setlist?.id, initialSongId: item.song.id } 
+                  })}
+                >
+                   <Text style={styles.songIndex}>{String(index + 1).padStart(2, '0')}</Text>
+                   
+                   <Orb variant={getSongVariant(index)} size={40} style={styles.orb}>
+                      <Music size={16} color={getSongColor(index)} />
+                   </Orb>
 
-                 <View style={styles.songInfo}>
-                    <Text style={styles.songTitle}>{item.song.title}</Text>
-                    <Text style={styles.songArtist}>{item.song.artist}</Text>
-                 </View>
+                   <View style={styles.songInfo}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={styles.songTitle}>{item.song.title}</Text>
+                        {needsLearn && (
+                          <View style={styles.learnBadge}>
+                             <Text style={styles.learnBadgeText}>LEARN</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.songArtist}>{item.song.artist}</Text>
+                   </View>
 
-                 <View style={styles.songMeta}>
-                    <View style={styles.keyBadge}>
-                       <Text style={styles.keyText}>{item.song.original_key || '?'}</Text>
-                    </View>
-                    <Text style={styles.durationText}>{Math.floor((item.song.duration_sec || 0) / 60)}:{(item.song.duration_sec || 0) % 60}</Text>
-                 </View>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.youtubeBtn}
-                onPress={() => handleYoutubeSearch(item.song.title, item.song.artist)}
-              >
-                <Video size={20} color="#FF0000" />
-              </TouchableOpacity>
-            </View>
-          ))
+                   <View style={styles.songMeta}>
+                      <View style={styles.keyBadge}>
+                         <Text style={styles.keyText}>{item.song.original_key || '?'}</Text>
+                      </View>
+                      <Text style={styles.durationText}>{Math.floor((item.song.duration_sec || 0) / 60)}:{(item.song.duration_sec || 0) % 60}</Text>
+                   </View>
+                </TouchableOpacity>
+                
+                <View style={styles.rowActions}>
+                  <TouchableOpacity 
+                    style={styles.actionBtn}
+                    onPress={() => handleToggleLearn(item.song.id, item.notes)}
+                  >
+                    <BookOpen size={18} color={needsLearn ? "#F59E0B" : "rgba(255,255,255,0.2)"} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={styles.youtubeBtn}
+                    onPress={() => handleYoutubeSearch(item.song.title, item.song.artist)}
+                  >
+                    <Video size={20} color="#FF0000" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          })
         )}
       </ScrollView>
     </View>
@@ -323,6 +352,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     height: '100%',
     justifyContent: 'center',
+  },
+  rowActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  actionBtn: {
+    paddingHorizontal: 10,
+    height: '100%',
+    justifyContent: 'center',
+  },
+  learnBadge: {
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  learnBadgeText: {
+    fontSize: 9,
+    color: '#F59E0B',
+    fontWeight: '700',
+    fontFamily: 'DM Sans Bold',
   },
   songIndex: {
     fontSize: 13,
