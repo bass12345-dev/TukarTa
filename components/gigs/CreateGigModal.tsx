@@ -11,6 +11,7 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Keyboard,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { X, Calendar, MapPin, Music, Clock, ChevronRight, Users } from 'lucide-react-native';
@@ -68,6 +69,12 @@ export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
     if (Platform.OS === 'android') {
       setShowPicker(false);
     }
+    
+    if (event.type === 'dismissed') {
+      setShowPicker(false);
+      return;
+    }
+
     if (selectedDate) {
       setDateObj(selectedDate);
     }
@@ -106,7 +113,11 @@ export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.form} showsVerticalScrollIndicator={false}>
+            <ScrollView 
+              style={styles.form} 
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
               
               {/* Band Selection */}
               <Text style={styles.label}>Select Band</Text>
@@ -172,8 +183,12 @@ export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
                 <View style={[styles.inputGroup, { flex: 1 }]}>
                   <Text style={styles.label}>Date & Time</Text>
                   <TouchableOpacity 
-                    style={styles.inputWrapper}
-                    onPress={() => setShowPicker(true)}
+                    style={[styles.inputWrapper, { zIndex: 100 }]}
+                    onPress={() => {
+                      console.log('Date picker triggered');
+                      Keyboard.dismiss();
+                      setShowPicker(!showPicker);
+                    }}
                     activeOpacity={0.7}
                   >
                     <Calendar size={18} color="#00D4FF" />
@@ -183,15 +198,49 @@ export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
                   </TouchableOpacity>
 
                   {showPicker && (
-                    <DateTimePicker
-                      value={dateObj}
-                      mode="datetime"
-                      is24Hour={true}
-                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                      onChange={onDateChange}
-                      textColor="#FFF"
-                      themeVariant="dark"
-                    />
+                    Platform.OS === 'web' ? (
+                      <View style={styles.pickerContainer}>
+                        <TextInput
+                          style={styles.input}
+                          type="datetime-local"
+                          value={dateObj.toISOString().slice(0, 16)}
+                          onChangeText={(val) => {
+                            if (val) setDateObj(new Date(val));
+                          }}
+                        />
+                        <TouchableOpacity 
+                          style={styles.doneBtn} 
+                          onPress={() => setShowPicker(false)}
+                        >
+                          <Text style={styles.doneBtnText}>Confirm</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : Platform.OS === 'ios' ? (
+                      <View style={styles.pickerContainer}>
+                        <DateTimePicker
+                          value={dateObj}
+                          mode="datetime"
+                          display="inline"
+                          onChange={onDateChange}
+                          textColor="#FFF"
+                          accentColor="#00D4FF"
+                          themeVariant="dark"
+                        />
+                        <TouchableOpacity 
+                          style={styles.doneBtn} 
+                          onPress={() => setShowPicker(false)}
+                        >
+                          <Text style={styles.doneBtnText}>Done</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <DateTimePicker
+                        value={dateObj}
+                        mode="datetime"
+                        display="default"
+                        onChange={onDateChange}
+                      />
+                    )
                   )}
                 </View>
                 <View style={[styles.inputGroup, { width: 100 }]}>
@@ -359,6 +408,26 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     gap: 12,
+  },
+  pickerContainer: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 24,
+    marginTop: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 212, 255, 0.2)',
+  },
+  doneBtn: {
+    backgroundColor: '#00D4FF',
+    padding: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  doneBtnText: {
+    color: '#071420',
+    fontWeight: '700',
+    fontFamily: 'DM Sans Bold',
   },
   footer: {
     flexDirection: 'row',
