@@ -19,10 +19,14 @@ import {
   ExternalLink,
   Music2,
   FileCode2,
+  Lock,
+  Radio,
+  Sparkles,
 } from 'lucide-react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useSetlistSongs } from '../utils/hooks/useMusician';
 import { useSongLyrics } from '../utils/hooks/useSongs';
+import { useBandSession } from '../context/bandSession';
 import {
   parseLineSegments,
   transposeChord,
@@ -42,6 +46,21 @@ export default function StageModeScreen() {
 
   // 1. Full setlist
   const { data: setlistSongs } = useSetlistSongs(setlistId as string);
+
+  // Band Session Integration
+  const {
+    sessionCode,
+    isLeader,
+    connected,
+    currentSong: syncCurrentSong,
+    nextSong: syncNextSong,
+    members,
+    broadcastSong,
+    broadcastPlayback,
+    broadcastCountIn,
+    countInNumber,
+    activeCue,
+  } = useBandSession();
 
   // 2. Navigation index & play state
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -70,6 +89,9 @@ export default function StageModeScreen() {
     ? [directSongObj]
     : setlistSongs || [];
 
+  // Determine effective song: if member in active session, follow leader's broadcast
+  const isMemberFollowing = !isLeader && !!sessionCode && !!syncCurrentSong;
+
   // Initialize index when setlist loads
   React.useEffect(() => {
     if (setlistSongs && initialSongId) {
@@ -81,26 +103,64 @@ export default function StageModeScreen() {
   // Reset transpose when switching songs
   React.useEffect(() => {
     setTransposeSteps(0);
-  }, [currentIndex]);
+  }, [currentIndex, syncCurrentSong?.songId]);
 
   const currentSetlistSong = songsList[currentIndex];
   const nextSetlistSong = songsList[currentIndex + 1];
 
   // 3. Lyrics & Chords Hook (Offline Local Cache -> Supabase Cache -> LRCLIB)
+  const songQueryId = isMemberFollowing ? syncCurrentSong.songId : currentSetlistSong?.song?.id;
+  const songQueryArtist = isMemberFollowing ? syncCurrentSong.artist : currentSetlistSong?.song?.artist;
+  const songQueryTitle = isMemberFollowing ? syncCurrentSong.title : currentSetlistSong?.song?.title;
+
   const { data: lyricsData, isLoading: isLoadingLyrics } = useSongLyrics(
-    currentSetlistSong?.song?.id,
-    currentSetlistSong?.song?.artist,
-    currentSetlistSong?.song?.title
+    songQueryId,
+    songQueryArtist,
+    songQueryTitle
   );
 
-  const hasLyrics = !!lyricsData?.plain_lyrics;
-  const baseKey = currentSetlistSong?.song?.original_key || 'G';
+  const rawLyrics = (isMemberFollowing && syncCurrentSong.plain_lyrics)
+    ? syncCurrentSong.plain_lyrics
+    : lyricsData?.plain_lyrics || '';
+
+  const hasLyrics = !!rawLyrics;
+  const baseKey = isMemberFollowing
+    ? syncCurrentSong.key || 'G'
+    : currentSetlistSong?.song?.original_key || 'G';
+
   const activeKey = transposeChord(baseKey, transposeSteps);
 
   const displayedLyrics = useMemo(() => {
-    if (!lyricsData?.plain_lyrics) return '';
-    return transposeChordProText(lyricsData.plain_lyrics, transposeSteps);
-  }, [lyricsData?.plain_lyrics, transposeSteps]);
+    if (!rawLyrics) return '';
+    return transposeChordProText(rawLyrics, transposeSteps);
+  }, [rawLyrics, transposeSteps]);
+
+  // Leader: Broadcast song change & key updates
+  React.useEffect(() => {
+    if (isLeader && currentSetlistSong) {
+      broadcastSong(
+        {
+          songId: currentSetlistSong.song?.id || currentSetlistSong.id,
+          title: currentSetlistSong.song?.title || 'Untitled Song',
+          artist: currentSetlistSong.song?.artist || 'Unknown Artist',
+          key: activeKey,
+          originalKey: baseKey,
+          transposeSteps,
+          plain_lyrics: lyricsData?.plain_lyrics,
+          provider: lyricsData?.provider,
+          index: currentIndex,
+          totalSongs: songsList.length,
+        },
+        nextSetlistSong
+          ? {
+              title: nextSetlistSong.song?.title || '',
+              artist: nextSetlistSong.song?.artist || '',
+              key: nextSetlistSong.song?.original_key || 'C',
+            }
+          : undefined
+      );
+    }
+  }, [currentIndex, activeKey, lyricsData?.plain_lyrics, isLeader]);
 
   // 4. Web Search
   const handleWebSearch = async (baseUrl: string) => {
@@ -128,16 +188,59 @@ export default function StageModeScreen() {
     });
   };
 
+  const displayedTitle = isMemberFollowing
+    ? syncCurrentSong.title
+    : currentSetlistSong?.song?.title || 'Select a Song';
+
+  const displayedArtist = isMemberFollowing
+    ? syncCurrentSong.artist
+    : currentSetlistSong?.song?.artist || '';
+
+  const displayedNextTitle = isMemberFollowing
+    ? syncNextSong?.title || ''
+    : nextSetlistSong?.song?.title || '';
+
+  const displayedNextKey = isMemberFollowing
+    ? syncNextSong?.key || ''
+    : nextSetlistSong?.song?.original_key || '';
+
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false, orientation: 'portrait' }} />
 
+      {/* ── Count In Banner Notification if triggered ── */}
+      {countInNumber !== null && (
+        <View style={styles.countInOverlay}>
+          <Text style={styles.countInText}>{countInNumber}</Text>
+          <Text style={styles.countInSub}>COUNT IN</Text>
+        </View>
+      )}
+
+      {/* ── Active Cue Toast ── */}
+      {activeCue && (
+        <View style={styles.cueToast}>
+          <Sparkles size={14} color="#10B981" />
+          <Text style={styles.cueToastText}>{activeCue}</Text>
+        </View>
+      )}
+
       {/* ── Top Status Bar ── */}
       <View style={styles.topStatusBar}>
         <View style={styles.syncStatusGroup}>
-          <View style={styles.pulseDot} />
+          <View
+            style={[
+              styles.pulseDot,
+              sessionCode
+                ? { backgroundColor: isLeader ? '#EF4444' : '#10B981' }
+                : null,
+            ]}
+          />
           <Text style={styles.syncStatusText}>
-            OFFLINE STAGE MODE • {lyricsData?.provider === 'user_import' ? 'CHORDPRO CHART' : 'LRCLIB SYNC'}
+            {sessionCode
+              ? isLeader
+                ? `BROADCASTING (${members.length}) • ${sessionCode}`
+                : `IN SYNC WITH LEADER • ${sessionCode}`
+              : `OFFLINE STAGE MODE • ${lyricsData?.provider === 'user_import' ? 'CHORDPRO' : 'LRCLIB SYNC'}`}
           </Text>
         </View>
 
@@ -162,10 +265,10 @@ export default function StageModeScreen() {
         <View style={styles.songInfoMain}>
           <View style={{ flex: 1 }}>
             <Text style={styles.songTitle} numberOfLines={1}>
-              {currentSetlistSong?.song?.title || 'Wonderwall'}
+              {displayedTitle}
             </Text>
             <Text style={styles.songArtist}>
-              {currentSetlistSong?.song?.artist || 'Oasis'}
+              {displayedArtist}
             </Text>
           </View>
 
@@ -193,9 +296,13 @@ export default function StageModeScreen() {
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.nextSongLabel} numberOfLines={1}>
-              NEXT: {nextSetlistSong?.song?.title || "Sweet Child O' Mine"}
-            </Text>
+            {displayedNextTitle ? (
+              <View style={styles.nextSongBadgeRow}>
+                <Text style={styles.nextSongLabel} numberOfLines={1}>
+                  NEXT: {displayedNextTitle} {displayedNextKey ? `(${displayedNextKey})` : ''}
+                </Text>
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -341,35 +448,52 @@ export default function StageModeScreen() {
       {/* ── Footer Controls ── */}
       <View style={styles.footerControls}>
         <View style={styles.transportRow}>
-          <TouchableOpacity
-            style={[styles.transportBtnSide, currentIndex === 0 && { opacity: 0.4 }]}
-            activeOpacity={0.8}
-            disabled={currentIndex === 0}
-            onPress={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
-          >
-            <SkipBack size={22} color="#166534" fill="#166534" />
-          </TouchableOpacity>
+          {isMemberFollowing ? (
+            /* Follower view: locked to leader */
+            <View style={styles.syncedMemberBox}>
+              <Lock size={16} color="#10B981" />
+              <Text style={styles.syncedMemberText}>
+                TELEPROMPTER CONTROLLED BY LEADER
+              </Text>
+            </View>
+          ) : (
+            /* Leader / Solo view */
+            <>
+              <TouchableOpacity
+                style={[styles.transportBtnSide, currentIndex === 0 && { opacity: 0.4 }]}
+                activeOpacity={0.8}
+                disabled={currentIndex === 0}
+                onPress={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
+              >
+                <SkipBack size={22} color="#166534" fill="#166534" />
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.transportBtnMain}
-            activeOpacity={0.88}
-            onPress={() => setIsPlaying(!isPlaying)}
-          >
-            {isPlaying ? (
-              <Pause size={36} color="#FFFFFF" fill="#FFFFFF" />
-            ) : (
-              <Play size={36} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 4 }} />
-            )}
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.transportBtnMain}
+                activeOpacity={0.88}
+                onPress={() => {
+                  const nextState = !isPlaying;
+                  setIsPlaying(nextState);
+                  if (isLeader) broadcastPlayback(nextState);
+                }}
+              >
+                {isPlaying ? (
+                  <Pause size={36} color="#FFFFFF" fill="#FFFFFF" />
+                ) : (
+                  <Play size={36} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 4 }} />
+                )}
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.transportBtnSide, currentIndex >= songsList.length - 1 && { opacity: 0.4 }]}
-            activeOpacity={0.8}
-            disabled={currentIndex >= songsList.length - 1}
-            onPress={() => setCurrentIndex((prev) => Math.min(songsList.length - 1, prev + 1))}
-          >
-            <SkipForward size={22} color="#166534" fill="#166534" />
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.transportBtnSide, currentIndex >= songsList.length - 1 && { opacity: 0.4 }]}
+                activeOpacity={0.8}
+                disabled={currentIndex >= songsList.length - 1}
+                onPress={() => setCurrentIndex((prev) => Math.min(songsList.length - 1, prev + 1))}
+              >
+                <SkipForward size={22} color="#166534" fill="#166534" />
+              </TouchableOpacity>
+            </>
+          )}
         </View>
 
         <View style={styles.subActionsRow}>
@@ -385,6 +509,19 @@ export default function StageModeScreen() {
             <Text style={styles.subActionText}>RESET</Text>
           </TouchableOpacity>
 
+          {isLeader && (
+            <TouchableOpacity
+              style={[styles.subActionBtn, { borderColor: '#10B981' }]}
+              activeOpacity={0.7}
+              onPress={() => broadcastCountIn(120)}
+            >
+              <Sparkles size={14} color="#10B981" />
+              <Text style={[styles.subActionText, { color: '#10B981', fontWeight: '800' }]}>
+                COUNT IN
+              </Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={styles.subActionBtn}
             activeOpacity={0.7}
@@ -399,10 +536,10 @@ export default function StageModeScreen() {
           <TouchableOpacity
             style={styles.subActionBtn}
             activeOpacity={0.7}
-            onPress={() => router.push('/(tabs)/index')}
+            onPress={() => router.push('/(tabs)/bands')}
           >
-            <ListMusic size={14} color="#10B981" />
-            <Text style={styles.subActionText}>SETLIST</Text>
+            <Radio size={14} color="#10B981" />
+            <Text style={styles.subActionText}>BAND ROOM</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -826,5 +963,104 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#10B981',
     letterSpacing: 0.8,
+  },
+  cueToast: {
+    position: 'absolute',
+    top: 50,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#064E3B',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    zIndex: 9999,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  cueToastText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+  },
+  countInOverlay: {
+    position: 'absolute',
+    top: 90,
+    left: '50%',
+    transform: [{ translateX: -70 }],
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: '#10B981',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 99999,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.6,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  countInText: {
+    fontSize: 54,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    fontFamily: 'DM Sans',
+  },
+  countInSub: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: 1.5,
+    fontFamily: 'DM Sans',
+  },
+  syncedMemberBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: '#10B981',
+    width: '100%',
+  },
+  syncedMemberText: {
+    color: '#065F46',
+    fontSize: 12,
+    fontWeight: '900',
+    fontFamily: 'DM Sans',
+    letterSpacing: 0.5,
+  },
+  nextSongBadgeRow: {
+    marginTop: 2,
+  },
+  emptyStageView: {
+    paddingVertical: 60,
+    paddingHorizontal: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  emptyStageTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+    color: '#064E3B',
+    textAlign: 'center',
+  },
+  emptyStageSubtitle: {
+    fontSize: 13,
+    fontFamily: 'DM Sans',
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });

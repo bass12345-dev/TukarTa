@@ -2,16 +2,18 @@ import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { ArrowLeft, MoreVertical, Music, Sparkles, Play, Plus, Video, BookOpen } from 'lucide-react-native';
+import { ArrowLeft, MoreVertical, Music, Sparkles, Play, Plus, Video, BookOpen, Radio } from 'lucide-react-native';
 import { Orb } from '@/components/ui/Orb';
 import { useGigDetails, useGigSetlists, useSetlistSongs, useToggleLearnStatus, useCreateSetlist } from '@/utils/hooks/useMusician';
 import { SongPickerModal } from '@/components/setlists/SongPickerModal';
 import { useAppTheme } from '@/context/theme';
+import { useBandSession } from '@/context/bandSession';
 
 export default function SetlistDetailsScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const { colors, isDark } = useAppTheme();
+  const { startSession } = useBandSession();
   const [showPicker, setShowPicker] = React.useState(false);
   const [activeSetlistIdx, setActiveSetlistIdx] = React.useState(0);
 
@@ -155,6 +157,21 @@ export default function SetlistDetailsScreen() {
         >
           <Plus size={18} color="#10B981" style={{ marginRight: 8 }} />
           <Text style={[styles.btnText, { color: colors.text }]}>Add Song</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.addManualBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]} 
+          activeOpacity={0.8} 
+          onPress={async () => {
+            await startSession({
+              gigName: gig?.name || 'Live Gig Session',
+              setlistId: currentSetlist?.id,
+            });
+            router.push('/bands');
+          }}
+        >
+          <Radio size={18} color="#10B981" style={{ marginRight: 8 }} />
+          <Text style={[styles.btnText, { color: colors.text }]}>Live Sync</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
@@ -396,7 +413,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   btnText: {
-    fontSize: 14,
+    fontSize: 12.5,
     fontWeight: '700',
     fontFamily: 'DM Sans',
   },

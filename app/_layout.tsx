@@ -23,6 +23,7 @@ import {
 } from '@expo-google-fonts/jetbrains-mono';
 import { AuthProvider, useAuth } from '../context/auth';
 import { AppThemeProvider, useAppTheme } from '../context/theme';
+import { BandSessionProvider } from '../context/bandSession';
 import { useRouter, useSegments } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -83,7 +84,9 @@ export default function RootLayout() {
     <QueryClientProvider client={queryClient}>
       <AppThemeProvider>
         <AuthProvider>
-          <RootLayoutNav />
+          <BandSessionProvider>
+            <RootLayoutNav />
+          </BandSessionProvider>
         </AuthProvider>
       </AppThemeProvider>
     </QueryClientProvider>

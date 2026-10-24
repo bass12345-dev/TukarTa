@@ -19,90 +19,185 @@ import {
   Plus,
   Users,
   Music,
+  Radio,
+  Play,
+  LogOut,
+  Sparkles,
+  Guitar,
+  Drum,
+  Mic,
+  Piano,
+  CheckCircle2,
   Share2,
 } from 'lucide-react-native';
 import { CreateBandModal } from '../../components/bands/CreateBandModal';
+import { JoinSessionModal } from '../../components/bands/JoinSessionModal';
+import { CreateSessionModal } from '../../components/bands/CreateSessionModal';
+import { QRCodeView } from '../../components/bands/QRCodeView';
 import { useAuth } from '../../context/auth';
 import { useMyBands } from '../../utils/hooks/useMusician';
 import { useAppTheme } from '../../context/theme';
+import { useBandSession, MemberRole } from '../../context/bandSession';
+
+const ROLE_ICONS: Record<MemberRole, any> = {
+  leader: Crown,
+  vocals: Mic,
+  guitar: Guitar,
+  bass: Guitar,
+  drums: Drum,
+  keys: Piano,
+  horns: Music,
+  other: Music,
+};
 
 export default function BandSessionScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { colors, isDark } = useAppTheme();
   const [activeTab, setActiveTab] = useState<'sync' | 'bands'>('sync');
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showCreateBandModal, setShowCreateBandModal] = useState(false);
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [showHostModal, setShowHostModal] = useState(false);
 
-  const { data: bands, isLoading } = useMyBands();
+  const { data: bands, isLoading: loadingBands } = useMyBands();
+
+  // Band Session Context
+  const {
+    sessionCode,
+    gigName,
+    isLeader,
+    connected,
+    members,
+    currentSong,
+    countInNumber,
+    broadcastCountIn,
+    muteOthers,
+    resyncAll,
+    leaveSession,
+  } = useBandSession();
 
   const handleMuteOthers = () => {
-    if (Platform.OS === 'web') {
-      window.alert('Muted audio output on all connected member devices.');
-    } else {
-      Alert.alert('Session Control', 'Muted audio output on all connected member devices.');
-    }
+    muteOthers();
+    const msg = 'Muted audio output on all connected member devices.';
+    if (Platform.OS === 'web') window.alert(msg);
+    else Alert.alert('Session Control', msg);
   };
 
   const handleResync = () => {
+    resyncAll();
+    const msg = 'Re-synchronized current song chords and teleprompter across all devices.';
+    if (Platform.OS === 'web') window.alert(msg);
+    else Alert.alert('Session Control', msg);
+  };
+
+  const handleCountIn = () => {
+    broadcastCountIn(120);
+  };
+
+  const handleLeaveSession = async () => {
     if (Platform.OS === 'web') {
-      window.alert('Re-synchronized teleprompter scroll and metronome across all devices.');
+      if (window.confirm('Are you sure you want to exit this live session?')) {
+        await leaveSession();
+      }
     } else {
-      Alert.alert('Session Control', 'Re-synchronized teleprompter scroll and metronome across all devices.');
+      Alert.alert('Exit Session', 'Are you sure you want to end or leave this live session?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Leave', style: 'destructive', onPress: leaveSession },
+      ]);
     }
   };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
-      <CreateBandModal 
-        visible={showCreateModal} 
-        onClose={() => setShowCreateModal(false)} 
-      />
       <Stack.Screen options={{ headerShown: false }} />
+
+      {/* Modals */}
+      <CreateBandModal
+        visible={showCreateBandModal}
+        onClose={() => setShowCreateBandModal(false)}
+      />
+      <JoinSessionModal
+        visible={showJoinModal}
+        onClose={() => setShowJoinModal(false)}
+        defaultCode={sessionCode || ''}
+      />
+      <CreateSessionModal
+        visible={showHostModal}
+        onClose={() => setShowHostModal(false)}
+      />
+
+      {/* ── Count In Banner Notification if triggered ── */}
+      {countInNumber !== null && (
+        <View style={styles.countInOverlay}>
+          <Text style={styles.countInText}>{countInNumber}</Text>
+          <Text style={styles.countInSub}>COUNT IN</Text>
+        </View>
+      )}
 
       {/* ── Header ── */}
       <View style={[styles.header, { backgroundColor: colors.bg, borderBottomColor: colors.border }]}>
         <View style={styles.headerTitleRow}>
           <Text style={[styles.title, { color: colors.text }]}>Band Session</Text>
-          <TouchableOpacity 
-            style={[styles.createBtn, { backgroundColor: colors.primary }]} 
-            activeOpacity={0.8}
-            onPress={() => setShowCreateModal(true)}
-          >
-            <Plus size={16} color="#FFFFFF" strokeWidth={2.5} />
-            <Text style={styles.createBtnText}>New Band</Text>
-          </TouchableOpacity>
+          {activeTab === 'bands' ? (
+            <TouchableOpacity
+              style={[styles.createBtn, { backgroundColor: colors.primary }]}
+              activeOpacity={0.8}
+              onPress={() => setShowCreateBandModal(true)}
+            >
+              <Plus size={16} color="#FFFFFF" strokeWidth={2.5} />
+              <Text style={styles.createBtnText}>New Band</Text>
+            </TouchableOpacity>
+          ) : sessionCode ? (
+            <TouchableOpacity
+              style={[styles.exitSessionBtn, { borderColor: '#EF4444' }]}
+              activeOpacity={0.8}
+              onPress={handleLeaveSession}
+            >
+              <LogOut size={14} color="#EF4444" />
+              <Text style={styles.exitSessionText}>{isLeader ? 'End Room' : 'Leave'}</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
-        <Text style={[styles.subtitle, { color: colors.textDim }]}>Sync lyrics and audio across all devices</Text>
+        <Text style={[styles.subtitle, { color: colors.textDim }]}>
+          Live teleprompter, chords, & setlists across all devices
+        </Text>
 
-        {/* Tab switch */}
+        {/* Tab Switch */}
         <View style={[styles.tabSwitch, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}>
           <TouchableOpacity
             style={[
-              styles.switchBtn, 
-              activeTab === 'sync' && [styles.switchBtnActive, { backgroundColor: colors.bgCard }]
+              styles.switchBtn,
+              activeTab === 'sync' && [styles.switchBtnActive, { backgroundColor: colors.bgCard }],
             ]}
             onPress={() => setActiveTab('sync')}
           >
-            <Text style={[
-              styles.switchText, 
-              { color: activeTab === 'sync' ? (isDark ? colors.accent : colors.primaryDark) : colors.textDim },
-              activeTab === 'sync' && styles.switchTextActive
-            ]}>
-              LIVE SYNC
-            </Text>
+            <View style={styles.tabContentRow}>
+              {sessionCode && <View style={styles.tabPulseDot} />}
+              <Text
+                style={[
+                  styles.switchText,
+                  { color: activeTab === 'sync' ? (isDark ? colors.accent : colors.primaryDark) : colors.textDim },
+                  activeTab === 'sync' && styles.switchTextActive,
+                ]}
+              >
+                LIVE SYNC {sessionCode ? '(ON)' : ''}
+              </Text>
+            </View>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
-              styles.switchBtn, 
-              activeTab === 'bands' && [styles.switchBtnActive, { backgroundColor: colors.bgCard }]
+              styles.switchBtn,
+              activeTab === 'bands' && [styles.switchBtnActive, { backgroundColor: colors.bgCard }],
             ]}
             onPress={() => setActiveTab('bands')}
           >
-            <Text style={[
-              styles.switchText, 
-              { color: activeTab === 'bands' ? (isDark ? colors.accent : colors.primaryDark) : colors.textDim },
-              activeTab === 'bands' && styles.switchTextActive
-            ]}>
+            <Text
+              style={[
+                styles.switchText,
+                { color: activeTab === 'bands' ? (isDark ? colors.accent : colors.primaryDark) : colors.textDim },
+                activeTab === 'bands' && styles.switchTextActive,
+              ]}
+            >
               MY BANDS ({bands?.length || 0})
             </Text>
           </TouchableOpacity>
@@ -116,114 +211,263 @@ export default function BandSessionScreen() {
       >
         {activeTab === 'sync' ? (
           <>
-            {/* ── Pairing Card ── */}
-            <View style={[styles.pairingCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-              <Text style={[styles.pairingTitle, { color: colors.primary }]}>PAIRING CODE</Text>
-
-              {/* QR Container */}
-              <View style={[styles.qrOuter, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}>
-                <View style={[styles.qrInner, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-                  <QrCode size={52} color={colors.primary} strokeWidth={1.8} />
-                </View>
-              </View>
-
-              {/* 4-Letter Code Blocks */}
-              <View style={styles.codeRow}>
-                {['T', 'U', 'K', 'A'].map((char, index) => (
-                  <View key={index} style={[styles.codeBox, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}>
-                    <Text style={[styles.codeChar, { color: colors.text }]}>{char}</Text>
+            {/* ── Scenario 1: NO SESSION ACTIVE YET ── */}
+            {!sessionCode ? (
+              <View style={styles.launcherSection}>
+                {/* Host Card */}
+                <TouchableOpacity
+                  style={[
+                    styles.launcherCard,
+                    {
+                      backgroundColor: colors.bgCard,
+                      borderColor: '#10B981',
+                    },
+                  ]}
+                  activeOpacity={0.88}
+                  onPress={() => setShowHostModal(true)}
+                >
+                  <View style={[styles.launcherIconCircle, { backgroundColor: isDark ? '#064E3B' : '#ECFDF5' }]}>
+                    <Crown size={28} color="#10B981" />
                   </View>
-                ))}
-              </View>
-
-              <Text style={[styles.pairingHint, { color: colors.textDim }]}>
-                Scan QR or enter code to join as a band member
-              </Text>
-            </View>
-
-            {/* ── Connected Devices Section ── */}
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>CONNECTED DEVICES (3)</Text>
-              <View style={styles.statusIndicator}>
-                <View style={styles.pulseDot} />
-                <Text style={styles.statusText}>LEADER ACTIVE</Text>
-              </View>
-            </View>
-
-            <View style={styles.devicesList}>
-              {/* Leader Device */}
-              <View style={[styles.leaderCard, { backgroundColor: isDark ? '#064E3B' : '#166534' }]}>
-                <View style={styles.leaderIconBox}>
-                  <Crown size={20} color="#FFFFFF" />
-                </View>
-                <View style={styles.deviceInfo}>
-                  <Text style={styles.leaderName}>iPhone 15 Pro (You)</Text>
-                  <Text style={styles.leaderMeta}>Session Leader • Latency: 0ms</Text>
-                </View>
-                <View style={styles.broadcastingBadge}>
-                  <Text style={styles.broadcastingText}>BROADCASTING</Text>
-                </View>
-              </View>
-
-              {/* Member 1: iPad Air */}
-              <View style={[styles.memberCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-                <View style={[styles.memberIconBox, { backgroundColor: colors.bgSecondary }]}>
-                  <Tablet size={18} color={colors.primary} />
-                </View>
-                <View style={styles.deviceInfo}>
-                  <Text style={[styles.memberName, { color: colors.text }]}>iPad Air</Text>
-                  <Text style={[styles.memberMeta, { color: colors.textDim }]}>Member • Latency: 12ms</Text>
-                </View>
-                <View style={styles.memberStatusRow}>
-                  <Text style={styles.syncText}>IN SYNC</Text>
-                  <View style={styles.syncDotGreen} />
-                </View>
-              </View>
-
-              {/* Member 2: Pixel 8 */}
-              <View style={[styles.memberCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-                <View style={[styles.memberIconBox, { backgroundColor: colors.bgSecondary }]}>
-                  <Smartphone size={18} color={colors.primary} />
-                </View>
-                <View style={styles.deviceInfo}>
-                  <Text style={[styles.memberName, { color: colors.text }]}>Pixel 8</Text>
-                  <Text style={[styles.memberMeta, { color: colors.textDim }]}>Member • Latency: 45ms</Text>
-                </View>
-                <View style={styles.memberStatusRow}>
-                  <Text style={styles.lagText}>LAGGING</Text>
-                  <View style={styles.syncDotAmber} />
-                </View>
-              </View>
-            </View>
-
-            {/* ── Session Control ── */}
-            <View style={styles.controlSection}>
-              <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>SESSION CONTROL</Text>
-              <View style={styles.controlGrid}>
-                <TouchableOpacity 
-                  style={[styles.controlCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
-                  activeOpacity={0.8}
-                  onPress={handleMuteOthers}
-                >
-                  <VolumeX size={20} color={colors.primary} style={{ marginBottom: 6 }} />
-                  <Text style={[styles.controlText, { color: colors.text }]}>MUTE OTHERS</Text>
+                  <View style={styles.launcherInfo}>
+                    <View style={styles.launcherHeaderRow}>
+                      <Text style={[styles.launcherTitle, { color: colors.text }]}>Host Live Session</Text>
+                      <View style={styles.leaderBadge}>
+                        <Text style={styles.leaderBadgeText}>BAND LEADER</Text>
+                      </View>
+                    </View>
+                    <Text style={[styles.launcherDesc, { color: colors.textSecondary }]}>
+                      Generate a QR code & room PIN. Connected band devices will automatically follow your setlist, chords, and teleprompter in real time!
+                    </Text>
+                    <View style={styles.launcherCta}>
+                      <Text style={styles.launcherCtaText}>Start Live Session →</Text>
+                    </View>
+                  </View>
                 </TouchableOpacity>
 
-                <TouchableOpacity 
-                  style={[styles.controlCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
-                  activeOpacity={0.8}
-                  onPress={handleResync}
+                {/* Join Card */}
+                <TouchableOpacity
+                  style={[
+                    styles.launcherCard,
+                    {
+                      backgroundColor: colors.bgCard,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                  activeOpacity={0.88}
+                  onPress={() => setShowJoinModal(true)}
                 >
-                  <RotateCw size={20} color={colors.primary} style={{ marginBottom: 6 }} />
-                  <Text style={[styles.controlText, { color: colors.text }]}>RE-SYNC ALL</Text>
+                  <View style={[styles.launcherIconCircle, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]}>
+                    <Radio size={28} color={isDark ? '#818CF8' : '#6366F1'} />
+                  </View>
+                  <View style={styles.launcherInfo}>
+                    <View style={styles.launcherHeaderRow}>
+                      <Text style={[styles.launcherTitle, { color: colors.text }]}>Join Band Session</Text>
+                      <View style={[styles.leaderBadge, { backgroundColor: isDark ? '#312E81' : '#EEF2FF' }]}>
+                        <Text style={[styles.leaderBadgeText, { color: '#6366F1' }]}>BAND MEMBER</Text>
+                      </View>
+                    </View>
+                    <Text style={[styles.launcherDesc, { color: colors.textSecondary }]}>
+                      Scan your leader's QR code or enter the room PIN to turn your phone into a synchronized stage teleprompter and chord sheet!
+                    </Text>
+                    <View style={styles.launcherCta}>
+                      <Text style={[styles.launcherCtaText, { color: '#6366F1' }]}>Enter Code / Join →</Text>
+                    </View>
+                  </View>
                 </TouchableOpacity>
               </View>
-            </View>
+            ) : (
+              /* ── Scenario 2: SESSION IS RUNNING ── */
+              <>
+                {/* Active Session Banner with Stage Mode Quick Launch */}
+                <View
+                  style={[
+                    styles.activeBannerCard,
+                    {
+                      backgroundColor: isDark ? '#064E3B' : '#ECFDF5',
+                      borderColor: '#10B981',
+                    },
+                  ]}
+                >
+                  <View style={styles.activeBannerLeft}>
+                    <View style={styles.activePulseWrap}>
+                      <View style={styles.pulseDot} />
+                      <Text style={styles.activeRoomBadge}>
+                        {isLeader ? 'BROADCASTING ROOM' : 'SYNCHRONIZED WITH LEADER'}
+                      </Text>
+                    </View>
+                    <Text style={[styles.activeGigName, { color: colors.text }]}>
+                      {gigName || 'Live Performance Session'}
+                    </Text>
+                    {currentSong ? (
+                      <Text style={[styles.activeSongText, { color: colors.textSecondary }]}>
+                        Now Playing: <Text style={{ fontWeight: '800', color: colors.primary }}>{currentSong.title}</Text> ({currentSong.key})
+                      </Text>
+                    ) : (
+                      <Text style={[styles.activeSongText, { color: colors.textDim }]}>
+                        Waiting for song selection...
+                      </Text>
+                    )}
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.openStageBtn}
+                    activeOpacity={0.85}
+                    onPress={() => router.push('/stage-mode')}
+                  >
+                    <Play size={16} color="#FFFFFF" fill="#FFFFFF" />
+                    <Text style={styles.openStageText}>STAGE MODE</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* ── Pairing Code & QR Card (Leader or Sharing) ── */}
+                <View style={[styles.pairingCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+                  <Text style={[styles.pairingTitle, { color: colors.primary }]}>ROOM PAIRING CODE</Text>
+
+                  {/* Real Vector QR Code */}
+                  <View style={[styles.qrOuter, { backgroundColor: '#FFFFFF', borderColor: colors.border }]}>
+                    <QRCodeView value={sessionCode} size={140} color="#10B981" />
+                  </View>
+
+                  {/* Display Code Blocks */}
+                  <View style={styles.codeRow}>
+                    {sessionCode.split('').map((char, index) => (
+                      <View
+                        key={index}
+                        style={[
+                          styles.codeBox,
+                          {
+                            backgroundColor: colors.bgSecondary,
+                            borderColor: char === '-' ? 'transparent' : colors.border,
+                            width: char === '-' ? 20 : 44,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.codeChar, { color: colors.text }]}>{char}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  <Text style={[styles.pairingHint, { color: colors.textDim }]}>
+                    Bandmates scan this QR or enter code <Text style={{ fontWeight: '800', color: colors.primary }}>{sessionCode}</Text> to join
+                  </Text>
+                </View>
+
+                {/* ── Connected Devices Section (Realtime Presence) ── */}
+                <View style={styles.sectionHeader}>
+                  <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
+                    CONNECTED DEVICES ({members.length})
+                  </Text>
+                  <View style={styles.statusIndicator}>
+                    <View style={styles.pulseDot} />
+                    <Text style={styles.statusText}>
+                      {isLeader ? 'LEADER BROADCASTING' : 'MEMBER IN SYNC'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.devicesList}>
+                  {members.map((member) => {
+                    const RoleIcon = ROLE_ICONS[member.role] || Music;
+                    const isMe = member.isLeader ? isLeader : !isLeader;
+                    return (
+                      <View
+                        key={member.id}
+                        style={[
+                          member.isLeader
+                            ? [styles.leaderCard, { backgroundColor: isDark ? '#064E3B' : '#166534' }]
+                            : [styles.memberCard, { backgroundColor: colors.bgCard, borderColor: colors.border }],
+                        ]}
+                      >
+                        <View
+                          style={[
+                            member.isLeader
+                              ? styles.leaderIconBox
+                              : [styles.memberIconBox, { backgroundColor: colors.bgSecondary }],
+                          ]}
+                        >
+                          <RoleIcon
+                            size={18}
+                            color={member.isLeader ? '#FFFFFF' : colors.primary}
+                          />
+                        </View>
+                        <View style={styles.deviceInfo}>
+                          <Text
+                            style={[
+                              member.isLeader ? styles.leaderName : [styles.memberName, { color: colors.text }],
+                            ]}
+                          >
+                            {member.name} {isMe ? '(You)' : ''}
+                          </Text>
+                          <Text
+                            style={[
+                              member.isLeader ? styles.leaderMeta : [styles.memberMeta, { color: colors.textDim }],
+                            ]}
+                          >
+                            {member.role.toUpperCase()} • {member.isLeader ? 'Authoritative Leader' : 'Teleprompter Follower'}
+                          </Text>
+                        </View>
+                        <View style={styles.memberStatusRow}>
+                          <Text style={member.isLeader ? styles.broadcastingText : styles.syncText}>
+                            {member.isLeader ? 'BROADCASTING' : 'IN SYNC'}
+                          </Text>
+                          <View style={styles.syncDotGreen} />
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+
+                {/* ── Session Controls (Leader Only) ── */}
+                {isLeader && (
+                  <View style={styles.controlSection}>
+                    <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>STAGE CONTROLS</Text>
+                    <View style={styles.controlGrid}>
+                      <TouchableOpacity
+                        style={[styles.controlCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+                        activeOpacity={0.8}
+                        onPress={handleCountIn}
+                      >
+                        <Sparkles size={20} color={colors.primary} style={{ marginBottom: 6 }} />
+                        <Text style={[styles.controlText, { color: colors.text }]}>COUNT-IN (4 BEATS)</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.controlCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+                        activeOpacity={0.8}
+                        onPress={handleResync}
+                      >
+                        <RotateCw size={20} color={colors.primary} style={{ marginBottom: 6 }} />
+                        <Text style={[styles.controlText, { color: colors.text }]}>RE-SYNC CHORDS</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.controlCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+                        activeOpacity={0.8}
+                        onPress={handleMuteOthers}
+                      >
+                        <VolumeX size={20} color={colors.primary} style={{ marginBottom: 6 }} />
+                        <Text style={[styles.controlText, { color: colors.text }]}>MUTE OTHERS</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.controlCard, { backgroundColor: colors.bgCard, borderColor: '#EF4444' }]}
+                        activeOpacity={0.8}
+                        onPress={handleLeaveSession}
+                      >
+                        <LogOut size={20} color="#EF4444" style={{ marginBottom: 6 }} />
+                        <Text style={[styles.controlText, { color: '#EF4444' }]}>END SESSION</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </>
+            )}
           </>
         ) : (
-          /* ── My Bands List ── */
+          /* ── Tab 2: My Bands List ── */
           <View style={styles.bandsContainer}>
-            {isLoading ? (
+            {loadingBands ? (
               <Text style={[styles.emptyText, { color: colors.textDim }]}>Loading bands...</Text>
             ) : bands && bands.length > 0 ? (
               bands.map((item: any) => {
@@ -264,8 +508,10 @@ export default function BandSessionScreen() {
             ) : (
               <View style={[styles.emptyCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
                 <Users size={36} color={colors.primary} />
-                <Text style={[styles.emptyTitle, { color: colors.text }]}>No bands joined yet</Text>
-                <Text style={[styles.emptySubtitle, { color: colors.textDim }]}>Create a band or enter a pairing code above.</Text>
+                <Text style={[styles.emptyTitle, { color: colors.text }]}>No bands created yet</Text>
+                <Text style={[styles.emptySubtitle, { color: colors.textDim }]}>
+                  Tap "New Band" above to create your band and assemble your lineup.
+                </Text>
               </View>
             )}
           </View>
@@ -317,6 +563,21 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: 'DM Sans',
   },
+  exitSessionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  exitSessionText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#EF4444',
+    fontFamily: 'DM Sans',
+  },
   tabSwitch: {
     flexDirection: 'row',
     borderRadius: 12,
@@ -336,6 +597,17 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  tabContentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  tabPulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
   switchText: {
     fontSize: 11,
     fontWeight: '700',
@@ -353,12 +625,133 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     paddingBottom: 90,
   },
+  launcherSection: {
+    gap: 14,
+  },
+  launcherCard: {
+    borderWidth: 1.5,
+    borderRadius: 22,
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  launcherIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  launcherInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  launcherHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  launcherTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+    letterSpacing: -0.2,
+  },
+  leaderBadge: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  leaderBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#10B981',
+    fontFamily: 'DM Sans',
+  },
+  launcherDesc: {
+    fontSize: 12,
+    fontFamily: 'DM Sans',
+    lineHeight: 16,
+  },
+  launcherCta: {
+    marginTop: 4,
+  },
+  launcherCtaText: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#10B981',
+    fontFamily: 'DM Sans',
+  },
+  activeBannerCard: {
+    borderWidth: 1.5,
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  activeBannerLeft: {
+    flex: 1,
+    gap: 3,
+  },
+  activePulseWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  activeRoomBadge: {
+    fontSize: 9.5,
+    fontWeight: '900',
+    color: '#10B981',
+    fontFamily: 'DM Sans',
+    letterSpacing: 0.5,
+  },
+  activeGigName: {
+    fontSize: 15,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+    letterSpacing: -0.2,
+  },
+  activeSongText: {
+    fontSize: 12,
+    fontFamily: 'DM Sans',
+  },
+  openStageBtn: {
+    backgroundColor: '#10B981',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  openStageText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+    letterSpacing: 0.5,
+  },
   pairingCard: {
     borderWidth: 1,
     borderRadius: 24,
     padding: 20,
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
     shadowColor: '#10B981',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
@@ -373,7 +766,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   qrOuter: {
-    padding: 12,
+    padding: 10,
     borderRadius: 18,
     borderWidth: 1,
     marginBottom: 16,
@@ -383,23 +776,14 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
-  qrInner: {
-    width: 110,
-    height: 110,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   codeRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
     marginBottom: 10,
+    alignItems: 'center',
   },
   codeBox: {
-    width: 44,
-    height: 52,
+    height: 48,
     borderWidth: 1,
     borderRadius: 12,
     alignItems: 'center',
@@ -411,8 +795,8 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   codeChar: {
-    fontFamily: 'DM Sans',
-    fontSize: 22,
+    fontFamily: 'JetBrains Mono',
+    fontSize: 20,
     fontWeight: '800',
   },
   pairingHint: {
@@ -452,7 +836,7 @@ const styles = StyleSheet.create({
   },
   devicesList: {
     gap: 10,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   leaderCard: {
     flexDirection: 'row',
@@ -478,42 +862,24 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   leaderName: {
-    fontSize: 14,
-    fontWeight: '700',
     color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 14,
     fontFamily: 'DM Sans',
-    marginBottom: 2,
   },
   leaderMeta: {
+    color: '#A7F3D0',
     fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.75)',
     fontFamily: 'DM Sans',
-  },
-  broadcastingBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  broadcastingText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
-    fontFamily: 'DM Sans',
+    marginTop: 1,
   },
   memberCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
     borderRadius: 18,
+    borderWidth: 1,
     padding: 14,
     gap: 12,
-    shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 5,
-    elevation: 1,
   },
   memberIconBox: {
     width: 40,
@@ -523,24 +889,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   memberName: {
-    fontSize: 14,
     fontWeight: '700',
-    marginBottom: 2,
+    fontSize: 14,
     fontFamily: 'DM Sans',
   },
   memberMeta: {
     fontSize: 11,
     fontFamily: 'DM Sans',
+    marginTop: 1,
   },
   memberStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
+  },
+  broadcastingText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '900',
+    fontFamily: 'DM Sans',
+    letterSpacing: 0.5,
   },
   syncText: {
+    color: '#10B981',
     fontSize: 10,
     fontWeight: '800',
-    color: '#10B981',
     fontFamily: 'DM Sans',
   },
   syncDotGreen: {
@@ -549,97 +922,76 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: '#10B981',
   },
-  lagText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#F59E0B',
-    fontFamily: 'DM Sans',
-  },
-  syncDotAmber: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#F59E0B',
-  },
   controlSection: {
-    gap: 10,
+    marginBottom: 20,
   },
   controlGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
   },
   controlCard: {
-    flex: 1,
-    borderWidth: 1,
+    width: '48.5%',
     borderRadius: 16,
-    paddingVertical: 16,
+    borderWidth: 1,
+    padding: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 5,
-    elevation: 1,
   },
   controlText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
     fontFamily: 'DM Sans',
+    textAlign: 'center',
   },
   bandsContainer: {
-    gap: 10,
+    gap: 12,
   },
   bandCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    borderRadius: 18,
     borderWidth: 1,
-    borderRadius: 16,
     padding: 14,
     gap: 12,
-    shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
-    elevation: 1,
   },
   bandAvatar: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   bandAvatarText: {
-    fontSize: 14,
-    fontWeight: '800',
     color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 15,
     fontFamily: 'DM Sans',
   },
   bandInfo: {
     flex: 1,
+    gap: 2,
   },
   bandName: {
     fontSize: 15,
-    fontWeight: '700',
-    marginBottom: 3,
+    fontWeight: '800',
     fontFamily: 'DM Sans',
   },
   bandMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   bandMetaText: {
     fontSize: 11,
-    fontWeight: '500',
     fontFamily: 'DM Sans',
   },
   roleBadge: {
-    borderWidth: 1,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
+    borderWidth: 1,
   },
   roleBadgeText: {
     fontSize: 10,
@@ -647,28 +999,59 @@ const styles = StyleSheet.create({
     fontFamily: 'DM Sans',
   },
   emptyCard: {
-    borderWidth: 1,
     borderRadius: 20,
+    borderWidth: 1,
     padding: 32,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
   },
   emptyTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    marginTop: 10,
-    marginBottom: 4,
+    fontSize: 16,
+    fontWeight: '800',
     fontFamily: 'DM Sans',
   },
   emptySubtitle: {
     fontSize: 12,
-    textAlign: 'center',
     fontFamily: 'DM Sans',
+    textAlign: 'center',
+    lineHeight: 18,
   },
   emptyText: {
     fontSize: 13,
+    fontFamily: 'DM Sans',
     textAlign: 'center',
-    marginVertical: 20,
+    paddingVertical: 20,
+  },
+  countInOverlay: {
+    position: 'absolute',
+    top: 100,
+    left: '50%',
+    transform: [{ translateX: -70 }],
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: '#10B981',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  countInText: {
+    fontSize: 54,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    fontFamily: 'DM Sans',
+  },
+  countInSub: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: 1.5,
     fontFamily: 'DM Sans',
   },
 });
