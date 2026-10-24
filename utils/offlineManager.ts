@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
-import { fetchLyrics } from './musicApi';
+import { getLyrics as fetchLyrics } from './musicApi';
 
 export interface OfflineSongItem {
   id: string;

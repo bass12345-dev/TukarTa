@@ -41,8 +41,10 @@ export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
 
   // Auto-select the only band
   React.useEffect(() => {
-    if (!selectedBandId && bands && bands.length === 1 && bands[0]?.band?.id) {
-      setSelectedBandId(bands[0].band.id);
+    const onlyBand = bands && bands.length === 1 ? (bands[0] as any)?.band : null;
+    const resolvedId = Array.isArray(onlyBand) ? onlyBand[0]?.id : onlyBand?.id;
+    if (!selectedBandId && resolvedId) {
+      setSelectedBandId(resolvedId);
     }
   }, [bands, selectedBandId]);
 

@@ -8,6 +8,7 @@ import {
   Platform,
   ActivityIndicator,
   Modal,
+  TextInput,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import {
@@ -23,13 +24,21 @@ import {
   Lock,
   Radio,
   Sparkles,
+  Search,
+  Plus,
+  Trash2,
+  Zap,
+  CornerDownRight,
+  Check,
+  X,
 } from 'lucide-react-native';
 import * as WebBrowser from 'expo-web-browser';
-import { useSetlistSongs } from '../utils/hooks/useMusician';
+import { useSetlistSongs, useMyKnownSongs } from '../utils/hooks/useMusician';
 import { useSongLyrics } from '../utils/hooks/useSongs';
 import { useBandSession } from '../context/bandSession';
 import { getOfflineGigPackage } from '../utils/offlineManager';
 import { supabase } from '../utils/supabase';
+import { searchSongs } from '../utils/musicApi';
 import {
   parseLineSegments,
   transposeChord,
@@ -123,17 +132,70 @@ export default function StageModeScreen() {
     ? setlistSongs
     : offlineSongs;
 
-  // Leader-editable running order (ids). null = use the saved order
-  const [orderOverride, setOrderOverride] = useState<string[] | null>(null);
+  // Leader-editable dynamic queue
+  // Musician's known repertoire for instant offline audience request lookups
+  const { data: myKnownSongs } = useMyKnownSongs();
+
+  // Leader-editable dynamic queue: supports live reordering, audience requests, skips, additions
+  const [customQueue, setCustomQueue] = useState<any[] | null>(null);
+
+  // Audience request search state
+  const [requestSearchQuery, setRequestSearchQuery] = useState('');
+  const [apiSearchResults, setApiSearchResults] = useState<any[]>([]);
+  const [isSearchingApi, setIsSearchingApi] = useState(false);
+  const [requestNotice, setRequestNotice] = useState<string | null>(null);
 
   const songsList = useMemo(() => {
-    if (!orderOverride) return baseSongsList;
-    const byId = new Map(baseSongsList.map((s: any) => [s.id, s]));
-    const ordered = orderOverride.map((id) => byId.get(id)).filter(Boolean) as any[];
-    // keep any songs added after the override was made
-    const rest = baseSongsList.filter((s: any) => !orderOverride.includes(s.id));
-    return [...ordered, ...rest];
-  }, [baseSongsList, orderOverride]);
+    return customQueue || baseSongsList;
+  }, [customQueue, baseSongsList]);
+
+  // Instant offline filter against repertoire
+  const filteredKnownSongs = useMemo(() => {
+    if (!myKnownSongs || !requestSearchQuery.trim()) return [];
+    const q = requestSearchQuery.toLowerCase().trim();
+    const seen = new Set<string>();
+    const list: any[] = [];
+    for (const item of myKnownSongs) {
+      const s = (item as any).song;
+      if (!s) continue;
+      const titleMatch = (s.title || '').toLowerCase().includes(q);
+      const artistMatch = (s.artist || '').toLowerCase().includes(q);
+      if ((titleMatch || artistMatch) && !seen.has(s.id)) {
+        seen.add(s.id);
+        list.push(s);
+      }
+    }
+    return list.slice(0, 8);
+  }, [myKnownSongs, requestSearchQuery]);
+
+  // Online catalog search with debounce
+  useEffect(() => {
+    const q = requestSearchQuery.trim();
+    if (q.length < 2) {
+      setApiSearchResults([]);
+      setIsSearchingApi(false);
+      return;
+    }
+    setIsSearchingApi(true);
+    const timer = setTimeout(async () => {
+      try {
+        const results = await searchSongs(q);
+        const knownIds = new Set(filteredKnownSongs.map((s: any) => s.id));
+        const filtered = (results || [])
+          .filter((r: any) => !knownIds.has(r.id))
+          .slice(0, 6);
+        setApiSearchResults(filtered);
+      } catch {
+        setApiSearchResults([]);
+      } finally {
+        setIsSearchingApi(false);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [requestSearchQuery, filteredKnownSongs]);
+
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const isUuid = (val: any): boolean => typeof val === 'string' && UUID_REGEX.test(val);
 
   // Move a queued song to a new slot (never above the song playing now)
   const moveQueueSong = async (from: number, to: number) => {
@@ -141,18 +203,125 @@ export default function StageModeScreen() {
     const next = [...songsList];
     const [moved] = next.splice(from, 1);
     next.splice(to, 0, moved);
-    setOrderOverride(next.map((s: any) => s.id));
+    setCustomQueue(next);
 
     // Persist the new order for real setlists (best effort)
     if (setlistId) {
       try {
         await Promise.all(
           next.map((s: any, i: number) =>
-            supabase.from('setlist_songs').update({ position: i + 1 }).eq('id', s.id)
+            s.id && isUuid(s.id)
+              ? supabase.from('setlist_songs').update({ position: i + 1 }).eq('id', s.id)
+              : Promise.resolve()
           )
         );
       } catch (e) {
         console.warn('Could not save new queue order:', e);
+      }
+    }
+  };
+
+  // 1-Tap Promote to "Up Next" slot
+  const makeUpNext = (fromIndex: number) => {
+    if (fromIndex <= currentIndex + 1 || fromIndex >= songsList.length) return;
+    moveQueueSong(fromIndex, currentIndex + 1);
+  };
+
+  // 1-Tap Skip / Jump to any song in the running order
+  const jumpToSong = (targetIndex: number) => {
+    if (targetIndex === currentIndex) return;
+    setCurrentIndex(targetIndex);
+    setTransposeSteps(0);
+  };
+
+  // Remove / skip a song from the upcoming queue
+  const removeQueueSong = async (indexToRemove: number) => {
+    if (indexToRemove <= currentIndex) return;
+    const itemToRemove = songsList[indexToRemove];
+    const next = songsList.filter((_: any, i: number) => i !== indexToRemove);
+    setCustomQueue(next);
+
+    if (setlistId && itemToRemove?.id && isUuid(itemToRemove.id)) {
+      try {
+        await supabase.from('setlist_songs').delete().eq('id', itemToRemove.id);
+      } catch (e) {
+        console.warn('Could not delete song from setlist:', e);
+      }
+    }
+  };
+
+  // Add an audience request immediately into the live queue
+  const handleAddAudienceRequest = async (
+    songItem: { id?: string; title: string; artist?: string; original_key?: string; bpm?: number; plain_lyrics?: string },
+    mode: 'play_next' | 'play_now'
+  ) => {
+    const cleanTitle = (songItem.title || 'Untitled Request').trim();
+    const cleanArtist = (songItem.artist || 'Audience Request').trim();
+    const cleanKey = songItem.original_key || 'C';
+
+    const newQueueItem = {
+      id: `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      position: mode === 'play_now' ? currentIndex + 1 : currentIndex + 2,
+      isRequest: true,
+      plain_lyrics: songItem.plain_lyrics,
+      song: {
+        id: songItem.id || `custom_${Date.now()}`,
+        title: cleanTitle,
+        artist: cleanArtist,
+        original_key: cleanKey,
+        bpm: songItem.bpm || null,
+      },
+    };
+
+    const nextQueue = [...songsList];
+    if (mode === 'play_now') {
+      nextQueue.splice(currentIndex, 0, newQueueItem);
+      setCustomQueue(nextQueue);
+      setTransposeSteps(0);
+      setRequestNotice(`Now Playing: "${cleanTitle}"`);
+    } else {
+      nextQueue.splice(currentIndex + 1, 0, newQueueItem);
+      setCustomQueue(nextQueue);
+      setRequestNotice(`Added to Up Next: "${cleanTitle}"`);
+    }
+
+    setRequestSearchQuery('');
+    setApiSearchResults([]);
+
+    setTimeout(() => {
+      setRequestNotice(null);
+    }, 4000);
+
+    // Save to database if setlistId is active
+    if (setlistId && isUuid(setlistId)) {
+      try {
+        let dbSongId = songItem.id;
+        if (!dbSongId || !isUuid(dbSongId)) {
+          const { data: createdSong } = await supabase
+            .from('songs')
+            .upsert(
+              {
+                title: cleanTitle,
+                artist: cleanArtist,
+                genre: 'Request',
+                original_key: cleanKey,
+              },
+              { onConflict: 'title, artist' }
+            )
+            .select('id')
+            .single();
+          if (createdSong?.id) dbSongId = createdSong.id;
+        }
+
+        if (dbSongId && isUuid(dbSongId)) {
+          await supabase.from('setlist_songs').insert({
+            setlist_id: setlistId,
+            song_id: dbSongId,
+            position: mode === 'play_now' ? currentIndex + 1 : currentIndex + 2,
+          });
+        }
+      } catch (e) {
+        console.warn('Setlist song async persist note:', e);
       }
     }
   };
@@ -228,7 +397,15 @@ export default function StageModeScreen() {
           : undefined
       );
     }
-  }, [currentIndex, activeKey, lyricsData?.plain_lyrics, isLeader, nextSetlistSong?.id]);
+  }, [
+    currentIndex,
+    activeKey,
+    lyricsData?.plain_lyrics,
+    isLeader,
+    nextSetlistSong?.id,
+    nextSetlistSong?.song?.title,
+    songsList.length,
+  ]);
 
   // 4. Web Search
   const handleWebSearch = async (baseUrl: string) => {
@@ -632,11 +809,23 @@ export default function StageModeScreen() {
       >
         <View style={styles.queueOverlay}>
           <View style={styles.queueSheet}>
+            {/* Header */}
             <View style={styles.queueHeader}>
               <View>
-                <Text style={styles.queueTitle}>Set Queue</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.queueTitle}>Set Queue</Text>
+                  {songsList.filter((s: any) => s.isRequest).length > 0 && (
+                    <View style={styles.queueBadgeRequest}>
+                      <Text style={styles.queueBadgeRequestText}>
+                        {songsList.filter((s: any) => s.isRequest).length} REQUESTS
+                      </Text>
+                    </View>
+                  )}
+                </View>
                 <Text style={styles.queueSub}>
-                  {isMemberFollowing ? 'Leader controls the order' : 'Tap a song to jump • ▲▼ to change what\'s next'}
+                  {isMemberFollowing
+                    ? 'Synced with Band Leader'
+                    : 'Search audience requests • Reorder • Skip live'}
                 </Text>
               </View>
               <TouchableOpacity onPress={() => setIsQueueVisible(false)} style={styles.queueClose}>
@@ -644,86 +833,291 @@ export default function StageModeScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {songsList.length === 0 && (
-                <Text style={styles.queueEmpty}>
-                  {syncNextSong
-                    ? `Now: ${displayedTitle}\nNext: ${syncNextSong.title}`
-                    : 'No songs in the queue yet.'}
-                </Text>
-              )}
-              {songsList.map((item: any, idx: number) => {
-                const isCurrent = idx === currentIndex;
-                const isPast = idx < currentIndex;
-                const isNext = idx === currentIndex + 1;
-                return (
-                  <TouchableOpacity
-                    key={item.id || idx}
-                    activeOpacity={0.75}
-                    disabled={isMemberFollowing}
-                    onPress={() => {
-                      setCurrentIndex(idx);
-                      setIsQueueVisible(false);
-                    }}
-                    style={[
-                      styles.queueRow,
-                      isCurrent && styles.queueRowCurrent,
-                      isPast && { opacity: 0.45 },
-                    ]}
-                  >
-                    <Text style={[styles.queueIndex, isCurrent && { color: '#FFFFFF' }]}>
-                      {String(idx + 1).padStart(2, '0')}
-                    </Text>
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[styles.queueSongTitle, isCurrent && { color: '#FFFFFF' }]}
-                        numberOfLines={1}
-                      >
-                        {item.song?.title || 'Untitled'}
-                      </Text>
-                      <Text
-                        style={[styles.queueSongMeta, isCurrent && { color: '#D1FAE5' }]}
-                        numberOfLines={1}
-                      >
-                        {item.song?.artist || 'Unknown'} • Key {item.song?.original_key || '-'}
-                      </Text>
+            {/* Notification Banner when request is added */}
+            {requestNotice && (
+              <View style={styles.requestNoticeBanner}>
+                <Check size={14} color="#065F46" />
+                <Text style={styles.requestNoticeText}>{requestNotice}</Text>
+              </View>
+            )}
+
+            {/* Audience Request Search Bar (Leader Only) */}
+            {!isMemberFollowing && (
+              <View style={styles.requestSearchContainer}>
+                <View style={styles.requestSearchBar}>
+                  <Search size={16} color="#059669" />
+                  <TextInput
+                    value={requestSearchQuery}
+                    onChangeText={setRequestSearchQuery}
+                    placeholder="Audience request? Search repertoire or song..."
+                    placeholderTextColor="#059669"
+                    style={styles.requestSearchInput}
+                    returnKeyType="search"
+                  />
+                  {requestSearchQuery.length > 0 && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setRequestSearchQuery('');
+                        setApiSearchResults([]);
+                      }}
+                      style={styles.requestClearBtn}
+                    >
+                      <X size={15} color="#047857" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            )}
+
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {/* Search Results Dropdown when searching */}
+              {requestSearchQuery.trim().length > 0 && (
+                <View style={styles.searchResultsBox}>
+                  {/* Repertoire Matches */}
+                  {filteredKnownSongs.length > 0 && (
+                    <View style={styles.searchSection}>
+                      <Text style={styles.searchSectionTitle}>★ REPERTOIRE MATCHES (READY TO PLAY)</Text>
+                      {filteredKnownSongs.map((s: any) => (
+                        <View key={`known_${s.id}`} style={styles.searchResultCard}>
+                          <View style={{ flex: 1, marginRight: 8 }}>
+                            <Text style={styles.searchResultTitle} numberOfLines={1}>{s.title}</Text>
+                            <Text style={styles.searchResultMeta} numberOfLines={1}>
+                              {s.artist || 'Unknown'} • Key {s.original_key || 'C'}
+                            </Text>
+                          </View>
+                          <View style={styles.searchActionRow}>
+                            <TouchableOpacity
+                              style={styles.btnPlayNext}
+                              onPress={() => handleAddAudienceRequest(s, 'play_next')}
+                            >
+                              <Plus size={13} color="#065F46" />
+                              <Text style={styles.btnPlayNextText}>Next</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.btnPlayNow}
+                              onPress={() => handleAddAudienceRequest(s, 'play_now')}
+                            >
+                              <Zap size={13} color="#FFFFFF" />
+                              <Text style={styles.btnPlayNowText}>Now</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      ))}
                     </View>
-                    {isCurrent ? (
-                      <View style={styles.queueBadgeNow}>
-                        <Text style={styles.queueBadgeNowText}>NOW</Text>
-                      </View>
-                    ) : (
-                      <>
-                        {isNext && (
-                          <View style={styles.queueBadgeNext}>
-                            <Text style={styles.queueBadgeNextText}>UP NEXT</Text>
+                  )}
+
+                  {/* Online Search Matches */}
+                  {apiSearchResults.length > 0 && (
+                    <View style={styles.searchSection}>
+                      <Text style={styles.searchSectionTitle}>🌐 ONLINE SONG CATALOG</Text>
+                      {apiSearchResults.map((s: any) => (
+                        <View key={`api_${s.id}`} style={styles.searchResultCard}>
+                          <View style={{ flex: 1, marginRight: 8 }}>
+                            <Text style={styles.searchResultTitle} numberOfLines={1}>{s.title}</Text>
+                            <Text style={styles.searchResultMeta} numberOfLines={1}>{s.artist || 'Unknown'}</Text>
                           </View>
-                        )}
-                        {!isPast && !isMemberFollowing && (
-                          <View style={styles.queueMoveCol}>
+                          <View style={styles.searchActionRow}>
                             <TouchableOpacity
-                              hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
-                              disabled={idx <= currentIndex + 1}
-                              onPress={() => moveQueueSong(idx, idx - 1)}
-                              style={[styles.queueMoveBtn, idx <= currentIndex + 1 && { opacity: 0.25 }]}
+                              style={styles.btnPlayNext}
+                              onPress={() => handleAddAudienceRequest(s, 'play_next')}
                             >
-                              <Text style={styles.queueMoveText}>▲</Text>
+                              <Plus size={13} color="#065F46" />
+                              <Text style={styles.btnPlayNextText}>Next</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                              hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
-                              disabled={idx >= songsList.length - 1}
-                              onPress={() => moveQueueSong(idx, idx + 1)}
-                              style={[styles.queueMoveBtn, idx >= songsList.length - 1 && { opacity: 0.25 }]}
+                              style={styles.btnPlayNow}
+                              onPress={() => handleAddAudienceRequest(s, 'play_now')}
                             >
-                              <Text style={styles.queueMoveText}>▼</Text>
+                              <Zap size={13} color="#FFFFFF" />
+                              <Text style={styles.btnPlayNowText}>Now</Text>
                             </TouchableOpacity>
                           </View>
-                        )}
-                      </>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {isSearchingApi && (
+                    <View style={styles.searchLoadingRow}>
+                      <ActivityIndicator size="small" color="#10B981" />
+                      <Text style={styles.searchLoadingText}>Searching online catalog...</Text>
+                    </View>
+                  )}
+
+                  {/* Quick Custom Request fallback */}
+                  <View style={styles.customRequestCard}>
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      <Text style={styles.customRequestTitle} numberOfLines={1}>
+                        "{requestSearchQuery.trim()}"
+                      </Text>
+                      <Text style={styles.customRequestSub}>Instant Custom Audience Request</Text>
+                    </View>
+                    <View style={styles.searchActionRow}>
+                      <TouchableOpacity
+                        style={styles.btnPlayNext}
+                        onPress={() =>
+                          handleAddAudienceRequest(
+                            { title: requestSearchQuery.trim(), artist: 'Audience Request', original_key: 'C' },
+                            'play_next'
+                          )
+                        }
+                      >
+                        <Plus size={13} color="#065F46" />
+                        <Text style={styles.btnPlayNextText}>Next</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.btnPlayNow}
+                        onPress={() =>
+                          handleAddAudienceRequest(
+                            { title: requestSearchQuery.trim(), artist: 'Audience Request', original_key: 'C' },
+                            'play_now'
+                          )
+                        }
+                      >
+                        <Zap size={13} color="#FFFFFF" />
+                        <Text style={styles.btnPlayNowText}>Now</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* Running Order List */}
+              <View style={styles.queueListSection}>
+                <Text style={styles.queueListSectionTitle}>
+                  CURRENT RUNNING ORDER ({songsList.length} SONGS)
+                </Text>
+
+                {songsList.length === 0 && (
+                  <Text style={styles.queueEmpty}>
+                    {syncNextSong
+                      ? `Now: ${displayedTitle}\nNext: ${syncNextSong.title}`
+                      : 'No songs in the setlist queue yet.'}
+                  </Text>
+                )}
+
+                {songsList.map((item: any, idx: number) => {
+                  const isCurrent = idx === currentIndex;
+                  const isPast = idx < currentIndex;
+                  const isNext = idx === currentIndex + 1;
+                  const isReq = !!item.isRequest;
+
+                  return (
+                    <View
+                      key={item.id || idx}
+                      style={[
+                        styles.queueRow,
+                        isCurrent && styles.queueRowCurrent,
+                        isNext && !isCurrent && styles.queueRowNext,
+                        isPast && styles.queueRowPast,
+                      ]}
+                    >
+                      <Text style={[styles.queueIndex, isCurrent && { color: '#FFFFFF' }]}>
+                        {isPast ? '✓' : String(idx + 1).padStart(2, '0')}
+                      </Text>
+
+                      <TouchableOpacity
+                        activeOpacity={0.75}
+                        disabled={isMemberFollowing || isCurrent}
+                        onPress={() => jumpToSong(idx)}
+                        style={{ flex: 1, paddingVertical: 2 }}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Text
+                            style={[styles.queueSongTitle, isCurrent && { color: '#FFFFFF' }]}
+                            numberOfLines={1}
+                          >
+                            {item.song?.title || 'Untitled'}
+                          </Text>
+                          {isReq && (
+                            <View style={styles.requestInlineTag}>
+                              <Text style={styles.requestInlineTagText}>REQUEST</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text
+                          style={[
+                            styles.queueSongMeta,
+                            isCurrent && { color: '#D1FAE5' },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {item.song?.artist || 'Unknown'} • Key {item.song?.original_key || '-'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {isCurrent ? (
+                        <View style={styles.queueBadgeNow}>
+                          <Text style={styles.queueBadgeNowText}>NOW</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.queueControlsRow}>
+                          {isNext && (
+                            <View style={styles.queueBadgeNext}>
+                              <Text style={styles.queueBadgeNextText}>UP NEXT</Text>
+                            </View>
+                          )}
+
+                          {!isPast && !isMemberFollowing && (
+                            <>
+                              {/* 1-Tap Make Next button if further down */}
+                              {idx > currentIndex + 1 && (
+                                <TouchableOpacity
+                                  onPress={() => makeUpNext(idx)}
+                                  style={styles.queuePromoteBtn}
+                                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                                >
+                                  <CornerDownRight size={11} color="#059669" />
+                                  <Text style={styles.queuePromoteText}>Next</Text>
+                                </TouchableOpacity>
+                              )}
+
+                              {/* 1-Tap Play Now button to skip directly */}
+                              <TouchableOpacity
+                                onPress={() => jumpToSong(idx)}
+                                style={styles.queuePlayNowBtn}
+                                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                              >
+                                <Zap size={11} color="#065F46" />
+                                <Text style={styles.queuePlayNowText}>Skip To</Text>
+                              </TouchableOpacity>
+
+                              {/* ▲ / ▼ Reordering */}
+                              <View style={styles.queueMoveCol}>
+                                <TouchableOpacity
+                                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                                  disabled={idx <= currentIndex + 1}
+                                  onPress={() => moveQueueSong(idx, idx - 1)}
+                                  style={[styles.queueMoveBtn, idx <= currentIndex + 1 && { opacity: 0.25 }]}
+                                >
+                                  <Text style={styles.queueMoveText}>▲</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                                  disabled={idx >= songsList.length - 1}
+                                  onPress={() => moveQueueSong(idx, idx + 1)}
+                                  style={[styles.queueMoveBtn, idx >= songsList.length - 1 && { opacity: 0.25 }]}
+                                >
+                                  <Text style={styles.queueMoveText}>▼</Text>
+                                </TouchableOpacity>
+                              </View>
+
+                              {/* Remove / Skip button */}
+                              <TouchableOpacity
+                                onPress={() => removeQueueSong(idx)}
+                                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                                style={styles.queueRemoveBtn}
+                              >
+                                <Trash2 size={13} color="#94A3B8" />
+                              </TouchableOpacity>
+                            </>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
             </ScrollView>
           </View>
         </View>
@@ -1237,7 +1631,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     padding: 20,
-    maxHeight: '75%',
+    maxHeight: '85%',
     width: '100%',
     maxWidth: 640,
     alignSelf: 'center',
@@ -1246,7 +1640,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   queueTitle: { fontSize: 20, fontWeight: '800', color: '#064E3B' },
   queueSub: { fontSize: 12, color: '#64748B', marginTop: 2 },
@@ -1257,6 +1651,177 @@ const styles = StyleSheet.create({
     backgroundColor: '#ECFDF5',
   },
   queueCloseText: { color: '#10B981', fontWeight: '800', fontSize: 12 },
+  queueBadgeRequest: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  queueBadgeRequestText: {
+    color: '#B45309',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  requestNoticeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  requestNoticeText: {
+    color: '#065F46',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  requestSearchContainer: {
+    marginBottom: 12,
+  },
+  requestSearchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1.5,
+    borderColor: '#A7F3D0',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+  },
+  requestSearchInput: {
+    flex: 1,
+    fontSize: 13,
+    color: '#064E3B',
+    fontWeight: '600',
+    padding: 0,
+  },
+  requestClearBtn: {
+    padding: 4,
+  },
+  searchResultsBox: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#A7F3D0',
+    borderRadius: 16,
+    padding: 10,
+    marginBottom: 14,
+    gap: 10,
+  },
+  searchSection: {
+    gap: 6,
+  },
+  searchSectionTitle: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#059669',
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  searchResultCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+  },
+  searchResultTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#064E3B',
+  },
+  searchResultMeta: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 1,
+  },
+  searchActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  btnPlayNext: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#10B981',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  btnPlayNextText: {
+    color: '#065F46',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  btnPlayNow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#10B981',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  btnPlayNowText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  searchLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 6,
+    justifyContent: 'center',
+  },
+  searchLoadingText: {
+    fontSize: 11,
+    color: '#059669',
+    fontWeight: '600',
+  },
+  customRequestCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  customRequestTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  customRequestSub: {
+    fontSize: 10,
+    color: '#B45309',
+    fontWeight: '600',
+  },
+  queueListSection: {
+    marginTop: 4,
+  },
+  queueListSectionTitle: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#065F46',
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
   queueEmpty: { color: '#64748B', textAlign: 'center', paddingVertical: 30, lineHeight: 22 },
   queueRow: {
     flexDirection: 'row',
@@ -1270,9 +1835,33 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   queueRowCurrent: { backgroundColor: '#10B981', borderColor: '#10B981' },
+  queueRowNext: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#10B981',
+    borderWidth: 1.5,
+  },
+  queueRowPast: {
+    opacity: 0.45,
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+  },
   queueIndex: { fontSize: 13, fontWeight: '800', color: '#10B981', width: 24 },
   queueSongTitle: { fontSize: 15, fontWeight: '800', color: '#064E3B' },
   queueSongMeta: { fontSize: 12, color: '#64748B', marginTop: 2 },
+  requestInlineTag: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  requestInlineTagText: {
+    color: '#B45309',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
   queueBadgeNow: {
     backgroundColor: '#064E3B',
     paddingHorizontal: 9,
@@ -1287,18 +1876,61 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   queueBadgeNextText: { color: '#B45309', fontSize: 10, fontWeight: '900' },
-  queueMoveCol: { flexDirection: 'row', gap: 6 },
+  queueControlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  queuePromoteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  queuePromoteText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#059669',
+  },
+  queuePlayNowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  queuePlayNowText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#065F46',
+  },
+  queueMoveCol: { flexDirection: 'row', gap: 4 },
   queueMoveBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#A7F3D0',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  queueMoveText: { color: '#10B981', fontSize: 12, fontWeight: '900' },
+  queueMoveText: { color: '#10B981', fontSize: 11, fontWeight: '900' },
+  queueRemoveBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+  },
   emptyStageView: {
     paddingVertical: 60,
     paddingHorizontal: 30,
