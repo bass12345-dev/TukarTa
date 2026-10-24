@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Platform,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import {
@@ -72,6 +73,7 @@ export default function StageModeScreen() {
   const [isPlaying, setIsPlaying] = useState(true);
   const [transposeSteps, setTransposeSteps] = useState(0);
   const [isMinusOneVisible, setIsMinusOneVisible] = useState(false);
+  const [isQueueVisible, setIsQueueVisible] = useState(false);
   const [offlineSongs, setOfflineSongs] = useState<any[]>([]);
 
   // Load offline gig package fallback if offline or db empty
@@ -567,6 +569,17 @@ export default function StageModeScreen() {
           <TouchableOpacity
             style={styles.subActionBtn}
             activeOpacity={0.7}
+            onPress={() => setIsQueueVisible(true)}
+          >
+            <ListMusic size={14} color="#10B981" />
+            <Text style={styles.subActionText}>
+              QUEUE{songsList.length > 0 ? ` (${Math.max(songsList.length - currentIndex - 1, 0)})` : ''}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.subActionBtn}
+            activeOpacity={0.7}
             onPress={() => router.push('/(tabs)/bands')}
           >
             <Radio size={14} color="#10B981" />
@@ -574,6 +587,88 @@ export default function StageModeScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* ── Queue / What's Next ── */}
+      <Modal
+        visible={isQueueVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsQueueVisible(false)}
+      >
+        <View style={styles.queueOverlay}>
+          <View style={styles.queueSheet}>
+            <View style={styles.queueHeader}>
+              <View>
+                <Text style={styles.queueTitle}>Set Queue</Text>
+                <Text style={styles.queueSub}>
+                  {isMemberFollowing ? 'Leader controls the order' : 'Tap a song to jump to it'}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setIsQueueVisible(false)} style={styles.queueClose}>
+                <Text style={styles.queueCloseText}>DONE</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {songsList.length === 0 && (
+                <Text style={styles.queueEmpty}>
+                  {syncNextSong
+                    ? `Now: ${displayedTitle}\nNext: ${syncNextSong.title}`
+                    : 'No songs in the queue yet.'}
+                </Text>
+              )}
+              {songsList.map((item: any, idx: number) => {
+                const isCurrent = idx === currentIndex;
+                const isPast = idx < currentIndex;
+                const isNext = idx === currentIndex + 1;
+                return (
+                  <TouchableOpacity
+                    key={item.id || idx}
+                    activeOpacity={0.75}
+                    disabled={isMemberFollowing}
+                    onPress={() => {
+                      setCurrentIndex(idx);
+                      setIsQueueVisible(false);
+                    }}
+                    style={[
+                      styles.queueRow,
+                      isCurrent && styles.queueRowCurrent,
+                      isPast && { opacity: 0.45 },
+                    ]}
+                  >
+                    <Text style={[styles.queueIndex, isCurrent && { color: '#FFFFFF' }]}>
+                      {String(idx + 1).padStart(2, '0')}
+                    </Text>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[styles.queueSongTitle, isCurrent && { color: '#FFFFFF' }]}
+                        numberOfLines={1}
+                      >
+                        {item.song?.title || 'Untitled'}
+                      </Text>
+                      <Text
+                        style={[styles.queueSongMeta, isCurrent && { color: '#D1FAE5' }]}
+                        numberOfLines={1}
+                      >
+                        {item.song?.artist || 'Unknown'} • Key {item.song?.original_key || '-'}
+                      </Text>
+                    </View>
+                    {isCurrent ? (
+                      <View style={styles.queueBadgeNow}>
+                        <Text style={styles.queueBadgeNowText}>NOW</Text>
+                      </View>
+                    ) : isNext ? (
+                      <View style={styles.queueBadgeNext}>
+                        <Text style={styles.queueBadgeNextText}>UP NEXT</Text>
+                      </View>
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1073,6 +1168,66 @@ const styles = StyleSheet.create({
   nextSongBadgeRow: {
     marginTop: 2,
   },
+  queueOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+  queueSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 20,
+    maxHeight: '75%',
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
+  },
+  queueHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  queueTitle: { fontSize: 20, fontWeight: '800', color: '#064E3B' },
+  queueSub: { fontSize: 12, color: '#64748B', marginTop: 2 },
+  queueClose: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#ECFDF5',
+  },
+  queueCloseText: { color: '#10B981', fontWeight: '800', fontSize: 12 },
+  queueEmpty: { color: '#64748B', textAlign: 'center', paddingVertical: 30, lineHeight: 22 },
+  queueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+    marginBottom: 8,
+  },
+  queueRowCurrent: { backgroundColor: '#10B981', borderColor: '#10B981' },
+  queueIndex: { fontSize: 13, fontWeight: '800', color: '#10B981', width: 24 },
+  queueSongTitle: { fontSize: 15, fontWeight: '800', color: '#064E3B' },
+  queueSongMeta: { fontSize: 12, color: '#64748B', marginTop: 2 },
+  queueBadgeNow: {
+    backgroundColor: '#064E3B',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  queueBadgeNowText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900' },
+  queueBadgeNext: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  queueBadgeNextText: { color: '#B45309', fontSize: 10, fontWeight: '900' },
   emptyStageView: {
     paddingVertical: 60,
     paddingHorizontal: 30,
