@@ -1,4 +1,17 @@
-import { LinearGradient } from 'expo-linear-gradient';
+import React, { useState } from 'react';
+import {
+  ActivityIndicator,
+  Dimensions,
+  FlatList,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  Alert
+} from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import {
   ChevronLeft,
@@ -6,22 +19,43 @@ import {
   Plus,
   Search,
   Star,
-  Trash2
+  Trash2,
+  X,
+  Sparkles
 } from 'lucide-react-native';
-import React, { useState } from 'react';
-import { ActivityIndicator, Dimensions, FlatList, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Alert } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
-import { Button } from '../../components/ui/Button';
-import { GlassCard } from '../../components/ui/GlassCard';
 import { Pill } from '../../components/ui/Pill';
 import { useInfiniteMySongs, useDeleteMySong } from '../../utils/hooks/useSongs';
+import { useAppTheme } from '../../context/theme';
 
 const { width } = Dimensions.get('window');
 
-const CATEGORIES = ['All', 'OPM', 'Rock', 'Pop', 'Acoustic', 'Worship', 'Ballad', 'Hip-Hop', 'R&B', 'Electronic', 'Country', 'Jazz', 'Classical', 'Blues', 'Folk', 'Metal', 'Punk', 'Reggae', 'Soul', 'Latin'];
+const CATEGORIES = [
+  'All',
+  'OPM',
+  'Rock',
+  'Pop',
+  'Acoustic',
+  'Worship',
+  'Ballad',
+  'Hip-Hop',
+  'R&B',
+  'Electronic',
+  'Country',
+  'Jazz',
+  'Classical',
+  'Blues',
+  'Folk',
+  'Metal',
+  'Punk',
+  'Reggae',
+  'Soul',
+  'Latin'
+];
 
 export default function SongDictionaryScreen() {
   const router = useRouter();
+  const { colors, isDark } = useAppTheme();
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   
@@ -62,74 +96,99 @@ export default function SongDictionaryScreen() {
 
   const renderHeader = () => (
     <>
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: colors.bg }]}>
         <View style={styles.headerTop}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <ChevronLeft size={24} color="#F0F4FF" />
+          <TouchableOpacity 
+            onPress={() => router.back()} 
+            style={[styles.backBtn, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}
+            activeOpacity={0.7}
+          >
+            <ChevronLeft size={22} color={colors.text} />
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>My Song Dictionary</Text>
-            <Text style={styles.headerSubtitle}>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>My Song Dictionary</Text>
+            <Text style={[styles.headerSubtitle, { color: colors.textDim }]}>
               {totalCount} songs · {liveCount} live-ready
             </Text>
           </View>
           <TouchableOpacity 
-            style={styles.addBtn}
+            style={[styles.addBtn, { backgroundColor: colors.primary }]}
             onPress={() => router.push('/songs/add')}
+            activeOpacity={0.85}
           >
-            <Plus size={24} color="#FFF" />
+            <Plus size={22} color="#FFF" strokeWidth={2.5} />
           </TouchableOpacity>
         </View>
 
         <View style={styles.statsRow}>
-          <StatCard value={String(totalCount)} label="TOTAL" color="#00D4FF" />
-          <StatCard value={String(liveCount)} label="LIVE" color="#10B981" />
-          <StatCard value={String(learningCount)} label="LEARNING" color="#F59E0B" />
-          <StatCard value={String(uniqueGenres)} label="GENRES" color="#8B5CF6" />
+          <StatCard value={String(totalCount)} label="TOTAL" color={colors.primary} colors={colors} />
+          <StatCard value={String(liveCount)} label="LIVE" color={colors.primaryDark} colors={colors} />
+          <StatCard value={String(learningCount)} label="LEARNING" color="#F59E0B" colors={colors} />
+          <StatCard value={String(uniqueGenres)} label="GENRES" color={isDark ? '#A7F3D0' : '#059669'} colors={colors} />
         </View>
       </View>
 
       <View style={styles.searchSection}>
-        <GlassCard 
-          intensity={10} 
-          noPadding 
-          contentContainerStyle={styles.searchBar}
-        >
-          <Search size={20} color="rgba(150, 175, 200, 0.5)" />
+        <View style={[styles.searchBar, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
+          <Search size={18} color={colors.textDim} />
           <TextInput
             placeholder="Search songs, artists, keys..."
-            placeholderTextColor="rgba(150, 175, 200, 0.4)"
-            style={styles.searchInput}
+            placeholderTextColor={colors.inputPlaceholder}
+            style={[
+              styles.searchInput, 
+              { color: colors.inputText },
+              Platform.OS === 'web' && ({ outlineStyle: 'none' } as any)
+            ]}
             value={search}
             onChangeText={setSearch}
           />
-        </GlassCard>
+          {search.length > 0 && (
+            <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <X size={16} color={colors.textDim} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <View style={styles.filterStickyContainer}>
          <View style={styles.filterRow}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
-            {CATEGORIES.map(cat => (
-              <TouchableOpacity 
-                key={cat} 
-                style={[styles.categoryPill, activeCategory === cat && styles.categoryPillActive]}
-                onPress={() => setActiveCategory(cat)}
-              >
-                <Text style={[styles.categoryText, activeCategory === cat && styles.categoryTextActive]}>{cat}</Text>
-              </TouchableOpacity>
-            ))}
+            {CATEGORIES.map(cat => {
+              const isActive = activeCategory === cat;
+              return (
+                <TouchableOpacity 
+                  key={cat} 
+                  style={[
+                    styles.categoryPill, 
+                    { 
+                      backgroundColor: isActive ? colors.primary : colors.bgCard,
+                      borderColor: isActive ? colors.primary : colors.border
+                    }
+                  ]}
+                  onPress={() => setActiveCategory(cat)}
+                  activeOpacity={0.7}
+                >
+                  <Text 
+                    style={[
+                      styles.categoryText, 
+                      { 
+                        color: isActive ? '#FFFFFF' : colors.text,
+                        fontWeight: isActive ? '700' : '500'
+                      }
+                    ]}
+                  >
+                    {cat}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         </View>
 
         <View style={styles.listSubHeader}>
-          <Text style={styles.showingText}>Showing <Text style={{ color: '#00D4FF' }}>{filteredSongs.length}</Text> songs</Text>
-          <TouchableOpacity style={styles.sortBtn}>
-            <Text style={styles.sortText}>Sort: </Text>
-            <View style={styles.sortPicker}>
-              <Text style={styles.sortValue}>Recent</Text>
-              <ChevronLeft size={14} color="rgba(150, 175, 200, 0.6)" style={{ transform: [{ rotate: '-90deg' }] }} />
-            </View>
-          </TouchableOpacity>
+          <Text style={[styles.showingText, { color: colors.textDim }]}>
+            Showing <Text style={{ color: colors.primary, fontWeight: '700' }}>{filteredSongs.length}</Text> songs
+          </Text>
         </View>
       </View>
     </>
@@ -139,8 +198,8 @@ export default function SongDictionaryScreen() {
     if (!isFetchingNextPage) return <View style={{ height: 40 }} />;
     return (
       <View style={styles.footerLoader}>
-        <ActivityIndicator size="small" color="#00D4FF" />
-        <Text style={styles.footerLoaderText}>Loading more...</Text>
+        <ActivityIndicator size="small" color={colors.primary} />
+        <Text style={[styles.footerLoaderText, { color: colors.textDim }]}>Loading more songs...</Text>
       </View>
     );
   };
@@ -148,41 +207,44 @@ export default function SongDictionaryScreen() {
   const renderEmpty = () => {
     if (isLoading) return (
       <View style={styles.loaderContainer}>
-        <ActivityIndicator size="large" color="#00D4FF" />
-        <Text style={styles.loaderText}>Fetching your repertoire...</Text>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.loaderText, { color: colors.textDim }]}>Fetching your repertoire...</Text>
       </View>
     );
 
     return (
       <View style={styles.emptyContainer}>
-        <Music size={48} color="rgba(150, 175, 200, 0.2)" />
-        <Text style={styles.emptyTitle}>
+        <View style={[styles.emptyIconBox, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}>
+          <Music size={40} color={colors.primary} />
+        </View>
+        <Text style={[styles.emptyTitle, { color: colors.text }]}>
           {search ? "No matches found" : "Your dictionary is empty"}
         </Text>
-        <Text style={styles.emptySubtitle}>
-          {search ? "Try adjusting your search or filters" : "Start adding songs manually or via screenshot!"}
+        <Text style={[styles.emptySubtitle, { color: colors.textDim }]}>
+          {search ? "Try adjusting your search or category filter" : "Start adding songs manually or scan with AI!"}
         </Text>
         {!search && (
-          <Button 
-            title="Add first song" 
-            variant="cyan"
+          <TouchableOpacity 
+            style={[styles.addFirstBtn, { backgroundColor: colors.primary }]}
             onPress={() => router.push('/songs/add')}
-            style={{ marginTop: 20 }}
-          />
+            activeOpacity={0.85}
+          >
+            <Plus size={18} color="#FFF" strokeWidth={2.5} />
+            <Text style={styles.addFirstText}>Add First Song</Text>
+          </TouchableOpacity>
         )}
       </View>
     );
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <LinearGradient colors={['#071420', '#0a1a2a']} style={StyleSheet.absoluteFill} />
 
       <FlatList
         data={filteredSongs}
         keyExtractor={(item) => (item.song as any).id}
-        renderItem={({ item }) => <SongListItem item={item} />}
+        renderItem={({ item }) => <SongListItem item={item} colors={colors} isDark={isDark} />}
         ListHeaderComponent={renderHeader}
         ListFooterComponent={renderFooter}
         ListEmptyComponent={renderEmpty}
@@ -199,38 +261,24 @@ export default function SongDictionaryScreen() {
   );
 }
 
-function StatCard({ value, label, color }: any) {
+function StatCard({ value, label, color, colors }: any) {
   return (
-    <GlassCard style={styles.statCard} intensity={8}>
+    <View style={[styles.statCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
       <Text style={[styles.statValue, { color }]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </GlassCard>
-  );
-}
-
-function SectionHeader({ label, color }: any) {
-  return (
-    <View style={styles.sectionHeader}>
-      <View style={[styles.sectionDot, { backgroundColor: color }]} />
-      <Text style={[styles.sectionTitle, { color }]}>{label}</Text>
+      <Text style={[styles.statLabel, { color: colors.textDim }]}>{label}</Text>
     </View>
   );
 }
 
-function SongListItem({ item }: { item: any }) {
+function SongListItem({ item, colors, isDark }: { item: any; colors: any; isDark: boolean }) {
   const song = item.song;
   const isLive = item.can_perform_live;
-  const iconColor = isLive ? '#00D4FF' : '#F59E0B';
-  const bgColor = isLive ? 'rgba(0, 212, 255, 0.1)' : 'rgba(245, 158, 11, 0.1)';
   const { mutate: deleteSong, isPending: isDeleting } = useDeleteMySong();
 
   const handleDelete = () => {
-    console.log('Delete button pressed for song:', song.title, song.id);
-    
     if (Platform.OS === 'web') {
       const confirmed = window.confirm(`Are you sure you want to remove "${song.title}" from your dictionary?`);
       if (confirmed) {
-        console.log('Web confirmation accepted, calling deleteSong...');
         deleteSong(song.id);
       }
       return;
@@ -240,14 +288,11 @@ function SongListItem({ item }: { item: any }) {
       "Delete Song",
       `Are you sure you want to remove "${song.title}" from your dictionary?`,
       [
-        { text: "Cancel", style: "cancel", onPress: () => console.log('Delete cancelled') },
+        { text: "Cancel", style: "cancel" },
         { 
           text: "Delete", 
           style: "destructive", 
-          onPress: () => {
-            console.log('Mobile confirmation accepted, calling deleteSong...');
-            deleteSong(song.id);
-          }
+          onPress: () => deleteSong(song.id)
         }
       ]
     );
@@ -280,29 +325,81 @@ function SongListItem({ item }: { item: any }) {
       rightThreshold={40}
       containerStyle={styles.swipeContainer}
     >
-      <TouchableOpacity style={styles.songItem} activeOpacity={0.7}>
-        <View style={[styles.songIcon, { backgroundColor: bgColor }]}>
-          <Music size={18} color={iconColor} />
+      <View 
+        style={[
+          styles.songItem, 
+          { 
+            backgroundColor: colors.bgCard,
+            borderColor: colors.border
+          }
+        ]}
+      >
+        {/* Left Icon */}
+        <View style={[styles.songIcon, { backgroundColor: isLive ? colors.primaryLight : (isDark ? '#2D200E' : '#FEF3C7') }]}>
+          <Music size={18} color={isLive ? colors.primary : '#F59E0B'} />
         </View>
+
+        {/* Center Info */}
         <View style={styles.songInfo}>
-          <Text style={styles.songTitle} numberOfLines={1}>{song.title}</Text>
-          <Text style={styles.songSubtitle} numberOfLines={1}>{song.artist} · {item.genre || song.genre || 'General'}</Text>
+          <Text style={[styles.songTitle, { color: colors.text }]} numberOfLines={1}>{song.title}</Text>
+          <Text style={[styles.songSubtitle, { color: colors.textDim }]} numberOfLines={1}>
+            {song.artist} · {item.genre || song.genre || 'General'}
+          </Text>
           <View style={styles.starsRow}>
-            {[1,2,3,4,5].map(i => (
-              <Star key={i} size={10} color="#F59E0B" fill={i <= item.confidence_level ? "#F59E0B" : "transparent"} />
+            {[1, 2, 3, 4, 5].map(i => (
+              <Star 
+                key={i} 
+                size={11} 
+                color="#F59E0B" 
+                fill={i <= (item.confidence_level || 3) ? "#F59E0B" : "transparent"} 
+              />
             ))}
           </View>
         </View>
+
+        {/* Right Badges */}
         <View style={styles.songMeta}>
           <View style={styles.metaTop}>
-            {song.original_key && <Pill label={song.original_key} variant="cyan" />}
-            {song.bpm && <Text style={styles.timeText}>{song.bpm} BPM</Text>}
+            {song.original_key && (
+              <View style={[styles.keyBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}>
+                <Text style={[styles.keyText, { color: colors.primaryDark }]}>{song.original_key}</Text>
+              </View>
+            )}
+            {song.bpm && (
+              <Text style={[styles.bpmText, { color: colors.textDim }]}>{song.bpm} BPM</Text>
+            )}
           </View>
-          {isLive && (
-            <Text style={styles.liveTag}>LIVE</Text>
-          )}
+          <View 
+            style={[
+              styles.statusBadge, 
+              { 
+                backgroundColor: isLive ? (isDark ? '#14382A' : '#D1FAE5') : (isDark ? '#3D280E' : '#FEF3C7'),
+                borderColor: isLive ? '#10B981' : '#F59E0B'
+              }
+            ]}
+          >
+            <Text 
+              style={[
+                styles.statusBadgeText, 
+                { color: isLive ? (isDark ? '#34D399' : '#065F46') : '#B45309' }
+              ]}
+            >
+              {isLive ? 'LIVE' : 'LEARNING'}
+            </Text>
+          </View>
         </View>
-      </TouchableOpacity>
+
+        {/* Web delete button for accessibility */}
+        {Platform.OS === 'web' && (
+          <TouchableOpacity 
+            style={styles.webDeleteBtn} 
+            onPress={handleDelete}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Trash2 size={16} color={colors.textDim} />
+          </TouchableOpacity>
+        )}
+      </View>
     </Swipeable>
   );
 }
@@ -310,242 +407,178 @@ function SongListItem({ item }: { item: any }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#071420',
   },
   header: {
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: Platform.OS === 'ios' ? 56 : 28,
     paddingHorizontal: 20,
-    backgroundColor: '#071420',
+    paddingBottom: 10,
   },
   headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 25,
+    marginBottom: 20,
   },
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitleContainer: {
     flex: 1,
-    marginLeft: 15,
+    marginLeft: 14,
   },
   headerTitle: {
-    fontSize: 24,
-    color: '#F0F4FF',
-    fontFamily: 'DM Sans Bold',
+    fontSize: 22,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+    letterSpacing: -0.2,
   },
   headerSubtitle: {
     fontSize: 13,
-    color: 'rgba(150, 175, 200, 0.6)',
     fontFamily: 'DM Sans',
     marginTop: 2,
   },
   addBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#00D4FF',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: [{
-      color: 'rgba(0, 212, 255, 0.3)',
-      offsetX: 0,
-      offsetY: 4,
-      blurRadius: 8,
-    }],
-    elevation: 5,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   statsRow: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 20,
+    marginBottom: 10,
   },
   statCard: {
     flex: 1,
     alignItems: 'center',
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
   statValue: {
     fontSize: 20,
-    fontFamily: 'DM Sans Bold',
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
     marginBottom: 2,
   },
   statLabel: {
     fontSize: 9,
-    color: 'rgba(150, 175, 200, 0.5)',
-    fontFamily: 'DM Sans Bold',
-    letterSpacing: 0.5,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+    letterSpacing: 0.6,
   },
   scrollContent: {
-    paddingTop: 10,
-    paddingBottom: 40,
+    paddingBottom: 60,
   },
   searchSection: {
     paddingHorizontal: 20,
-    marginBottom: 20,
-    marginTop: 20,
+    marginTop: 10,
+    marginBottom: 14,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 15,
-    height: 50,
-    borderRadius: 15,
+    paddingHorizontal: 14,
+    height: 48,
+    borderRadius: 16,
+    borderWidth: 1,
     gap: 10,
   },
   searchInput: {
     flex: 1,
-    color: '#FFF',
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: 'DM Sans',
+    paddingVertical: 8,
   },
   filterStickyContainer: {
-    backgroundColor: '#071420',
-    paddingVertical: 10,
+    paddingBottom: 8,
   },
   filterRow: {
-    marginBottom: 15,
+    marginBottom: 12,
   },
   categoryScroll: {
     paddingHorizontal: 20,
     gap: 8,
   },
   categoryPill: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 15,
+    paddingVertical: 7,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  categoryPillActive: {
-    backgroundColor: 'rgba(0, 212, 255, 0.1)',
-    borderColor: '#00D4FF',
   },
   categoryText: {
-    fontSize: 13,
-    color: 'rgba(150, 175, 200, 0.8)',
-    fontFamily: 'DM Sans Medium',
-  },
-  categoryTextActive: {
-    color: '#00D4FF',
-    fontWeight: '700',
+    fontSize: 12,
+    fontFamily: 'DM Sans',
   },
   listSubHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 10,
+    paddingHorizontal: 22,
+    marginBottom: 6,
   },
   showingText: {
-    fontSize: 13,
-    color: 'rgba(150, 175, 200, 0.6)',
-    fontFamily: 'DM Sans',
-  },
-  sortBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  sortText: {
-    fontSize: 13,
-    color: 'rgba(150, 175, 200, 0.5)',
-    fontFamily: 'DM Sans',
-  },
-  sortPicker: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    gap: 4,
-  },
-  sortValue: {
-    fontSize: 13,
-    color: 'rgba(150, 175, 200, 0.8)',
-    fontFamily: 'DM Sans Bold',
-  },
-  songsList: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
-  },
-  sectionDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  sectionTitle: {
     fontSize: 12,
-    fontFamily: 'DM Sans Bold',
-    letterSpacing: 1,
+    fontFamily: 'DM Sans',
   },
   swipeContainer: {
-    marginHorizontal: 15,
-    marginBottom: 12,
+    marginHorizontal: 20,
+    marginBottom: 10,
   },
   songItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 15,
-    paddingVertical: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    borderRadius: 16,
-    gap: 15,
-  },
-  deleteAction: {
-    backgroundColor: '#EF4444',
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 80,
-    height: '100%',
-    borderRadius: 16,
-    marginLeft: 10,
-    gap: 4,
-  },
-  deleteActionText: {
-    color: '#FFF',
-    fontSize: 10,
-    fontFamily: 'DM Sans Bold',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 12,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
   songIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: 42,
+    height: 42,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   songInfo: {
     flex: 1,
-    gap: 2,
   },
   songTitle: {
-    fontSize: 16,
-    color: '#F0F4FF',
-    fontFamily: 'DM Sans Bold',
+    fontSize: 15,
+    fontWeight: '700',
+    fontFamily: 'DM Sans',
   },
   songSubtitle: {
-    fontSize: 13,
-    color: 'rgba(150, 175, 200, 0.6)',
+    fontSize: 12,
     fontFamily: 'DM Sans',
+    marginTop: 2,
+    marginBottom: 4,
   },
   starsRow: {
     flexDirection: 'row',
     gap: 2,
-    marginTop: 2,
   },
   songMeta: {
     alignItems: 'flex-end',
@@ -554,21 +587,96 @@ const styles = StyleSheet.create({
   metaTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
-  timeText: {
-    fontSize: 12,
-    color: 'rgba(150, 175, 200, 0.4)',
-    fontFamily: 'JetBrains Mono Bold',
-  },
-  liveTag: {
-    fontSize: 10,
-    color: '#10B981',
-    fontFamily: 'DM Sans Bold',
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+  keyBadge: {
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  keyText: {
+    fontSize: 10,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+  },
+  bpmText: {
+    fontSize: 11,
+    fontFamily: 'DM Sans',
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  statusBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+    letterSpacing: 0.5,
+  },
+  webDeleteBtn: {
+    padding: 6,
+    marginLeft: 4,
+  },
+  deleteAction: {
+    backgroundColor: '#EF4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 76,
+    height: '100%',
+    borderRadius: 18,
+    marginLeft: 8,
+    gap: 4,
+  },
+  deleteActionText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '700',
+    fontFamily: 'DM Sans',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 30,
+  },
+  emptyIconBox: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    fontFamily: 'DM Sans',
+    marginBottom: 6,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    fontFamily: 'DM Sans',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  addFirstBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 14,
+    marginTop: 20,
+  },
+  addFirstText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: 'DM Sans',
   },
   loaderContainer: {
     paddingVertical: 60,
@@ -576,37 +684,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loaderText: {
-    color: 'rgba(150, 175, 200, 0.6)',
+    fontSize: 13,
     fontFamily: 'DM Sans',
-    fontSize: 14,
-  },
-  emptyContainer: {
-    paddingVertical: 80,
-    alignItems: 'center',
-    gap: 12,
-  },
-  emptyTitle: {
-    color: '#FFF',
-    fontSize: 18,
-    fontFamily: 'DM Sans Bold',
-    marginTop: 10,
-  },
-  emptySubtitle: {
-    color: 'rgba(150, 175, 200, 0.6)',
-    fontSize: 14,
-    fontFamily: 'DM Sans',
-    textAlign: 'center',
-    paddingHorizontal: 40,
   },
   footerLoader: {
-    paddingVertical: 20,
-    alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 10,
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 20,
   },
   footerLoaderText: {
-    color: 'rgba(150, 175, 200, 0.5)',
     fontSize: 12,
     fontFamily: 'DM Sans',
   }

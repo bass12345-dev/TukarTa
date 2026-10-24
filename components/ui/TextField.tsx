@@ -7,6 +7,7 @@ import {
   TextInputProps, 
   Platform 
 } from 'react-native';
+import { useAppTheme } from '../../context/theme';
 
 interface TextFieldProps extends TextInputProps {
   label?: string;
@@ -19,21 +20,28 @@ export const TextField: React.FC<TextFieldProps> = ({
   error, 
   leftIcon, 
   style, 
+  placeholderTextColor,
   ...props 
 }) => {
+  const { colors } = useAppTheme();
+
   return (
     <View style={styles.container}>
-      {label && <Text style={styles.label}>{label}</Text>}
+      {label && <Text style={[styles.label, { color: colors.textSecondary }]}>{label}</Text>}
       <View style={[
         styles.inputWrapper,
+        {
+          backgroundColor: colors.inputBg,
+          borderColor: colors.inputBorder,
+        },
         props.multiline && styles.inputWrapperMultiline,
         error ? styles.inputError : null,
       ]}>
         {leftIcon && <View style={styles.iconContainer}>{leftIcon}</View>}
         <TextInput
-          style={[styles.input, style]}
-          placeholderTextColor="rgba(255, 255, 255, 0.3)"
-          selectionColor="#00D4FF"
+          style={[styles.input, { color: colors.inputText }, style]}
+          placeholderTextColor={placeholderTextColor || colors.inputPlaceholder}
+          selectionColor={colors.primary}
           autoCapitalize="none"
           {...props}
         />
@@ -50,34 +58,19 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.5)',
     marginBottom: 6,
     marginLeft: 4,
     fontFamily: 'DM Sans',
+    fontWeight: '600',
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    height: 54,
+    height: 52,
     paddingHorizontal: 16,
     paddingVertical: Platform.OS === 'ios' ? 8 : 0,
-    ...Platform.select({
-      ios: {
-        boxShadow: [{
-          color: 'rgba(0, 0, 0, 0.1)',
-          offsetX: 0,
-          offsetY: 2,
-          blurRadius: 4,
-        }],
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
   },
   inputWrapperMultiline: {
     height: undefined,
@@ -86,16 +79,15 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   inputError: {
-    borderColor: 'rgba(239, 68, 68, 0.5)',
-    backgroundColor: 'rgba(239, 68, 68, 0.05)',
+    borderColor: '#EF4444',
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
   },
   iconContainer: {
     marginRight: 12,
-    opacity: 0.6,
+    opacity: 0.8,
   },
   input: {
     flex: 1,
-    color: '#FFFFFF',
     fontSize: 15,
     fontFamily: 'DM Sans',
     height: '100%',

@@ -33,6 +33,7 @@ import {
   FlatList,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAppTheme } from '../context/theme';
 import { Button } from '../components/ui/Button';
 import { GlassCard } from '../components/ui/GlassCard';
 import {
@@ -120,6 +121,7 @@ function parseAIMessage(content: string) {
 
 // ─── Proposal Card Component ─────────────────────────────────────────────────
 function ProposalCard({ action, onApprove, onCancel }: any) {
+  const { colors, isDark } = useAppTheme();
   const type = action.type?.toLowerCase() || '';
   const isSong = type === 'add' || type === 'add_song' || type === 'proposal_add_song';
   const isGig = type === 'proposal_create_gig' || type === 'create_gig';
@@ -128,27 +130,32 @@ function ProposalCard({ action, onApprove, onCancel }: any) {
   const isApplied = action.isApplied;
 
   return (
-    <GlassCard 
-      intensity={isApplied ? 30 : 12} 
-      style={[styles.proposalCard, isApplied && styles.proposalCardActive]}
-      noPadding
+    <View 
+      style={[
+        styles.proposalCard, 
+        { 
+          backgroundColor: colors.bgCard, 
+          borderColor: isApplied ? colors.primary : colors.border 
+        },
+        isApplied && { backgroundColor: colors.primaryLight }
+      ]}
     >
       <View style={styles.proposalContent}>
-        <View style={[styles.proposalIconBox, { backgroundColor: isSong ? 'rgba(0,212,255,0.06)' : isGig ? 'rgba(245,158,11,0.06)' : isDictionary ? 'rgba(16,185,129,0.06)' : 'rgba(139,92,246,0.06)' }]}>
-          {isSong && <Music size={18} color="#00D4FF" />}
+        <View style={[styles.proposalIconBox, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}>
+          {isSong && <Music size={18} color={colors.primary} />}
           {isGig && <Calendar size={18} color="#F59E0B" />}
-          {isInvite && <UserPlus size={18} color="#8B5CF6" />}
-          {isDictionary && <Check size={18} color="#10B981" />}
+          {isInvite && <UserPlus size={18} color={colors.primaryDark} />}
+          {isDictionary && <Check size={18} color={colors.primary} />}
         </View>
         
         <View style={styles.proposalTextContainer}>
-          <Text style={styles.proposalTitle} numberOfLines={1}>
+          <Text style={[styles.proposalTitle, { color: colors.text }]} numberOfLines={1}>
             {isSong ? (action.data?.title || action.title || 'SONG SUGGESTION') : 
              isGig ? (action.data?.name || 'GIG PROPOSAL') : 
              isDictionary ? (action.data?.title || 'ADD TO DICTIONARY') : 
              isInvite ? (action.data?.musicianName || 'RECRUITMENT') : 'PROPOSAL'}
           </Text>
-          <Text style={styles.proposalSubtitle} numberOfLines={1}>
+          <Text style={[styles.proposalSubtitle, { color: colors.textDim }]} numberOfLines={1}>
             {isSong ? (action.data?.artist || action.artist || 'Proposed addition') : 
              isGig ? (action.data?.venue || 'Proposed event') : 
              isDictionary ? `${action.data?.artist || ''} • ${action.data?.genre || 'Music'}` : 
@@ -159,26 +166,33 @@ function ProposalCard({ action, onApprove, onCancel }: any) {
         <View style={styles.proposalRight}>
           {!isApplied ? (
             <View style={styles.proposalActionsRow}>
-              <TouchableOpacity style={styles.miniCancelBtn} onPress={onCancel}>
-                <X size={14} color="rgba(255,255,255,0.3)" />
+              <TouchableOpacity 
+                style={[styles.miniCancelBtn, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]} 
+                onPress={onCancel}
+              >
+                <X size={14} color={colors.textDim} />
               </TouchableOpacity>
-              <TouchableOpacity onPress={onApprove} style={styles.approveMiniBtn}>
-                <Text style={styles.approveMiniText}>Approve</Text>
+              <TouchableOpacity 
+                onPress={onApprove} 
+                style={[styles.approveMiniBtn, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]}
+              >
+                <Text style={[styles.approveMiniText, { color: colors.primaryDark }]}>Approve</Text>
               </TouchableOpacity>
             </View>
           ) : (
-            <View style={styles.checkboxActive}>
+            <View style={[styles.checkboxActive, { backgroundColor: colors.primary }]}>
               <Check size={14} color="#FFF" strokeWidth={3} />
             </View>
           )}
         </View>
       </View>
-    </GlassCard>
+    </View>
   );
 }
 
 // ─── Typing Indicator ────────────────────────────────────────────────────────
 function TypingIndicator() {
+  const { colors } = useAppTheme();
   const [dots, setDots] = useState('');
   
   useEffect(() => {
@@ -190,12 +204,12 @@ function TypingIndicator() {
 
   return (
     <View style={[styles.msgWrapper, styles.msgWrapperAI]}>
-      <GlassCard intensity={15} style={[styles.msgBubble, styles.msgBubbleAI, { paddingVertical: 12, paddingHorizontal: 16 }]}>
-        <Text style={styles.aiLabel}>TUKARTA BOT IS TYPING</Text>
+      <View style={[styles.msgBubble, styles.msgBubbleAI, { backgroundColor: colors.bgCard, borderColor: colors.border, paddingVertical: 12, paddingHorizontal: 16 }]}>
+        <Text style={[styles.aiLabel, { color: colors.primary }]}>TUKARTA BOT IS TYPING</Text>
         <View style={styles.dotsRow}>
-          <Text style={styles.typingText}>Thinking{dots}</Text>
+          <Text style={[styles.typingText, { color: colors.textDim }]}>Thinking{dots}</Text>
         </View>
-      </GlassCard>
+      </View>
     </View>
   );
 }
@@ -214,6 +228,7 @@ export default function AIAgentScreen() {
   const isCreatingSession = useRef(false);
   const autoCreatedSessionRef = useRef<string | null>(null);
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useAppTheme();
 
   // 1. Data Hooks
   const { data: gig } = useGigDetails(gigId as string);
@@ -424,12 +439,19 @@ export default function AIAgentScreen() {
       
       setMessages((prev) => [...prev, aiReply]);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-    } catch (error) {
+    } catch (error: any) {
       console.error('AI error:', error);
+      const isGroqModelError = error?.message?.includes('llama-3.3-70b-versatile') || error?.message?.includes('Groq API Error');
+      
+      let replyText = "Sorry, I'm having trouble connecting right now. 🎤 Catching my breath!";
+      if (isGroqModelError) {
+        replyText = "⚠️ Groq Model Notice: Your Supabase Edge Function attempted to call `llama-3.3-70b-versatile`, which is restricted or unavailable on this Groq API key.\n\n✅ The edge function codebase has been updated with `llama-3.1-8b-instant` and an automatic multi-model fallback chain!\n\nTo update your live Supabase cloud deployment, run:\n`npx supabase functions deploy setlist-agent --no-verify-jwt`";
+      }
+
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        segments: [{ text: "Sorry, I'm having trouble connecting right now. 🎤 Catching my breath!" }],
+        segments: [{ text: replyText }],
       };
       setMessages((prev) => [...prev, errorMsg]);
     }
@@ -574,24 +596,24 @@ export default function AIAgentScreen() {
   const filteredSessions = (sessions as any[] || []).filter((s: any) => s.ai_messages && s.ai_messages.length > 0);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={[styles.header, { paddingTop: insets.top + (Platform.OS === 'ios' ? 10 : 20), height: 74 + insets.top }]}>
+      <View style={[styles.header, { backgroundColor: colors.bg, borderBottomColor: colors.border, paddingTop: insets.top + (Platform.OS === 'ios' ? 10 : 20), height: 74 + insets.top }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
-          <ChevronLeft size={20} color="rgba(255,255,255,0.7)" />
-          <Text style={styles.backText}>Back</Text>
+          <ChevronLeft size={20} color={colors.text} />
+          <Text style={[styles.backText, { color: colors.text }]}>Back</Text>
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <View style={styles.agentAvatar}>
-            <Text style={styles.agentAvatarIcon}>✦</Text>
+          <View style={[styles.agentAvatar, { backgroundColor: colors.primaryLight, borderColor: colors.border }]}>
+            <Text style={[styles.agentAvatarIcon, { color: colors.primaryDark }]}>✦</Text>
           </View>
           <View style={styles.headerInfo}>
-            <Text style={styles.headerTitle}>✦ TukarTa Bot</Text>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>✦ TukarTa Bot</Text>
             <View style={styles.statusRow}>
               <View style={styles.onlineDot} />
-              <Text style={styles.headerStatus}>
+              <Text style={[styles.headerStatus, { color: colors.textDim }]}>
                 {sessionId ? `Active Session` : 'Creating Session...'}
               </Text>
             </View>
@@ -599,10 +621,11 @@ export default function AIAgentScreen() {
         </View>
 
         <TouchableOpacity 
-          style={styles.historyBtn} 
+          style={[styles.historyBtn, { backgroundColor: colors.bgSecondary, borderColor: colors.border, borderWidth: 1 }]} 
           onPress={() => setIsHistoryVisible(true)}
+          activeOpacity={0.7}
         >
-          <History size={20} color="rgba(255,255,255,0.7)" />
+          <History size={20} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
@@ -612,58 +635,62 @@ export default function AIAgentScreen() {
         transparent={true}
         onRequestClose={() => setIsHistoryVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <GlassCard intensity={40} style={styles.modalContent}>
+        <View style={[styles.modalOverlay, { backgroundColor: isDark ? 'rgba(0,0,0,0.75)' : 'rgba(0,0,0,0.5)' }]}>
+          <View style={[styles.modalContent, { backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1 }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Chat History</Text>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Chat History</Text>
               <TouchableOpacity onPress={() => setIsHistoryVisible(false)}>
-                <X size={24} color="#FFF" />
+                <X size={24} color={colors.text} />
               </TouchableOpacity>
             </View>
 
             <TouchableOpacity 
-              style={styles.newChatBtn} 
+              style={[styles.newChatBtn, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]} 
               onPress={() => {
                 setIsHistoryVisible(false);
                 handleNewChat();
               }}
             >
-              <Plus size={20} color="#00D4FF" />
-              <Text style={styles.newChatText}>Start New Conversation</Text>
+              <Plus size={20} color={colors.primaryDark} />
+              <Text style={[styles.newChatText, { color: colors.primaryDark }]}>Start New Conversation</Text>
             </TouchableOpacity>
 
             {isLoadingSessions ? (
-              <ActivityIndicator color="#00D4FF" style={{ marginTop: 40 }} />
+              <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
             ) : (
               <FlatList
                 data={filteredSessions}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
                   <TouchableOpacity 
-                    style={[styles.sessionItem, sessionId === item.id && styles.activeSessionItem]}
+                    style={[
+                      styles.sessionItem, 
+                      { backgroundColor: colors.bgSecondary, borderColor: colors.border },
+                      sessionId === item.id && { borderColor: colors.primary, borderWidth: 1.5 }
+                    ]}
                     onPress={() => {
                       setSessionId(item.id);
                       setIsHistoryVisible(false);
                     }}
                   >
                     <View style={styles.sessionInfo}>
-                      <Text style={styles.sessionTitle} numberOfLines={1}>{item.title}</Text>
-                      <Text style={styles.sessionDate}>
+                      <Text style={[styles.sessionTitle, { color: colors.text }]} numberOfLines={1}>{item.title}</Text>
+                      <Text style={[styles.sessionDate, { color: colors.textDim }]}>
                         {new Date(item.created_at).toLocaleDateString()}
                       </Text>
                     </View>
-                    {sessionId === item.id && <Circle size={8} color="#00D4FF" fill="#00D4FF" />}
+                    {sessionId === item.id && <Circle size={8} color={colors.primary} fill={colors.primary} />}
                   </TouchableOpacity>
                 )}
                 ListEmptyComponent={
                   <View style={styles.emptySessionsWrapper}>
-                    <Text style={styles.emptySessions}>No past conversations found.</Text>
-                    <Text style={styles.emptySessionsSub}>Start a conversation to see it here.</Text>
+                    <Text style={[styles.emptySessions, { color: colors.text }]}>No past conversations found.</Text>
+                    <Text style={[styles.emptySessionsSub, { color: colors.textDim }]}>Start a conversation to see it here.</Text>
                   </View>
                 }
               />
             )}
-          </GlassCard>
+          </View>
         </View>
       </Modal>
 
@@ -679,28 +706,35 @@ export default function AIAgentScreen() {
         >
           {showWelcome && (
             <View style={styles.welcomeContainer}>
-              <View style={styles.agentAvatarLarge}>
-                <Text style={styles.agentAvatarIconLarge}>✦</Text>
+              <View style={[styles.agentAvatarLarge, { backgroundColor: colors.primaryLight, borderColor: colors.border }]}>
+                <Text style={[styles.agentAvatarIconLarge, { color: colors.primary }]}>✦</Text>
               </View>
-              <Text style={styles.welcomeTitle}>
+              <Text style={[styles.welcomeTitle, { color: colors.text }]}>
                 {gig ? `Planning for ${gig.name}` : 'How can I help today?'}
               </Text>
-              <Text style={styles.welcomeSub}>
+              <Text style={[styles.welcomeSub, { color: colors.textDim }]}>
                 I can help you build setlists, hire musicians, or plan your next performance.
               </Text>
             </View>
           )}
 
           {isLoadingHistory && sessionId && (
-             <ActivityIndicator color="#00D4FF" style={{ marginTop: 20 }} />
+             <ActivityIndicator color={colors.primary} style={{ marginTop: 20 }} />
           )}
 
           {messages.map((msg) => (
             <View key={msg.id}>
               <View style={[styles.msgWrapper, msg.role === 'user' ? styles.msgWrapperUser : styles.msgWrapperAI]}>
-                <View style={[styles.msgBubble, msg.role === 'user' ? styles.msgBubbleUser : styles.msgBubbleAI]}>
+                <View 
+                  style={[
+                    styles.msgBubble, 
+                    msg.role === 'user' 
+                      ? [styles.msgBubbleUser, { backgroundColor: colors.primary }] 
+                      : [styles.msgBubbleAI, { backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1 }]
+                  ]}
+                >
                   {msg.role === 'assistant' && (
-                    <Text style={styles.aiLabel}>TUKARTA BOT</Text>
+                    <Text style={[styles.aiLabel, { color: colors.primary }]}>TUKARTA BOT</Text>
                   )}
                   
                   {msg.role === 'assistant' && msg.isAnimating ? (
@@ -713,12 +747,12 @@ export default function AIAgentScreen() {
                       }} 
                     />
                   ) : (
-                    <RichText segments={msg.segments} isUser={msg.role === 'user'} />
+                    <RichText segments={msg.segments} isUser={msg.role === 'user'} colors={colors} />
                   )}
                   
                   {msg.badge && (
-                    <View style={styles.badge}>
-                      <Text style={styles.badgeText}>{msg.badge}</Text>
+                    <View style={[styles.badge, { borderTopColor: colors.border }]}>
+                      <Text style={[styles.badgeText, { color: colors.primaryDark }]}>{msg.badge}</Text>
                     </View>
                   )}
                 </View>
@@ -746,34 +780,48 @@ export default function AIAgentScreen() {
           {aiMutation.isPending && <TypingIndicator />}
         </ScrollView>
 
-        <View style={[styles.inputOuter, { paddingBottom: insets.bottom > 0 ? insets.bottom : 20 }]}>
-          <View style={styles.inputInner}>
+        <View style={[styles.inputOuter, { backgroundColor: colors.bg, paddingBottom: insets.bottom > 0 ? insets.bottom : 20 }]}>
+          <View style={[styles.inputInner, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
             <View style={styles.actionBtns}>
-              <TouchableOpacity style={styles.actionBtn} onPress={handleCaptureImage} disabled={isExtracting}>
-                <Camera size={20} color="rgba(255,255,255,0.5)" />
+              <TouchableOpacity 
+                style={[styles.actionBtn, { backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1 }]} 
+                onPress={handleCaptureImage} 
+                disabled={isExtracting}
+                activeOpacity={0.7}
+              >
+                <Camera size={18} color={colors.primary} />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.actionBtn} onPress={handlePickImage} disabled={isExtracting}>
-                <ImageIcon size={20} color="rgba(255,255,255,0.5)" />
+              <TouchableOpacity 
+                style={[styles.actionBtn, { backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1 }]} 
+                onPress={handlePickImage} 
+                disabled={isExtracting}
+                activeOpacity={0.7}
+              >
+                <ImageIcon size={18} color={colors.primary} />
               </TouchableOpacity>
             </View>
             <TextInput
-              style={styles.input}
+              style={[
+                styles.input,
+                { color: colors.inputText },
+                Platform.OS === 'web' && ({ outlineStyle: 'none' } as any),
+              ]}
               placeholder={isExtracting ? "Extracting songs..." : "e.g. 'Plan a bar gig for next Friday'"}
-              placeholderTextColor="rgba(255,255,255,0.3)"
+              placeholderTextColor={colors.inputPlaceholder}
               value={input}
               onChangeText={setInput}
               multiline
               editable={!aiMutation.isPending && !!sessionId && !isExtracting}
             />
             <TouchableOpacity 
-              style={[styles.sendBtn, (!input.trim() || !sessionId || isExtracting) && { opacity: 0.5 }]} 
+              style={[styles.sendBtn, { backgroundColor: colors.primary }, (!input.trim() || !sessionId || isExtracting) && { opacity: 0.5 }]} 
               onPress={() => handleSend()}
               disabled={!input.trim() || aiMutation.isPending || !sessionId || isExtracting}
             >
               {aiMutation.isPending || isExtracting ? (
                 <ActivityIndicator size="small" color="#FFF" />
               ) : (
-                <Send size={20} color="#FFF" />
+                <Send size={18} color="#FFF" />
               )}
             </TouchableOpacity>
           </View>
@@ -783,12 +831,15 @@ export default function AIAgentScreen() {
   );
 }
 
-function RichText({ segments, isUser }: { segments: Segment[]; isUser: boolean }) {
+function RichText({ segments, isUser, colors }: { segments: Segment[]; isUser: boolean; colors?: any }) {
+  const textColor = isUser ? '#FFFFFF' : (colors?.text || '#166534');
+  const highlightColor = isUser ? '#FFFFFF' : (colors?.primaryDark || '#065F46');
+
   return (
-    <Text style={[styles.msgText, isUser && styles.msgTextUser]}>
+    <Text style={[styles.msgText, { color: textColor }]}>
       {segments.map((seg, i) =>
         seg.highlight ? (
-          <Text key={i} style={styles.highlight}>{seg.text}</Text>
+          <Text key={i} style={[styles.highlight, { color: highlightColor }]}>{seg.text}</Text>
         ) : (
           <Text key={i}>{seg.text}</Text>
         )
@@ -800,15 +851,12 @@ function RichText({ segments, isUser }: { segments: Segment[]; isUser: boolean }
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#071420',
   },
   header: {
-    backgroundColor: 'rgba(7, 20, 32, 0.95)',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
   },
   backBtn: {
     flexDirection: 'row',
@@ -817,8 +865,9 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   backText: {
-    color: 'rgba(255,255,255,0.7)',
     fontSize: 14,
+    fontFamily: 'DM Sans',
+    fontWeight: '600',
   },
   headerCenter: {
     flex: 1,
@@ -830,14 +879,11 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(139, 92, 246, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.3)',
   },
   agentAvatarIcon: {
-    color: '#8B5CF6',
     fontSize: 18,
   },
   headerInfo: {
@@ -845,8 +891,8 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#FFF',
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
   },
   statusRow: {
     flexDirection: 'row',
@@ -854,20 +900,19 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   onlineDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
     backgroundColor: '#10B981',
   },
   headerStatus: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.4)',
+    fontFamily: 'DM Sans',
   },
   historyBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -881,40 +926,37 @@ const styles = StyleSheet.create({
   welcomeContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 40,
+    paddingVertical: 50,
+    paddingHorizontal: 30,
   },
   agentAvatarLarge: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
     borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.2)',
   },
   agentAvatarIconLarge: {
-    fontSize: 40,
-    color: '#8B5CF6',
+    fontSize: 36,
   },
   welcomeTitle: {
     fontSize: 22,
-    fontWeight: '700',
-    color: '#FFF',
+    fontWeight: '800',
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
+    fontFamily: 'DM Sans',
   },
   welcomeSub: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.5)',
     textAlign: 'center',
     lineHeight: 20,
+    fontFamily: 'DM Sans',
   },
   msgWrapper: {
     flexDirection: 'row',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   msgWrapperAI: {
     justifyContent: 'flex-start',
@@ -928,44 +970,39 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   msgBubbleAI: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderBottomLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   msgBubbleUser: {
-    backgroundColor: '#8B5CF6',
     borderBottomRightRadius: 4,
   },
   aiLabel: {
     fontSize: 9,
-    fontWeight: '700',
-    color: '#8B5CF6',
+    fontWeight: '800',
     marginBottom: 6,
-    letterSpacing: 1.5,
+    letterSpacing: 1.2,
+    fontFamily: 'DM Sans',
   },
   msgText: {
     fontSize: 15,
     lineHeight: 22,
-    color: 'rgba(255,255,255,0.9)',
+    fontFamily: 'DM Sans',
   },
   msgTextUser: {
-    color: '#FFF',
+    color: '#FFFFFF',
   },
   highlight: {
-    color: '#00D4FF',
     fontWeight: '700',
+    fontFamily: 'DM Sans',
   },
   badge: {
     marginTop: 10,
-    paddingTop: 10,
+    paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.05)',
   },
   badgeText: {
     fontSize: 11,
-    color: '#10B981',
     fontWeight: '700',
+    fontFamily: 'DM Sans',
   },
   dotsRow: {
     flexDirection: 'row',
@@ -973,25 +1010,22 @@ const styles = StyleSheet.create({
   },
   typingText: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.4)',
     fontStyle: 'italic',
+    fontFamily: 'DM Sans',
   },
   proposalsContainer: {
-    paddingHorizontal: 14,
-    marginBottom: 24,
+    paddingHorizontal: 10,
+    marginBottom: 18,
     gap: 8,
   },
   proposalCard: {
     height: 70,
-    borderRadius: 24,
-    borderWidth: 1.2,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 20,
+    borderWidth: 1,
     overflow: 'hidden',
   },
   proposalCardActive: {
-    borderColor: '#00D4FF',
     borderWidth: 1.5,
-    backgroundColor: 'rgba(0, 212, 255, 0.06)',
   },
   proposalContent: {
     flex: 1,
@@ -1000,27 +1034,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   proposalIconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
   },
   proposalTextContainer: {
     flex: 1,
-    marginLeft: 14,
+    marginLeft: 12,
   },
   proposalTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
-    color: '#FFF',
+    fontFamily: 'DM Sans',
   },
   proposalSubtitle: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.3)',
     marginTop: 1,
+    fontFamily: 'DM Sans',
   },
   proposalRight: {
     marginLeft: 10,
@@ -1031,86 +1064,76 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   approveMiniBtn: {
-    backgroundColor: 'rgba(0, 212, 255, 0.1)',
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(0, 212, 255, 0.2)',
   },
   approveMiniText: {
-    color: '#00D4FF',
     fontSize: 12,
     fontWeight: '800',
     textTransform: 'uppercase',
+    fontFamily: 'DM Sans',
   },
   miniCancelBtn: {
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.03)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
   },
   checkboxActive: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#00D4FF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   inputOuter: {
-    padding: 20,
-    paddingTop: 0,
-    backgroundColor: '#071420',
+    paddingHorizontal: 16,
+    paddingTop: 4,
   },
   inputInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 24,
-    paddingLeft: 10,
+    paddingLeft: 8,
     paddingRight: 6,
-    paddingVertical: 6,
+    paddingVertical: 4,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
   },
   actionBtns: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
     gap: 4,
   },
   actionBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.03)',
   },
   input: {
     flex: 1,
-    color: '#FFF',
-    fontSize: 15,
-    maxHeight: 120,
-    paddingTop: 10,
-    paddingBottom: 10,
+    fontSize: 14,
+    maxHeight: 100,
+    paddingTop: 8,
+    paddingBottom: 8,
+    paddingHorizontal: 8,
+    fontFamily: 'DM Sans',
   },
   sendBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#8B5CF6',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'flex-end',
   },
   modalContent: {
@@ -1123,69 +1146,63 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: '700',
-    color: '#FFF',
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
   },
   newChatBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: 'rgba(0,212,255,0.1)',
     padding: 16,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0,212,255,0.2)',
     marginBottom: 20,
   },
   newChatText: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#00D4FF',
+    fontWeight: '700',
+    fontFamily: 'DM Sans',
   },
   sessionItem: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 1,
     marginBottom: 10,
     gap: 12,
   },
   activeSessionItem: {
-    backgroundColor: 'rgba(139, 92, 246, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.2)',
   },
   sessionInfo: {
     flex: 1,
   },
   sessionTitle: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#FFF',
+    fontWeight: '700',
     marginBottom: 4,
+    fontFamily: 'DM Sans',
   },
   sessionDate: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.3)',
+    fontFamily: 'DM Sans',
   },
   emptySessionsWrapper: {
     alignItems: 'center',
     paddingTop: 40,
-    opacity: 0.5,
   },
   emptySessions: {
-    color: '#FFF',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
+    fontFamily: 'DM Sans',
   },
   emptySessionsSub: {
-    color: '#FFF',
     fontSize: 12,
     marginTop: 4,
+    fontFamily: 'DM Sans',
   },
 });

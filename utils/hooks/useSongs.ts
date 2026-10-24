@@ -1,9 +1,7 @@
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
-import { supabase } from '../supabase';
+import { supabase, getCurrentUser } from '../supabase';
 import { searchSongs, getArtistMetadata, SongResult, getLyrics } from '../musicApi';
 import { Alert } from 'react-native';
-
-// ... (existing hooks)
 
 export function useSongLyrics(songId: string, artist: string, title: string) {
   return useQuery({
@@ -33,14 +31,20 @@ export function useSongLyrics(songId: string, artist: string, title: string) {
         expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
       };
 
-      // 3. Update Cache
-      await supabase
-        .from('lyrics_cache')
-        .upsert(result, { onConflict: 'song_id' });
+      // 3. Update Cache (silently catch so RLS doesn't block lyrics)
+      try {
+        await supabase
+          .from('lyrics_cache')
+          .upsert(result, { onConflict: 'song_id' });
+      } catch (cacheErr) {
+        // Silently continue
+      }
 
       return result;
     },
     enabled: !!songId && !!artist && !!title,
+    staleTime: 1000 * 60 * 60 * 24, // 24 hours: lyrics don't change
+    gcTime: 1000 * 60 * 60 * 24,
   });
 }
 
@@ -48,7 +52,8 @@ export function useSearchSongs(query: string) {
   return useQuery({
     queryKey: ['songs', 'search', query],
     queryFn: () => searchSongs(query),
-    enabled: query.length > 2,
+    enabled: query.trim().length > 2,
+    staleTime: 1000 * 60 * 5, // 5 minutes cache for song searches
   });
 }
 
@@ -57,7 +62,7 @@ export function useAddSong() {
 
   return useMutation({
     mutationFn: async (song: Omit<SongResult, 'id'>) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error('User not authenticated');
 
       // 1. Try to find the song or insert it
@@ -91,6 +96,8 @@ export function useAddSong() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-songs'] });
+      queryClient.invalidateQueries({ queryKey: ['my-known-songs'] });
+      queryClient.invalidateQueries({ queryKey: ['song-stats'] });
     },
   });
 }
@@ -99,7 +106,7 @@ export function useInfiniteMySongs(pageSize = 20) {
   return useInfiniteQuery({
     queryKey: ['my-songs', 'infinite'],
     queryFn: async ({ pageParam = 0 }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error('Not authenticated');
 
       const from = pageParam * pageSize;
@@ -132,6 +139,7 @@ export function useInfiniteMySongs(pageSize = 20) {
     getNextPageParam: (lastPage, allPages) => {
       return lastPage.length === pageSize ? allPages.length : undefined;
     },
+    staleTime: 1000 * 60 * 3, // 3 minutes fresh
   });
 }
 
@@ -140,7 +148,7 @@ export function useAddMultipleSongs() {
 
   return useMutation({
     mutationFn: async (songs: Array<{ title: string; artist: string; genre: string }>) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error('User not authenticated');
 
       // 1. Pre-process and normalize in-memory to prevent duplicates in the batch
@@ -156,12 +164,11 @@ export function useAddMultipleSongs() {
       ).values());
 
       // 2. Batch Upsert into Songs table
-      // select() returns all matching/inserted rows so we get the IDs
       const { data: songData, error: songError } = await supabase
         .from('songs')
         .upsert(uniqueToSave, { 
           onConflict: 'title, artist',
-          ignoreDuplicates: false // We want the IDs back for existing ones too
+          ignoreDuplicates: false
         })
         .select('id');
 
@@ -179,7 +186,7 @@ export function useAddMultipleSongs() {
         confidence_level: 5,
         can_perform_live: true,
         source: 'screenshot',
-        genre: songs[idx].genre
+        genre: songs[idx]?.genre || 'Music'
       }));
 
       const { error: knowledgeError } = await supabase
@@ -193,6 +200,8 @@ export function useAddMultipleSongs() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-songs'] });
+      queryClient.invalidateQueries({ queryKey: ['my-known-songs'] });
+      queryClient.invalidateQueries({ queryKey: ['song-stats'] });
     },
   });
 }
@@ -209,13 +218,12 @@ export function useAnalyzeScreenshot() {
     },
   });
 }
+
 export function useUpdateSongArtist() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ songId, artist, title, setlistId, position }: { songId: string; artist: string; title: string; setlistId?: string; position?: number }) => {
-      // 1. Ensure the song with the correct title/artist exists in the catalog
-      // This will either return the existing song or create a new one
       const { data: targetSong, error: songError } = await supabase
         .from('songs')
         .upsert({ title, artist }, { onConflict: 'title, artist' })
@@ -225,19 +233,14 @@ export function useUpdateSongArtist() {
       if (songError) throw songError;
       if (!targetSong) throw new Error('Failed to resolve song');
 
-      // 2. If it's for a setlist, update the setlist reference
       if (setlistId) {
-        // If the solved song ID is different from the current one, we need to swap them
         if (targetSong.id !== songId) {
-          // 1. Remove the old (incorrect/unknown) song from this setlist FIRST
-          // to free up its position in the database constraint
           await supabase
             .from('setlist_songs')
             .delete()
             .eq('setlist_id', setlistId)
             .eq('song_id', songId);
 
-          // 2. Now add/update the correct song to that position
           const { error: upsertError } = await supabase
             .from('setlist_songs')
             .upsert({
@@ -247,9 +250,6 @@ export function useUpdateSongArtist() {
             }, { onConflict: 'setlist_id, song_id' });
 
           if (upsertError) throw upsertError;
-        } else {
-          // If IDs are the same, the update already happened via upsert on 'songs'
-          // (though technically upsert on same ID with same values does nothing)
         }
       }
 
@@ -268,7 +268,7 @@ export function useDeleteMySong() {
 
   return useMutation({
     mutationFn: async (songId: string) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error('Not authenticated');
 
       const { error } = await supabase
@@ -280,8 +280,9 @@ export function useDeleteMySong() {
       if (error) throw error;
     },
     onSuccess: () => {
-      console.log('Song deleted successfully, invalidating queries...');
       queryClient.invalidateQueries({ queryKey: ['my-songs'] });
+      queryClient.invalidateQueries({ queryKey: ['my-known-songs'] });
+      queryClient.invalidateQueries({ queryKey: ['song-stats'] });
     },
     onError: (error) => {
       console.error('Failed to delete song:', error);

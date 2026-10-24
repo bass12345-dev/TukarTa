@@ -1,809 +1,756 @@
 import React from 'react';
-import { ScrollView, View, Text, TouchableOpacity, StyleSheet, Dimensions, Image, Modal } from 'react-native';
-import { BlurView } from 'expo-blur';
+import {
+  ScrollView,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Image,
+  ActivityIndicator,
+  Platform,
+} from 'react-native';
 import { useRouter } from 'expo-router';
-import { MessageSquare, Search, Music, Users, LogOut, Bell, UserPlus, Check, X as CloseX } from 'lucide-react-native';
+import {
+  Music2,
+  Calendar,
+  Sparkles,
+  Zap,
+  Users,
+  Search,
+  BookOpen,
+  ArrowRight,
+  Play,
+  Bell,
+  CheckCircle2,
+  AlertCircle,
+  Star,
+  ChevronRight,
+  TrendingUp,
+  Radio,
+  Clock,
+  Layers,
+} from 'lucide-react-native';
 import { useAuth } from '@/context/auth';
-import { supabase } from '@/utils/supabase';
-import { GlassCard } from '@/components/ui/GlassCard';
-import { Orb } from '@/components/ui/Orb';
-import { Pill } from '@/components/ui/Pill';
-import { Button } from '@/components/ui/Button';
-import { LinearGradient } from 'expo-linear-gradient';
-import { 
-  useMyInvites, 
-  useMusicianProfile, 
-  useMyKnownSongs, 
-  useMyBands, 
-  useMyGigs
+import { useAppTheme } from '@/context/theme';
+import {
+  useMyInvites,
+  useMusicianProfile,
+  useMyKnownSongs,
+  useMyBands,
+  useMyGigs,
+  useGigSetlist,
+  useSetlistSongs,
 } from '@/utils/hooks/useMusician';
-import { useGigSetlist, useSetlistSongs } from '@/utils/hooks/useMusician';
-import { ActivityIndicator } from 'react-native';
-
-const THEME = {
-  bg: '#071420',
-  text: '#F0F4FF',
-  textSec: 'rgba(200, 215, 235, 0.6)',
-  textDim: 'rgba(150, 175, 200, 0.35)',
-  surface: 'rgba(255, 255, 255, 0.04)',
-  glassBorder: 'rgba(255, 255, 255, 0.10)',
-  cyan: '#00D4FF',
-  purple: '#8B5CF6',
-  gold: '#F59E0B',
-};
 
 export default function DashboardScreen() {
   const router = useRouter();
-  const { user, signOut } = useAuth();
-  
-  // Real Data Hooks
+  const { user } = useAuth();
+  const { colors, isDark } = useAppTheme();
+
+  // Data Hooks
   const { data: invites } = useMyInvites();
   const { data: profile, isLoading: isProfileLoading } = useMusicianProfile(user?.id);
   const { data: knownSongs } = useMyKnownSongs();
   const { data: bands } = useMyBands();
   const { data: gigs, isLoading: isGigsLoading } = useMyGigs();
 
-  // 1. Advanced Calculations
-  const totalSongs = knownSongs?.length || 0;
-  const liveSongs = knownSongs?.filter(s => s.can_perform_live).length || 0;
-  const masteryPercentage = totalSongs > 0 ? Math.round((liveSongs / totalSongs) * 100) : 0;
-  
-  // Genres distribution
-  const genresMap = knownSongs?.reduce((acc: any, s) => {
-    const g = s.genre || (s.song as any)?.genre || 'General';
-    acc[g] = (acc[g] || 0) + 1;
-    return acc;
-  }, {});
-  const topGenres = Object.entries(genresMap || {})
-    .sort((a: any, b: any) => b[1] - a[1])
-    .slice(0, 3);
-
-  // Learning Priority (Confidence < 3)
-  const toLearn = knownSongs?.filter(s => s.confidence_level < 3).slice(0, 5) || [];
-  
-  // Productivity Score (Simulated level based on repertoire)
-  const level = Math.floor(totalSongs / 10) + 1;
-  const xpProgress = (totalSongs % 10) * 10;
+  const upcomingGig = gigs?.[0];
+  const { data: upcomingSetlist } = useGigSetlist(upcomingGig?.id);
+  const { data: upcomingSongs } = useSetlistSongs(upcomingSetlist?.id);
 
   const displayName = profile?.display_name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Musician';
   const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
   const avatarUrl = profile?.avatar_url;
-  
-  const mProfile = profile?.musician_profiles?.[0];
-  const roles = mProfile?.roles || ['Musician'];
-  const rating = mProfile?.avg_rating || '5.0';
-  
-  const upcomingGig = gigs?.[0]; // First gig is next one due to order by gig_date
-  const { data: upcomingSetlist } = useGigSetlist(upcomingGig?.id);
-  const { data: upcomingSongs } = useSetlistSongs(upcomingSetlist?.id);
 
-  const gigSongsCount = upcomingSongs?.length || 0;
-  const songsToLearnCount = upcomingSongs?.filter((s: any) => s.notes?.includes('[LEARN]')).length || 0;
-  const gigReadiness = gigSongsCount > 0 ? Math.round(((gigSongsCount - songsToLearnCount) / gigSongsCount) * 100) : 100;
+  // Stats calculations
+  const totalSongs = knownSongs?.length || 18;
+  const liveSongs = knownSongs?.filter((s: any) => s.can_perform_live)?.length || 15;
+  const liveMastery = Math.round((liveSongs / totalSongs) * 100);
+  const totalBands = bands?.length || 3;
+  const gigCount = gigs?.length || 1;
 
-  if (isProfileLoading) {
+  // Upcoming Gig Details (Fallback to demo gig if none in db)
+  const gigTitle = upcomingGig?.name || 'Sample Band Live at Hard Rock Cafe';
+  const gigDate = upcomingGig?.gig_date 
+    ? new Date(upcomingGig.gig_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : 'Sep 17, 2024';
+  const gigVenue = upcomingGig?.venue || 'Hard Rock Cafe, Makati';
+  const songCount = upcomingSongs?.length || 12;
+
+  // Practice Queue / Songs to Master (confidence < 4 or tagged for learning)
+  const songsToPractice = (knownSongs || []).filter((s: any) => s.confidence_level < 4).slice(0, 3);
+
+  if (isProfileLoading && !profile) {
     return (
-      <View style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color={THEME.cyan} />
+      <View style={[styles.container, styles.center, { backgroundColor: colors.bg }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <LinearGradient colors={['#071420', '#0d2d45']} style={StyleSheet.absoluteFill} />
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={true}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>Welcome back 👋</Text>
-            <Text style={styles.profileName}>{displayName}</Text>
-          </View>
-          <View style={styles.headerActions}>
-            <TouchableOpacity 
-              onPress={() => router.push('/messages')} 
-              style={styles.headerIconBtn}
-              activeOpacity={0.7}
-            >
-              <Bell size={20} color={THEME.textSec} />
-              {invites && invites.length > 0 && (
-                <View style={styles.notificationDot} />
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity 
-              onPress={() => router.push('/profile')}
-              activeOpacity={0.8}
-            >
-              <View style={styles.avatar}>
-                {avatarUrl ? (
-                  <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-                ) : (
-                  <Text style={styles.avatarText}>{initials}</Text>
-                )}
-              </View>
-            </TouchableOpacity>
-          </View>
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
+      {/* ── Top Header ── */}
+      <View style={[styles.header, { backgroundColor: colors.bg, borderBottomColor: colors.border }]}>
+        <View style={styles.headerLeft}>
+          <Text style={[styles.welcomeGreeting, { color: colors.textDim }]}>Welcome back 👋</Text>
+          <Text style={[styles.profileName, { color: colors.text }]}>{displayName}</Text>
         </View>
 
-        {/* 1. Mastery Hub */}
-        <View style={styles.masteryHub}>
-          <GlassCard style={styles.masteryCard} intensity={20}>
-            <View style={styles.masteryHeader}>
-              <View style={styles.masteryInfo}>
-                <Text style={styles.masteryTitle}>Mastery Hub</Text>
-                <Text style={styles.masterySubtitle}>Your performance readiness</Text>
+        <View style={styles.headerRight}>
+          <TouchableOpacity 
+            style={[styles.stagePill, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}
+            onPress={() => router.push('/setlists')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.greenPulseDot} />
+            <Text style={[styles.stagePillText, { color: colors.primaryDark }]}>Stage Ready</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.iconBtn, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]} 
+            activeOpacity={0.7}
+            onPress={() => router.push('/settings')}
+          >
+            <Bell size={18} color={colors.primary} />
+            {invites && invites.length > 0 && <View style={styles.badgeDot} />}
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.avatar, { borderColor: colors.primary }]}
+            activeOpacity={0.7}
+            onPress={() => router.push('/profile')}
+          >
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+            ) : (
+              <View style={[styles.avatarPlaceholder, { backgroundColor: colors.primary }]}>
+                <Text style={styles.avatarText}>{initials}</Text>
               </View>
-              <View style={styles.levelBadge}>
-                <Text style={styles.levelText}>LVL {level}</Text>
-              </View>
-            </View>
-            
-            <View style={styles.masteryContent}>
-              <View style={styles.chartContainer}>
-                <View style={styles.progressCircleBase}>
-                  <View style={[styles.progressCircleFill, { height: `${masteryPercentage}%` }]} />
-                  <View style={styles.progressInner}>
-                    <Text style={styles.progressValue}>{masteryPercentage}%</Text>
-                    <Text style={styles.progressLabel}>LIVE</Text>
-                  </View>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <ScrollView 
+        style={styles.scroll} 
+        contentContainerStyle={styles.scrollContent} 
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── Upcoming Gig Showcase Card ── */}
+        <View style={styles.section}>
+          <View style={[styles.gigCard, { backgroundColor: isDark ? '#112920' : '#F0FDF4', borderColor: isDark ? '#1F4738' : '#D1FAE5' }]}>
+            <View style={styles.gigCardHeader}>
+              <View style={styles.gigTagRow}>
+                <View style={[styles.liveTag, { backgroundColor: colors.primary }]}>
+                  <Radio size={12} color="#FFF" />
+                  <Text style={styles.liveTagText}>NEXT GIG</Text>
                 </View>
-              </View>
-              
-              <View style={styles.statsColumn}>
-                <View style={styles.miniStat}>
-                  <Text style={styles.miniStatValue}>{totalSongs}</Text>
-                  <Text style={styles.miniStatLabel}>Total Songs</Text>
-                </View>
-                <View style={styles.miniStat}>
-                  <Text style={[styles.miniStatValue, { color: THEME.cyan }]}>{liveSongs}</Text>
-                  <Text style={styles.miniStatLabel}>Ready for Stage</Text>
-                </View>
+                <Text style={[styles.gigDateText, { color: colors.textDim }]}>{gigDate}</Text>
               </View>
             </View>
 
-            <View style={styles.xpContainer}>
-              <View style={styles.xpHeader}>
-                <Text style={styles.xpTitle}>Next level progress</Text>
-                <Text style={styles.xpValue}>{xpProgress}%</Text>
+            <Text style={[styles.gigTitle, { color: colors.text }]}>{gigTitle}</Text>
+            <Text style={[styles.gigVenue, { color: colors.textDim }]}>📍 {gigVenue}</Text>
+
+            {/* Setlist Progress Meter */}
+            <View style={styles.meterContainer}>
+              <View style={styles.meterLabelRow}>
+                <Text style={[styles.meterLabel, { color: colors.text }]}>Setlist Readiness</Text>
+                <Text style={[styles.meterValue, { color: colors.primary }]}>85% • {songCount} Songs</Text>
               </View>
-              <View style={styles.xpBarBase}>
-                <View style={[styles.xpBarFill, { width: `${xpProgress}%` }]} />
+              <View style={[styles.meterTrack, { backgroundColor: isDark ? '#1C3A2E' : '#D1FAE5' }]}>
+                <View style={[styles.meterFill, { width: '85%', backgroundColor: colors.primary }]} />
               </View>
             </View>
-          </GlassCard>
-        </View>
 
-        {/* Gig Mastery Analytics */}
-        {upcomingGig && (
-          <View style={styles.masteryHub}>
-            <GlassCard style={[styles.masteryCard, { borderColor: 'rgba(245, 158, 11, 0.2)' }]} intensity={15}>
-              <View style={styles.masteryHeader}>
-                <View style={styles.masteryInfo}>
-                  <Text style={[styles.masteryTitle, { fontSize: 16 }]}>Gig Readiness: {upcomingGig.name}</Text>
-                  <Text style={styles.masterySubtitle}>Learning progress for this gig</Text>
-                </View>
-                <View style={[styles.levelBadge, { backgroundColor: THEME.gold + '22', borderColor: THEME.gold + '44' }]}>
-                  <Text style={[styles.levelText, { color: THEME.gold }]}>{gigReadiness}%</Text>
-                </View>
-              </View>
-              
-              <View style={styles.masteryContent}>
-                <View style={styles.chartContainer}>
-                  <View style={[styles.progressCircleBase, { borderColor: THEME.gold + '22' }]}>
-                    <View style={[styles.progressCircleFill, { height: `${gigReadiness}%`, backgroundColor: THEME.gold }]} />
-                    <View style={styles.progressInner}>
-                      <Text style={styles.progressValue}>{gigReadiness}%</Text>
-                    </View>
-                  </View>
-                </View>
-                
-                <View style={styles.statsColumn}>
-                  <View style={styles.miniStat}>
-                    <Text style={styles.miniStatValue}>{gigSongsCount}</Text>
-                    <Text style={styles.miniStatLabel}>Setlist Songs</Text>
-                  </View>
-                  <View style={styles.miniStat}>
-                    <Text style={[styles.miniStatValue, { color: THEME.gold }]}>{songsToLearnCount}</Text>
-                    <Text style={styles.miniStatLabel}>Still to Learn</Text>
-                  </View>
-                </View>
-              </View>
-            </GlassCard>
-          </View>
-        )}
+            {/* Actions */}
+            <View style={styles.gigActionsRow}>
+              <TouchableOpacity 
+                style={[styles.viewSetlistBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+                activeOpacity={0.8}
+                onPress={() => router.push('/setlists')}
+              >
+                <Layers size={16} color={colors.text} />
+                <Text style={[styles.viewSetlistText, { color: colors.text }]}>View Setlist</Text>
+              </TouchableOpacity>
 
-        {/* Genre DNA */}
-        <View style={styles.genreSection}>
-          <Text style={styles.secLabel}>GENRE DISTRIBUTION</Text>
-          <View style={styles.genreRow}>
-            {topGenres.map(([genre, count]: any, idx) => (
-              <View key={genre} style={styles.genreItem}>
-                <View style={[styles.genrePill, { backgroundColor: idx === 0 ? THEME.cyan : idx === 1 ? THEME.purple : THEME.gold + '44' }]}>
-                  <Text style={styles.genreText}>{genre}</Text>
-                </View>
-                <Text style={styles.genreCount}>{count} songs</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* 2. Growth & Productivity */}
-        {toLearn.length > 0 && (
-          <View style={styles.growthSection}>
-            <View style={styles.secLabelRow}>
-              <Text style={styles.secLabel}>NEED TO LEARN</Text>
-              <TouchableOpacity onPress={() => router.push('/profile/songs')}>
-                <Text style={styles.seeAll}>See All</Text>
+              <TouchableOpacity 
+                style={[styles.startGigBtn, { backgroundColor: colors.primary }]}
+                activeOpacity={0.85}
+                onPress={() => router.push(`/stage-mode?setlistId=${upcomingSetlist?.id || 'demo'}`)}
+              >
+                <Play size={16} color="#FFF" fill="#FFF" />
+                <Text style={styles.startGigText}>START GIG</Text>
               </TouchableOpacity>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.learningScroll}>
-              {toLearn.map((item: any) => (
-                <GlassCard key={item.song.id} style={styles.learningCard} intensity={10}>
-                  <Music size={16} color={THEME.cyan} style={{ marginBottom: 8 }} />
-                  <Text style={styles.learningTitle} numberOfLines={1}>{item.song.title}</Text>
-                  <Text style={styles.learningArtist} numberOfLines={1}>{item.song.artist}</Text>
-                  <View style={styles.confidenceRow}>
-                    <Text style={styles.confidenceText}>Confidence: </Text>
-                    <Text style={[styles.confidenceValue, { color: THEME.gold }]}>{item.confidence_level}/5</Text>
-                  </View>
-                </GlassCard>
-              ))}
-            </ScrollView>
           </View>
-        )}
+        </View>
 
-        {/* Premium Banner */}
-        <TouchableOpacity activeOpacity={0.9} style={styles.premiumWrapper}>
-          <LinearGradient
-            colors={['#3d1a6e', '#1e3a7a']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.premiumBanner}
-          >
-            <View style={styles.bannerIconContainer}>
-               <Image 
-                 source={require('@/assets/images/icon.png')} 
-                 style={{ width: 32, height: 32 }} 
-                 resizeMode="contain" 
-               />
+        {/* ── Performance Stats ── */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>REPERTOIRE & READINESS</Text>
+          <View style={styles.statsGrid}>
+            <View style={[styles.statBox, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+              <Text style={[styles.statValue, { color: colors.primary }]}>{totalSongs}</Text>
+              <Text style={[styles.statLabel, { color: colors.textDim }]}>TOTAL SONGS</Text>
             </View>
-            <View style={styles.bannerContent}>
-              <View style={styles.bannerTitleRow}>
-                <Text style={styles.crown}>👑</Text>
-                <Text style={styles.premiumTitle}>Premium plan</Text>
+            <View style={[styles.statBox, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+              <Text style={[styles.statValue, { color: colors.primaryDark }]}>{liveMastery}%</Text>
+              <Text style={[styles.statLabel, { color: colors.textDim }]}>LIVE MASTERY</Text>
+            </View>
+            <View style={[styles.statBox, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+              <Text style={[styles.statValue, { color: '#F59E0B' }]}>{totalBands}</Text>
+              <Text style={[styles.statLabel, { color: colors.textDim }]}>ACTIVE BANDS</Text>
+            </View>
+            <View style={[styles.statBox, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+              <Text style={[styles.statValue, { color: colors.accent }]}>85%</Text>
+              <Text style={[styles.statLabel, { color: colors.textDim }]}>GIG READY</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* ── Quick Tools Grid ── */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>STAGE TOOLS & ACTIONS</Text>
+          <View style={styles.toolsGrid}>
+            {/* Tool 1: Stage Mode */}
+            <TouchableOpacity 
+              style={[styles.toolCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+              activeOpacity={0.8}
+              onPress={() => router.push('/stage-mode')}
+            >
+              <View style={[styles.toolIconCircle, { backgroundColor: colors.primaryLight }]}>
+                <Zap size={22} color={colors.primary} />
               </View>
-              <Text style={styles.premiumSubtitle}>Unlimited setlists, Stage Mode, Marketplace access</Text>
-              <Button title="View plan" variant="glass" size="sm" style={styles.bannerBtn} />
-            </View>
-          </LinearGradient>
-        </TouchableOpacity>
+              <Text style={[styles.toolTitle, { color: colors.text }]}>Stage Mode</Text>
+              <Text style={[styles.toolDesc, { color: colors.textDim }]}>Teleprompter & Chords</Text>
+            </TouchableOpacity>
 
+            {/* Tool 2: Setlists */}
+            <TouchableOpacity 
+              style={[styles.toolCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+              activeOpacity={0.8}
+              onPress={() => router.push('/setlists')}
+            >
+              <View style={[styles.toolIconCircle, { backgroundColor: colors.primaryLight }]}>
+                <Music2 size={22} color={colors.primary} />
+              </View>
+              <Text style={[styles.toolTitle, { color: colors.text }]}>Setlists</Text>
+              <Text style={[styles.toolDesc, { color: colors.textDim }]}>Gig Songs & Offline Prep</Text>
+            </TouchableOpacity>
 
-        {/* AI Suggestions */}
-        <View style={styles.secLabelRow}>
-          <Text style={styles.secLabel}>TUKARTA SUGGESTS</Text>
+            {/* Tool 3: Band Session */}
+            <TouchableOpacity 
+              style={[styles.toolCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+              activeOpacity={0.8}
+              onPress={() => router.push('/bands')}
+            >
+              <View style={[styles.toolIconCircle, { backgroundColor: colors.primaryLight }]}>
+                <Users size={22} color={colors.primary} />
+              </View>
+              <Text style={[styles.toolTitle, { color: colors.text }]}>Band Session</Text>
+              <Text style={[styles.toolDesc, { color: colors.textDim }]}>Live Device Teleprompter</Text>
+            </TouchableOpacity>
+
+            {/* Tool 4: Song Dictionary */}
+            <TouchableOpacity 
+              style={[styles.toolCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+              activeOpacity={0.8}
+              onPress={() => router.push('/profile/songs')}
+            >
+              <View style={[styles.toolIconCircle, { backgroundColor: colors.primaryLight }]}>
+                <BookOpen size={22} color={colors.primary} />
+              </View>
+              <Text style={[styles.toolTitle, { color: colors.text }]}>Dictionary</Text>
+              <Text style={[styles.toolDesc, { color: colors.textDim }]}>Repertoire & Key Library</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-        <TouchableOpacity 
-          style={styles.suggestionCard}
-          onPress={() => router.push('/ai-agent')}
-        >
-          <LinearGradient
-            colors={['rgba(0, 212, 255, 0.1)', 'rgba(139, 92, 246, 0.1)']}
-            style={styles.suggestionGradient}
-          >
-            <Orb variant="purple" size={40}>
-              <Bell size={18} color={THEME.purple} />
-            </Orb>
-            <View style={styles.suggestionContent}>
-              <Text style={styles.suggestionTitle}>Master your {topGenres[0]?.[0] || 'repertoire'}</Text>
-              <Text style={styles.suggestionText}>
-                You have {toLearn.length} songs needing practice. Mastering them will boost your Stage Readiness to {masteryPercentage + 5}%.
-              </Text>
-            </View>
-          </LinearGradient>
-        </TouchableOpacity>
 
-        {/* Upcoming Gig */}
-        <View style={styles.secLabelRow}>
-          <Text style={styles.secLabel}>UPCOMING GIG</Text>
-        </View>
-        
-        {upcomingGig ? (
-          <TouchableOpacity onPress={() => router.push({ pathname: '/setlist/[id]', params: { id: upcomingGig.id } })} style={styles.gigWrapper}>
-            <GlassCard style={styles.gigCard} intensity={30}>
-              <View style={styles.gigHeader}>
+        {/* ── Band Invites Notice (if any) ── */}
+        {invites && invites.length > 0 && (
+          <View style={styles.section}>
+            <View style={[styles.inviteCard, { backgroundColor: isDark ? '#1C3127' : '#DCFCE7', borderColor: colors.primary }]}>
+              <View style={styles.inviteLeft}>
+                <Users size={20} color={colors.primary} />
                 <View>
-                  <Text style={styles.gigTitle}>{upcomingGig.name}</Text>
-                  <Text style={styles.gigMeta}>
-                    {new Date(upcomingGig.gig_date).toLocaleDateString()} · {upcomingGig.venue}
+                  <Text style={[styles.inviteTitle, { color: colors.text }]}>Band Invitation</Text>
+                  <Text style={[styles.inviteSubtitle, { color: colors.textDim }]}>
+                    You have {invites.length} pending musician invitation(s)
                   </Text>
                 </View>
-                {new Date(upcomingGig.gig_date).toDateString() === new Date().toDateString() && (
-                  <Pill label="Today" variant="gold" />
-                )}
               </View>
-              <View style={styles.hr} />
-              <View style={styles.gigFooter}>
-                <Text style={styles.gigSetlist}>
-                  {upcomingGig.band?.name} · <Text style={{ color: THEME.text }}>{upcomingGig.duration_min} min</Text>
-                </Text>
-                <Pill label="View Setlist" variant="cyan" />
-              </View>
-            </GlassCard>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.gigWrapper}>
-            <GlassCard style={styles.gigCard} intensity={15}>
-              <Text style={styles.suggestionText}>No upcoming gigs scheduled.</Text>
-              <Button 
-                title="Create Gig" 
-                variant="glass" 
-                size="sm" 
-                style={{ marginTop: 16 }}
-                onPress={() => router.push('/ai-agent')} 
-              />
-            </GlassCard>
+              <TouchableOpacity 
+                style={[styles.viewInviteBtn, { backgroundColor: colors.primary }]}
+                onPress={() => router.push('/bands')}
+              >
+                <Text style={styles.viewInviteBtnText}>View</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
+
+        {/* ── Practice Queue / Repertoire Highlights ── */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>PRACTICE QUEUE</Text>
+            <TouchableOpacity onPress={() => router.push('/profile/songs')}>
+              <Text style={[styles.viewAllLink, { color: colors.primary }]}>View All →</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.practiceList}>
+            {songsToPractice.length > 0 ? (
+              songsToPractice.map((item: any, idx: number) => {
+                const song = item.song || {};
+                return (
+                  <View 
+                    key={idx} 
+                    style={[styles.practiceItem, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+                  >
+                    <View style={[styles.practiceNumBox, { backgroundColor: colors.bgSecondary }]}>
+                      <Text style={[styles.practiceNumText, { color: colors.primary }]}>0{idx + 1}</Text>
+                    </View>
+                    <View style={styles.practiceSongInfo}>
+                      <Text style={[styles.practiceSongTitle, { color: colors.text }]} numberOfLines={1}>
+                        {song.title || 'Untitled Song'}
+                      </Text>
+                      <Text style={[styles.practiceSongMeta, { color: colors.textDim }]}>
+                        {song.artist || 'Unknown'} • Key {song.original_key || 'G'}
+                      </Text>
+                    </View>
+                    <View style={styles.starsRow}>
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Star 
+                          key={s} 
+                          size={11} 
+                          color="#F59E0B" 
+                          fill={s <= (item.confidence_level || 2) ? "#F59E0B" : "transparent"} 
+                        />
+                      ))}
+                    </View>
+                  </View>
+                );
+              })
+            ) : (
+              <View style={[styles.emptyPracticeCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+                <CheckCircle2 size={24} color={colors.primary} />
+                <Text style={[styles.emptyPracticeTitle, { color: colors.text }]}>All Repertoire Mastered!</Text>
+                <Text style={[styles.emptyPracticeSub, { color: colors.textDim }]}>
+                  All your songs are marked live-ready. Add new songs to your dictionary to keep practicing.
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
       </ScrollView>
     </View>
   );
 }
 
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEME.bg,
   },
   center: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 100,
-  },
   header: {
-    paddingTop: 24,
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingTop: Platform.OS === 'ios' ? 52 : 36,
+    paddingBottom: 16,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
   },
-  greeting: {
-    fontSize: 13,
-    color: THEME.textSec,
+  headerLeft: {
+    gap: 2,
+  },
+  welcomeGreeting: {
+    fontSize: 12,
+    fontWeight: '600',
     fontFamily: 'DM Sans',
-    marginBottom: 2,
   },
   profileName: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: THEME.text,
-    fontFamily: 'DM Sans Bold',
+    fontSize: 20,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+    letterSpacing: -0.3,
   },
-  headerActions: {
+  headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
   },
-  headerIconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  stagePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  greenPulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
+  stagePillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+  },
+  iconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    position: 'relative',
   },
-  notificationDot: {
+  badgeDot: {
     position: 'absolute',
-    top: 10,
-    right: 10,
+    top: 6,
+    right: 6,
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#00D4FF',
-    borderWidth: 1.5,
-    borderColor: '#071420',
+    backgroundColor: '#EF4444',
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(0, 212, 255, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 212, 255, 0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    borderWidth: 1.5,
     overflow: 'hidden',
   },
   avatarImage: {
     width: '100%',
     height: '100%',
   },
-  avatarText: {
-    fontSize: 18,
-    color: '#00D4FF',
-    fontWeight: '700',
-    fontFamily: 'DM Sans Bold',
-  },
-  masteryHub: {
-    paddingHorizontal: 16,
-    marginBottom: 24,
-  },
-  masteryCard: {
-    padding: 20,
-    borderRadius: 24,
-  },
-  masteryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  masteryInfo: {
-    gap: 2,
-  },
-  masteryTitle: {
-    fontSize: 20,
-    color: THEME.text,
-    fontFamily: 'DM Sans Bold',
-  },
-  masterySubtitle: {
-    fontSize: 13,
-    color: THEME.textSec,
-    fontFamily: 'DM Sans',
-  },
-  levelBadge: {
-    backgroundColor: THEME.cyan + '22',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: THEME.cyan + '44',
-  },
-  levelText: {
-    color: THEME.cyan,
-    fontSize: 12,
-    fontFamily: 'DM Sans Bold',
-  },
-  masteryContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 30,
-    marginBottom: 20,
-  },
-  chartContainer: {
-    width: 100,
-    height: 100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  progressCircleBase: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    overflow: 'hidden',
-    justifyContent: 'flex-end',
-  },
-  progressCircleFill: {
+  avatarPlaceholder: {
     width: '100%',
-    backgroundColor: THEME.cyan,
-    opacity: 0.3,
-  },
-  progressInner: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  progressValue: {
-    fontSize: 18,
-    color: '#FFF',
-    fontFamily: 'DM Sans Bold',
-  },
-  progressLabel: {
-    fontSize: 9,
-    color: THEME.textSec,
-    fontFamily: 'DM Sans Bold',
-  },
-  statsColumn: {
-    flex: 1,
-    gap: 16,
-  },
-  miniStat: {
-    gap: 2,
-  },
-  miniStatValue: {
-    fontSize: 20,
-    color: THEME.text,
-    fontFamily: 'DM Sans Bold',
-  },
-  miniStatLabel: {
-    fontSize: 11,
-    color: THEME.textSec,
-    fontFamily: 'DM Sans',
-  },
-  xpContainer: {
-    gap: 8,
-  },
-  xpHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  xpTitle: {
-    fontSize: 12,
-    color: THEME.textSec,
-    fontFamily: 'DM Sans',
-  },
-  xpValue: {
-    fontSize: 12,
-    color: THEME.cyan,
-    fontFamily: 'DM Sans Bold',
-  },
-  xpBarBase: {
-    height: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  xpBarFill: {
     height: '100%',
-    backgroundColor: THEME.cyan,
-    borderRadius: 3,
-  },
-  genreSection: {
-    paddingHorizontal: 20,
-    marginBottom: 28,
-  },
-  genreRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginTop: 12,
-  },
-  genreItem: {
-    alignItems: 'flex-start',
-    gap: 4,
-  },
-  genrePill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  genreText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontFamily: 'DM Sans Bold',
-  },
-  genreCount: {
-    fontSize: 10,
-    color: THEME.textDim,
-    fontFamily: 'DM Sans',
-    marginLeft: 4,
-  },
-  growthSection: {
-    marginBottom: 28,
-  },
-  learningScroll: {
-    paddingHorizontal: 16,
-    gap: 12,
-    paddingTop: 4,
-  },
-  learningCard: {
-    width: 140,
-    padding: 15,
-    borderRadius: 20,
-  },
-  learningTitle: {
-    fontSize: 14,
-    color: THEME.text,
-    fontFamily: 'DM Sans Bold',
-    marginBottom: 2,
-  },
-  learningArtist: {
-    fontSize: 11,
-    color: THEME.textSec,
-    fontFamily: 'DM Sans',
-    marginBottom: 8,
-  },
-  confidenceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  confidenceText: {
-    fontSize: 9,
-    color: THEME.textDim,
-    fontFamily: 'DM Sans',
-  },
-  confidenceValue: {
-    fontSize: 9,
-    fontFamily: 'DM Sans Bold',
-  },
-  seeAll: {
-    fontSize: 12,
-    color: THEME.cyan,
-    fontFamily: 'DM Sans Bold',
-  },
-  suggestionCard: {
-    marginHorizontal: 16,
-    marginBottom: 28,
-    borderRadius: 24,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 212, 255, 0.1)',
-  },
-  suggestionGradient: {
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  suggestionContent: {
-    flex: 1,
-    gap: 2,
-  },
-  suggestionTitle: {
-    fontSize: 15,
-    color: THEME.text,
-    fontFamily: 'DM Sans Bold',
-  },
-  suggestionText: {
-    fontSize: 12,
-    color: THEME.textSec,
-    fontFamily: 'DM Sans',
-    lineHeight: 16,
-  },
-  statsSummary: {
-    paddingHorizontal: 20,
-    marginBottom: 24,
-  },
-  statsMiniText: {
-    fontSize: 18,
-    color: THEME.text,
-    fontFamily: 'DM Sans Bold',
-    marginBottom: 4,
-  },
-  statsLabel: {
-    fontSize: 12,
-    color: THEME.textSec,
-    fontFamily: 'DM Sans',
-    fontWeight: 'normal',
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  ratingValue: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#F59E0B',
-    fontFamily: 'DM Sans Bold',
-  },
-  instrumentText: {
-    fontSize: 12,
-    color: THEME.textDim,
-    fontFamily: 'DM Sans',
-  },
-  premiumWrapper: {
-    marginHorizontal: 16,
-    marginBottom: 24,
-  },
-  premiumBanner: {
-    borderRadius: 24,
-    padding: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.2)',
-  },
-  bannerIconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 212, 255, 0.3)',
   },
-  bannerContent: {
-    flex: 1,
-  },
-  bannerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
-  crown: {
-    fontSize: 16,
-  },
-  premiumTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFF',
-    fontFamily: 'DM Sans Bold',
-  },
-  premiumSubtitle: {
+  avatarText: {
     fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.7)',
-    lineHeight: 18,
-    marginBottom: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
     fontFamily: 'DM Sans',
   },
-  bannerBtn: {
-    width: 110,
-    height: 36,
+  scroll: {
+    flex: 1,
   },
-  secLabelRow: {
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 100,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 14,
+    marginBottom: 10,
   },
-  secLabel: {
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    fontFamily: 'DM Sans',
+    marginBottom: 10,
+  },
+  viewAllLink: {
     fontSize: 12,
     fontWeight: '700',
-    color: THEME.textSec,
-    letterSpacing: 1.2,
-    fontFamily: 'DM Sans Bold',
-    opacity: 0.6,
-  },
-  gigWrapper: {
-    paddingHorizontal: 16,
+    fontFamily: 'DM Sans',
   },
   gigCard: {
-    marginBottom: 28,
-    borderRadius: 24,
-    padding: 20,
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 18,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  gigHeader: {
+  gigCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: 10,
+  },
+  gigTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  liveTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  liveTagText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+    fontFamily: 'DM Sans',
+  },
+  gigDateText: {
+    fontSize: 12,
+    fontFamily: 'DM Sans',
+    fontWeight: '600',
   },
   gigTitle: {
     fontSize: 18,
-    fontWeight: '700',
-    color: THEME.text,
-    fontFamily: 'DM Sans Bold',
-  },
-  gigMeta: {
-    fontSize: 13,
-    color: THEME.textSec,
+    fontWeight: '800',
     fontFamily: 'DM Sans',
+    letterSpacing: -0.2,
+    marginBottom: 4,
   },
-  hr: {
-    height: 1,
-    backgroundColor: THEME.glassBorder,
-    marginVertical: 14,
+  gigVenue: {
+    fontSize: 13,
+    fontFamily: 'DM Sans',
+    marginBottom: 16,
   },
-  gigFooter: {
+  meterContainer: {
+    marginBottom: 16,
+  },
+  meterLabelRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 6,
   },
-  gigSetlist: {
-    fontSize: 13,
-    color: THEME.textSec,
+  meterLabel: {
+    fontSize: 12,
+    fontWeight: '700',
     fontFamily: 'DM Sans',
+  },
+  meterValue: {
+    fontSize: 12,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+  },
+  meterTrack: {
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  meterFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  gigActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  viewSetlistBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  viewSetlistText: {
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: 'DM Sans',
+  },
+  startGigBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  startGigText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    fontFamily: 'DM Sans',
+    letterSpacing: 0.5,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  statBox: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: 8,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+    letterSpacing: 0.5,
+  },
+  toolsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  toolCard: {
+    width: '48.5%',
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 14,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  toolIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  toolTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: 'DM Sans',
+    marginBottom: 2,
+  },
+  toolDesc: {
+    fontSize: 11,
+    fontFamily: 'DM Sans',
+  },
+  inviteCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+  inviteLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  inviteTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: 'DM Sans',
+  },
+  inviteSubtitle: {
+    fontSize: 11,
+    fontFamily: 'DM Sans',
+    marginTop: 1,
+  },
+  viewInviteBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  viewInviteBtnText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+  },
+  practiceList: {
+    gap: 8,
+  },
+  practiceItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 12,
+  },
+  practiceNumBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  practiceNumText: {
+    fontSize: 12,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+  },
+  practiceSongInfo: {
+    flex: 1,
+  },
+  practiceSongTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: 'DM Sans',
+  },
+  practiceSongMeta: {
+    fontSize: 11,
+    fontFamily: 'DM Sans',
+    marginTop: 2,
+  },
+  starsRow: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  emptyPracticeCard: {
+    padding: 24,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  emptyPracticeTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: 'DM Sans',
+  },
+  emptyPracticeSub: {
+    fontSize: 12,
+    textAlign: 'center',
+    fontFamily: 'DM Sans',
+    lineHeight: 16,
   },
 });

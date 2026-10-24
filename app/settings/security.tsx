@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Platform, TextInput, Alert, Switch } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronLeft, Lock, ShieldCheck, Eye, EyeOff, ShieldAlert, Smartphone } from 'lucide-react-native';
-import { GlassCard } from '../../components/ui/GlassCard';
-import { Button } from '../../components/ui/Button';
+import { useAppTheme } from '../../context/theme';
 
 export default function SecurityScreen() {
   const router = useRouter();
+  const { colors, isDark } = useAppTheme();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -15,24 +14,46 @@ export default function SecurityScreen() {
   const [twoFactor, setTwoFactor] = useState(false);
 
   const handleUpdatePassword = () => {
-    if (newPassword !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+    if (!currentPassword || !newPassword) {
+      if (Platform.OS === 'web') {
+        window.alert('Please fill out all password fields');
+      } else {
+        Alert.alert('Incomplete Fields', 'Please fill out all password fields');
+      }
       return;
     }
-    Alert.alert('Success', 'Password updated successfully');
+    if (newPassword !== confirmPassword) {
+      if (Platform.OS === 'web') {
+        window.alert('Passwords do not match');
+      } else {
+        Alert.alert('Error', 'Passwords do not match');
+      }
+      return;
+    }
+    if (Platform.OS === 'web') {
+      window.alert('Password updated successfully');
+    } else {
+      Alert.alert('Success', 'Password updated successfully');
+    }
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <LinearGradient colors={['#071420', '#0d2d45']} style={StyleSheet.absoluteFill} />
 
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <ChevronLeft size={24} color="#FFF" />
+      <View style={[styles.header, { backgroundColor: colors.bg, borderBottomColor: colors.border }]}>
+        <TouchableOpacity 
+          onPress={() => router.back()} 
+          style={[styles.backBtn, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}
+          activeOpacity={0.7}
+        >
+          <ChevronLeft size={22} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Security & Privacy</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Security & Privacy</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -40,96 +61,101 @@ export default function SecurityScreen() {
         
         {/* Password Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>CHANGE PASSWORD</Text>
-          <GlassCard style={styles.formCard} intensity={12}>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>CHANGE PASSWORD</Text>
+          <View style={[styles.formCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
             <View style={styles.inputItem}>
-              <Lock size={18} color="rgba(255,255,255,0.4)" />
+              <Lock size={18} color={colors.textDim} />
               <TextInput 
-                style={styles.input}
+                style={[styles.input, { color: colors.inputText }, Platform.OS === 'web' && ({ outlineStyle: 'none' } as any)]}
                 placeholder="Current Password"
-                placeholderTextColor="rgba(255,255,255,0.2)"
+                placeholderTextColor={colors.inputPlaceholder}
                 secureTextEntry={!showPass}
                 value={currentPassword}
                 onChangeText={setCurrentPassword}
               />
               <TouchableOpacity onPress={() => setShowPass(!showPass)}>
-                {showPass ? <EyeOff size={18} color="rgba(255,255,255,0.4)" /> : <Eye size={18} color="rgba(255,255,255,0.4)" />}
+                {showPass ? <EyeOff size={18} color={colors.textDim} /> : <Eye size={18} color={colors.textDim} />}
               </TouchableOpacity>
             </View>
-            <View style={styles.hr} />
+
+            <View style={[styles.hr, { backgroundColor: colors.border }]} />
+
             <View style={styles.inputItem}>
-              <Lock size={18} color="rgba(255,255,255,0.4)" />
+              <Lock size={18} color={colors.textDim} />
               <TextInput 
-                style={styles.input}
+                style={[styles.input, { color: colors.inputText }, Platform.OS === 'web' && ({ outlineStyle: 'none' } as any)]}
                 placeholder="New Password"
-                placeholderTextColor="rgba(255,255,255,0.2)"
+                placeholderTextColor={colors.inputPlaceholder}
                 secureTextEntry={!showPass}
                 value={newPassword}
                 onChangeText={setNewPassword}
               />
             </View>
-            <View style={styles.hr} />
+
+            <View style={[styles.hr, { backgroundColor: colors.border }]} />
+
             <View style={styles.inputItem}>
-              <Lock size={18} color="rgba(255,255,255,0.4)" />
+              <Lock size={18} color={colors.textDim} />
               <TextInput 
-                style={styles.input}
+                style={[styles.input, { color: colors.inputText }, Platform.OS === 'web' && ({ outlineStyle: 'none' } as any)]}
                 placeholder="Confirm New Password"
-                placeholderTextColor="rgba(255,255,255,0.2)"
+                placeholderTextColor={colors.inputPlaceholder}
                 secureTextEntry={!showPass}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
               />
             </View>
-          </GlassCard>
-          <Button 
-            title="Update Password" 
-            variant="glass" 
-            style={styles.actionBtn}
+          </View>
+
+          <TouchableOpacity 
+            style={[styles.updateBtn, { backgroundColor: colors.primary }]} 
             onPress={handleUpdatePassword}
-          />
+            activeOpacity={0.85}
+          >
+            <Text style={styles.updateBtnText}>Update Password</Text>
+          </TouchableOpacity>
         </View>
 
         {/* 2FA Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>TWO-FACTOR AUTHENTICATION</Text>
-          <GlassCard style={styles.toggleCard} intensity={12} contentContainerStyle={styles.toggleContent}>
-            <View style={styles.toggleLeft}>
-              <View style={styles.iconBubble}>
-                <Smartphone size={20} color="#00D4FF" />
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>AUTHENTICATION</Text>
+          <View style={[styles.featureCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+            <View style={styles.featureLeft}>
+              <View style={[styles.iconBubble, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}>
+                <Smartphone size={20} color={colors.primary} />
               </View>
-              <View style={styles.labelArea}>
-                <Text style={styles.toggleLabel}>2FA Authentication</Text>
-                <Text style={styles.toggleSublabel}>Secure your account with a secondary verification code.</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.featureLabel, { color: colors.text }]}>Two-Factor Authentication</Text>
+                <Text style={[styles.featureSub, { color: colors.textDim }]}>
+                  Require a verification code on every new sign in
+                </Text>
               </View>
             </View>
             <Switch 
               value={twoFactor} 
-              onValueChange={setTwoFactor}
-              trackColor={{ false: 'rgba(255,255,255,0.05)', true: 'rgba(0, 212, 255, 0.4)' }}
-              thumbColor={twoFactor ? '#00D4FF' : '#455a64'}
+              onValueChange={setTwoFactor} 
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor={Platform.OS === 'ios' ? undefined : (twoFactor ? '#FFFFFF' : '#9CA3AF')}
             />
-          </GlassCard>
+          </View>
         </View>
 
-        {/* Privacy Section */}
+        {/* Data & Privacy */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>PRIVACY SETTINGS</Text>
-          <GlassCard style={styles.privacyCard} intensity={12}>
-            <PrivacyItem label="Public Profile" sublabel="Allow anyone to view your musician details" active />
-            <View style={styles.hr} />
-            <PrivacyItem label="Show Rates" sublabel="Display your hourly rate on search results" active />
-            <View style={styles.hr} />
-            <PrivacyItem label="Online Status" sublabel="Let others see when you are active" />
-          </GlassCard>
-        </View>
-
-        {/* Danger Zone */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: '#FF4B4B' }]}>DANGER ZONE</Text>
-          <TouchableOpacity style={styles.deleteBtn}>
-             <ShieldAlert size={18} color="#FF4B4B" />
-             <Text style={styles.deleteText}>Delete Account Permanently</Text>
-          </TouchableOpacity>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>DATA ACCESS</Text>
+          <View style={[styles.featureCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+            <View style={styles.featureLeft}>
+              <View style={[styles.iconBubble, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}>
+                <ShieldCheck size={20} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.featureLabel, { color: colors.text }]}>Cloud Setlist Backup</Text>
+                <Text style={[styles.featureSub, { color: colors.textDim }]}>
+                  Automated encrypted sync with PostgreSQL Supabase
+                </Text>
+              </View>
+            </View>
+          </View>
         </View>
 
       </ScrollView>
@@ -137,51 +163,31 @@ export default function SecurityScreen() {
   );
 }
 
-function PrivacyItem({ label, sublabel, active }: any) {
-  return (
-    <View style={styles.privacyItem}>
-      <View style={styles.privacyInfo}>
-        <Text style={styles.privacyLabel}>{label}</Text>
-        <Text style={styles.privacySublabel}>{sublabel}</Text>
-      </View>
-      <Switch 
-        value={active} 
-        onValueChange={() => {}} 
-        trackColor={{ false: 'rgba(255,255,255,0.05)', true: 'rgba(0, 212, 255, 0.4)' }}
-        thumbColor={active ? '#00D4FF' : '#455a64'}
-      />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#071420',
   },
   header: {
-    height: 100,
+    height: Platform.OS === 'ios' ? 100 : 70,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'ios' ? 40 : 10,
     borderBottomWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
   },
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: '700',
-    color: '#FFF',
-    fontFamily: 'DM Sans Bold',
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
   },
   scroll: {
     flex: 1,
@@ -192,121 +198,97 @@ const styles = StyleSheet.create({
   },
   section: {
     paddingHorizontal: 20,
-    marginBottom: 35,
+    marginBottom: 28,
   },
   sectionTitle: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.3)',
-    fontWeight: '700',
+    fontWeight: '800',
     letterSpacing: 1.2,
-    marginBottom: 16,
-    fontFamily: 'DM Sans Bold',
+    marginBottom: 12,
+    fontFamily: 'DM Sans',
+    paddingLeft: 4,
   },
   formCard: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginBottom: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    marginBottom: 14,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
   inputItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 60,
-    paddingHorizontal: 16,
+    height: 52,
     gap: 12,
   },
   input: {
     flex: 1,
-    height: '100%',
-    color: '#FFF',
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: 'DM Sans',
   },
   hr: {
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    marginLeft: 44,
   },
-  actionBtn: {
-    height: 52,
-    borderRadius: 16,
+  updateBtn: {
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  toggleCard: {
+  updateBtnText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: 'DM Sans',
+  },
+  featureCard: {
     borderRadius: 20,
-  },
-  toggleContent: {
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
     justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
-  toggleLeft: {
+  featureLeft: {
     flex: 1,
     flexDirection: 'row',
-    gap: 16,
     alignItems: 'center',
+    gap: 14,
+    marginRight: 10,
   },
   iconBubble: {
-    width: 44,
-    height: 44,
+    width: 42,
+    height: 42,
     borderRadius: 14,
-    backgroundColor: 'rgba(0, 212, 255, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  labelArea: {
-    flex: 1,
-  },
-  toggleLabel: {
-    fontSize: 16,
-    color: '#FFF',
-    fontFamily: 'DM Sans Bold',
-    marginBottom: 2,
-  },
-  toggleSublabel: {
-    fontSize: 12,
-    color: 'rgba(150, 175, 200, 0.5)',
-    fontFamily: 'DM Sans',
-    lineHeight: 18,
-  },
-  privacyCard: {
-    borderRadius: 20,
-    overflow: 'hidden',
-  },
-  privacyItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-  },
-  privacyInfo: {
-    flex: 1,
-    paddingRight: 10,
-  },
-  privacyLabel: {
-    fontSize: 16,
-    color: '#FFF',
-    fontFamily: 'DM Sans Bold',
-    marginBottom: 2,
-  },
-  privacySublabel: {
-    fontSize: 12,
-    color: 'rgba(150, 175, 200, 0.5)',
-    fontFamily: 'DM Sans',
-  },
-  deleteBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 75, 75, 0.05)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 75, 75, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  deleteText: {
-    color: '#FF4B4B',
+  featureLabel: {
     fontSize: 15,
-    fontFamily: 'DM Sans Bold',
-  }
+    fontWeight: '700',
+    fontFamily: 'DM Sans',
+    marginBottom: 2,
+  },
+  featureSub: {
+    fontSize: 12,
+    fontFamily: 'DM Sans',
+    lineHeight: 16,
+  },
 });

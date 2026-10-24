@@ -13,6 +13,7 @@ import { Stack, useRouter } from 'expo-router';
 import { Search, MapPin, Star, Music2, AlertCircle } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useDiscoverMusicians } from '../../utils/hooks/useMusician';
+import { useAppTheme } from '../../context/theme';
 
 const FILTERS = ['All', 'Singer', 'Guitarist', 'Bassist', 'Drummer', 'Keys'];
 
@@ -47,6 +48,7 @@ function MatchBar({ value }: { value: number }) {
 
 export default function DiscoverScreen() {
   const router = useRouter();
+  const { colors, isDark } = useAppTheme();
   const [activeFilter, setActiveFilter] = useState('All');
   const [query, setQuery] = useState('');
 
@@ -71,35 +73,40 @@ export default function DiscoverScreen() {
   };
 
   const getAvatarColor = (id: string) => {
-    const colors = ['#1E40AF', '#065F46', '#7C3AED', '#B45309', '#BE123C'];
-    const index = parseInt(id.slice(-1), 16) % colors.length;
-    return colors[isNaN(index) ? 0 : index];
+    const palette = isDark 
+      ? ['#065F46', '#1E3A8A', '#5B21B6', '#92400E', '#831843'] 
+      : ['#D1FAE5', '#DBEAFE', '#EDE9FE', '#FEF3C7', '#FFE4E6'];
+    const index = parseInt(id.slice(-1), 16) % palette.length;
+    return palette[isNaN(index) ? 0 : index];
   };
 
   return (
-    <View style={styles.container}>
-      <LinearGradient colors={['#071420', '#0d2d45']} style={StyleSheet.absoluteFill} />
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: colors.bg, borderBottomColor: colors.border }]}>
         <View>
-          <Text style={styles.eyebrow}>EXPLORE</Text>
-          <Text style={styles.title}>Discover Musicians</Text>
+          <Text style={[styles.eyebrow, { color: colors.primary }]}>EXPLORE</Text>
+          <Text style={[styles.title, { color: colors.text }]}>Discover Musicians</Text>
         </View>
         <TouchableOpacity 
-          style={styles.headerBadge}
+          style={[styles.headerBadge, { backgroundColor: colors.primaryLight, borderColor: colors.border }]}
           onPress={() => router.push('/(tabs)')}
         >
-          <Music2 size={18} color="#00D4FF" />
+          <Music2 size={18} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
-      <View style={styles.searchWrapper}>
-        <Search size={16} color="rgba(255,255,255,0.35)" style={styles.searchIcon} />
+      <View style={[styles.searchWrapper, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
+        <Search size={16} color={colors.textDim} style={styles.searchIcon} />
         <TextInput
           placeholder="Search by name, genre..."
-          placeholderTextColor="rgba(255,255,255,0.22)"
-          style={styles.searchInput}
+          placeholderTextColor={colors.inputPlaceholder}
+          style={[
+            styles.searchInput,
+            { color: colors.inputText },
+            Platform.OS === 'web' && ({ outlineStyle: 'none' } as any)
+          ]}
           value={query}
           onChangeText={setQuery}
         />
@@ -117,11 +124,27 @@ export default function DiscoverScreen() {
             return (
               <TouchableOpacity
                 key={f}
-                style={[styles.filterPill, active && styles.filterPillActive]}
+                style={[
+                  styles.filterPill, 
+                  { 
+                    backgroundColor: active ? colors.primary : colors.bgCard,
+                    borderColor: active ? colors.primary : colors.border
+                  }
+                ]}
                 onPress={() => setActiveFilter(f)}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.filterText, active && styles.filterTextActive]}>{f}</Text>
+                <Text 
+                  style={[
+                    styles.filterText, 
+                    { 
+                      color: active ? '#FFFFFF' : colors.text,
+                      fontWeight: active ? '700' : '600'
+                    }
+                  ]}
+                >
+                  {f}
+                </Text>
               </TouchableOpacity>
             );
           })}
@@ -129,7 +152,7 @@ export default function DiscoverScreen() {
       </View>
 
       {!isLoading && !error && (
-        <Text style={styles.sortLabel}>
+        <Text style={[styles.sortLabel, { color: colors.textDim }]}>
           {filtered.length} musicians · sorted by song match
         </Text>
       )}
@@ -141,15 +164,15 @@ export default function DiscoverScreen() {
       >
         {isLoading && (
           <View style={styles.centerState}>
-            <ActivityIndicator size="large" color="#00D4FF" />
-            <Text style={styles.emptyText}>Finding talent...</Text>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.emptyText, { color: colors.textDim }]}>Finding talent...</Text>
           </View>
         )}
 
         {error && (
           <View style={styles.centerState}>
             <AlertCircle size={40} color="#EF4444" />
-            <Text style={styles.emptyText}>Something went wrong</Text>
+            <Text style={[styles.emptyText, { color: colors.text }]}>Something went wrong</Text>
           </View>
         )}
 
@@ -164,41 +187,41 @@ export default function DiscoverScreen() {
           return (
             <TouchableOpacity
               key={m.id}
-              style={styles.card}
+              style={[
+                styles.card, 
+                { 
+                  backgroundColor: colors.bgCard,
+                  borderColor: colors.border
+                }
+              ]}
               activeOpacity={0.8}
               onPress={() => router.push(`/musician/${m.id}`)}
             >
-              <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
+              <View style={[styles.avatar, { backgroundColor: avatarColor, borderWidth: 1, borderColor: colors.border }]}>
                 {m.avatar_url ? (
                    <View style={styles.avatarPlaceholder} />
                 ) : (
-                  <Text style={styles.avatarText}>{initials}</Text>
+                  <Text style={[styles.avatarText, { color: isDark ? '#FFFFFF' : colors.primaryDark }]}>{initials}</Text>
                 )}
                 {profile?.is_available && <View style={styles.availableDot} />}
               </View>
 
               <View style={styles.cardBody}>
                 <View style={styles.cardTopRow}>
-                  <Text style={styles.musicianName} numberOfLines={1}>{m.display_name}</Text>
+                  <Text style={[styles.musicianName, { color: colors.text }]} numberOfLines={1}>{m.display_name}</Text>
                   <View
                     style={[
                       styles.matchBadge,
                       {
-                        backgroundColor:
-                          matchScore >= 8
-                            ? 'rgba(16,185,129,0.12)'
-                            : 'rgba(0,212,255,0.08)',
-                        borderColor:
-                          matchScore >= 8
-                            ? 'rgba(16,185,129,0.45)'
-                            : 'rgba(0,212,255,0.3)',
+                        backgroundColor: colors.primaryLight,
+                        borderColor: colors.border,
                       },
                     ]}
                   >
                     <Text
                       style={[
                         styles.matchText,
-                        { color: matchScore >= 8 ? '#10B981' : '#00D4FF' },
+                        { color: colors.primaryDark },
                       ]}
                     >
                       ♪ {matchScore}
@@ -206,20 +229,20 @@ export default function DiscoverScreen() {
                   </View>
                 </View>
 
-                <Text style={styles.musicianRole} numberOfLines={1}>
+                <Text style={[styles.musicianRole, { color: colors.primary }]} numberOfLines={1}>
                   {primaryRole} ·{' '}
-                  <Text style={styles.genreText}>{genres.slice(0, 3).join(', ')}</Text>
+                  <Text style={[styles.genreText, { color: colors.textDim }]}>{genres.slice(0, 3).join(', ')}</Text>
                 </Text>
 
                 <View style={styles.cardBottom}>
                   <View style={styles.ratingPart}>
                     <StarRating value={profile?.avg_rating || 5} />
                     <Text style={styles.ratingVal}>{profile?.avg_rating || '5.0'}</Text>
-                    <Text style={styles.ratingCount}>({profile?.rating_count || 0})</Text>
+                    <Text style={[styles.ratingCount, { color: colors.textDim }]}>({profile?.rating_count || 0})</Text>
                   </View>
                   <View style={styles.locationPart}>
-                    <MapPin size={10} color="rgba(255,255,255,0.3)" />
-                    <Text style={styles.locationText}>{m.city || 'Cebu'}</Text>
+                    <MapPin size={10} color={colors.textDim} />
+                    <Text style={[styles.locationText, { color: colors.textDim }]}>{m.city || 'Cebu'}</Text>
                   </View>
                 </View>
 
@@ -231,8 +254,8 @@ export default function DiscoverScreen() {
 
         {!isLoading && !error && filtered.length === 0 && (
           <View style={styles.emptyState}>
-            <Music2 size={40} color="rgba(255,255,255,0.1)" />
-            <Text style={styles.emptyText}>No musicians found</Text>
+            <Music2 size={40} color={colors.border} />
+            <Text style={[styles.emptyText, { color: colors.textDim }]}>No musicians found</Text>
           </View>
         )}
       </ScrollView>
@@ -243,7 +266,6 @@ export default function DiscoverScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A0F1E',
   },
   header: {
     paddingTop: Platform.OS === 'ios' ? 56 : 32,
@@ -252,27 +274,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
+    borderBottomWidth: 1,
   },
   eyebrow: {
     fontSize: 11,
-    fontWeight: '700',
-    color: '#00D4FF',
+    fontWeight: '800',
     letterSpacing: 1.8,
     marginBottom: 4,
-    opacity: 0.8,
+    fontFamily: 'DM Sans',
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    fontSize: 26,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+    letterSpacing: -0.3,
   },
   headerBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0,212,255,0.08)',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     borderWidth: 1,
-    borderColor: 'rgba(0,212,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
@@ -280,14 +301,13 @@ const styles = StyleSheet.create({
   searchWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 16,
     paddingHorizontal: 14,
-    height: 46,
+    height: 48,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
     marginHorizontal: 16,
-    marginBottom: 14,
+    marginTop: 12,
+    marginBottom: 12,
   },
   searchIcon: {
     marginRight: 8,
@@ -295,11 +315,11 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 14,
-    color: '#FFFFFF',
+    fontFamily: 'DM Sans',
   },
   filterRow: {
     height: 44,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   filterScroll: {
     paddingHorizontal: 16,
@@ -308,9 +328,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   filterPill: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
     paddingHorizontal: 16,
     height: 34,
     borderRadius: 17,
@@ -318,22 +336,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   filterPillActive: {
-    backgroundColor: 'rgba(0,212,255,0.1)',
-    borderColor: '#00D4FF',
   },
   filterText: {
     fontSize: 13,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.45)',
+    fontFamily: 'DM Sans',
   },
   filterTextActive: {
-    color: '#00D4FF',
   },
   sortLabel: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.2)',
     paddingHorizontal: 20,
-    marginBottom: 12,
+    marginBottom: 10,
+    fontFamily: 'DM Sans',
   },
   scroll: {
     flex: 1,
@@ -346,41 +360,44 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
     borderRadius: 20,
     padding: 14,
     gap: 14,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
   avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
   avatarText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
   },
   avatarPlaceholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 25,
   },
   availableDot: {
     position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     backgroundColor: '#10B981',
     borderWidth: 2,
-    borderColor: '#0A0F1E',
+    borderColor: '#FFFFFF',
   },
   cardBody: {
     flex: 1,
@@ -395,25 +412,26 @@ const styles = StyleSheet.create({
   musicianName: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#FFFFFF',
+    fontFamily: 'DM Sans',
   },
   musicianRole: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.4)',
-    marginBottom: 6,
+    marginBottom: 4,
+    fontFamily: 'DM Sans',
   },
   genreText: {
-    color: 'rgba(255,255,255,0.25)',
+    fontFamily: 'DM Sans',
   },
   matchBadge: {
-    paddingVertical: 3,
-    paddingHorizontal: 9,
-    borderRadius: 20,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 12,
     borderWidth: 1,
   },
   matchText: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
   },
   cardBottom: {
     flexDirection: 'row',
@@ -434,10 +452,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#F59E0B',
+    fontFamily: 'DM Sans',
   },
   ratingCount: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.25)',
+    fontFamily: 'DM Sans',
   },
   locationPart: {
     flexDirection: 'row',
@@ -446,12 +465,12 @@ const styles = StyleSheet.create({
   },
   locationText: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.25)',
+    fontFamily: 'DM Sans',
   },
   matchBarTrack: {
-    height: 3,
+    height: 4,
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
     borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.07)',
     overflow: 'hidden',
   },
   matchBarFill: {
@@ -459,18 +478,17 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   centerState: {
+    paddingVertical: 50,
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 60,
     gap: 12,
   },
   emptyState: {
+    paddingVertical: 50,
     alignItems: 'center',
-    paddingTop: 60,
     gap: 12,
   },
   emptyText: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.2)',
+    fontFamily: 'DM Sans',
   },
 });

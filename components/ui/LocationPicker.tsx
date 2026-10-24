@@ -10,9 +10,10 @@ import {
   Platform,
   Dimensions,
 } from 'react-native';
-import { X, Search, MapPin, ChevronRight, Globe, Check } from 'lucide-react-native';
+import { X, Search, MapPin, ChevronRight, Globe } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import { Country, State, City } from 'country-state-city';
+import { useAppTheme } from '../../context/theme';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -31,6 +32,7 @@ interface LocationPickerProps {
 }
 
 export function LocationPicker({ visible, onClose, onSelect, initialCountryCode = 'PH' }: LocationPickerProps) {
+  const { colors, isDark } = useAppTheme();
   const [step, setStep] = useState<'country' | 'city'>('city');
   const [search, setSearch] = useState('');
   const [selectedCountry, setSelectedCountry] = useState<any>(null);
@@ -62,7 +64,6 @@ export function LocationPicker({ visible, onClose, onSelect, initialCountryCode 
       const cities = City.getCitiesOfCountry(selectedCountry.isoCode) || [];
       
       if (!query) {
-        // Show priority cities or just some sample cities
         return cities.slice(0, 50);
       }
       
@@ -103,17 +104,17 @@ export function LocationPicker({ visible, onClose, onSelect, initialCountryCode 
 
   const renderItem = ({ item }: { item: any }) => (
     <TouchableOpacity 
-      style={styles.item} 
+      style={[styles.item, { borderBottomColor: colors.border }]} 
       onPress={() => handleSelectItem(item)}
       activeOpacity={0.7}
     >
       <View style={styles.itemLeft}>
-        <View style={styles.iconBox}>
-          {step === 'country' ? <Globe size={18} color="#00D4FF" /> : <MapPin size={18} color="#00D4FF" />}
+        <View style={[styles.iconBox, { backgroundColor: isDark ? '#16382C' : '#F0FDF4' }]}>
+          {step === 'country' ? <Globe size={18} color="#10B981" /> : <MapPin size={18} color="#10B981" />}
         </View>
-        <Text style={styles.itemText}>{item.name}</Text>
+        <Text style={[styles.itemText, { color: colors.text }]}>{item.name}</Text>
       </View>
-      <ChevronRight size={18} color="rgba(255,255,255,0.2)" />
+      <ChevronRight size={18} color={colors.textSecondary} />
     </TouchableOpacity>
   );
 
@@ -126,35 +127,37 @@ export function LocationPicker({ visible, onClose, onSelect, initialCountryCode 
     >
       <View style={styles.container}>
         <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onClose}>
-          <BlurView intensity={20} style={StyleSheet.absoluteFill} tint="dark" />
+          <BlurView intensity={25} style={StyleSheet.absoluteFill} tint={isDark ? 'dark' : 'light'} />
         </TouchableOpacity>
 
-        <View style={styles.modalContent}>
-          <View style={styles.indicator} />
+        <View style={[styles.modalContent, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <View style={[styles.indicator, { backgroundColor: colors.border }]} />
           
           <View style={styles.header}>
             <View>
-              <Text style={styles.eyebrow}>
+              <Text style={[styles.eyebrow, { color: colors.primary }]}>
                 {step === 'country' ? 'SELECT NATION' : 
-                 `CITIES IN ${selectedCountry?.name.toUpperCase()}`}
+                 `CITIES IN ${selectedCountry?.name?.toUpperCase() || 'PH'}`}
               </Text>
-              <Text style={styles.title}>
-                {step === 'country' ? 'Choose Country' : 
-                 'Search Your City'}
+              <Text style={[styles.title, { color: colors.text }]}>
+                {step === 'country' ? 'Choose Country' : 'Search Your City'}
               </Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <X size={20} color="rgba(255,255,255,0.4)" />
+            <TouchableOpacity 
+              onPress={onClose} 
+              style={[styles.closeBtn, { backgroundColor: isDark ? colors.bgSecondary : '#F0FDF4' }]}
+            >
+              <X size={20} color={colors.text} />
             </TouchableOpacity>
           </View>
 
           <View style={styles.searchSection}>
-            <View style={styles.searchWrapper}>
-              <Search size={18} color="rgba(255,255,255,0.3)" />
+            <View style={[styles.searchWrapper, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
+              <Search size={18} color={colors.primary} />
               <TextInput
-                style={styles.searchInput}
-                placeholder={step === 'country' ? "Search for a country..." : "Search for a city (e.g. Oroquieta)..."}
-                placeholderTextColor="rgba(255,255,255,0.3)"
+                style={[styles.searchInput, { color: colors.inputText }]}
+                placeholder={step === 'country' ? "Search for a country..." : "Search for a city (e.g. Oroquieta, Cebu)..."}
+                placeholderTextColor={colors.inputPlaceholder}
                 value={search}
                 onChangeText={setSearch}
                 autoFocus={false}
@@ -164,7 +167,7 @@ export function LocationPicker({ visible, onClose, onSelect, initialCountryCode 
 
           {step !== 'country' && (
             <TouchableOpacity onPress={handleBack} style={styles.backLink}>
-              <Text style={styles.backLinkText}>← Back to Countries</Text>
+              <Text style={[styles.backLinkText, { color: colors.primary }]}>← Back to Countries</Text>
             </TouchableOpacity>
           )}
 
@@ -179,7 +182,7 @@ export function LocationPicker({ visible, onClose, onSelect, initialCountryCode 
             windowSize={10}
             ListEmptyComponent={
               <View style={styles.empty}>
-                <Text style={styles.emptyText}>No results found</Text>
+                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No results found</Text>
               </View>
             }
           />
@@ -195,17 +198,17 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#0A1A2F',
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     height: SCREEN_HEIGHT * 0.85,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    maxWidth: 640,
+    width: '100%',
+    alignSelf: 'center',
   },
   indicator: {
     width: 40,
     height: 4,
-    backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 12,
@@ -215,59 +218,54 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
   },
   eyebrow: {
     fontSize: 10,
     letterSpacing: 1.2,
-    color: '#00D4FF',
-    fontFamily: 'DM Sans Bold',
+    fontFamily: 'DM Sans',
+    fontWeight: '800',
     marginBottom: 4,
   },
   title: {
     fontSize: 22,
-    fontWeight: '700',
-    color: '#FFF',
-    fontFamily: 'DM Sans Bold',
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
   },
   closeBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.05)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   searchSection: {
     paddingHorizontal: 24,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   searchWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    borderRadius: 16,
+    borderRadius: 14,
     paddingHorizontal: 16,
-    height: 54,
+    height: 50,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
     gap: 12,
   },
   searchInput: {
     flex: 1,
-    color: '#FFF',
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: 'DM Sans',
   },
   backLink: {
     paddingHorizontal: 24,
-    paddingBottom: 16,
+    paddingBottom: 14,
   },
   backLinkText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.4)',
-    fontFamily: 'DM Sans Medium',
+    fontSize: 13.5,
+    fontFamily: 'DM Sans',
+    fontWeight: '600',
   },
   listContent: {
     paddingHorizontal: 24,
@@ -279,32 +277,29 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.04)',
   },
   itemLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 14,
   },
   iconBox: {
     width: 36,
     height: 36,
-    borderRadius: 10,
-    backgroundColor: 'rgba(0, 212, 255, 0.08)',
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   itemText: {
-    fontSize: 16,
-    color: '#E2E8F0',
-    fontFamily: 'DM Sans Medium',
+    fontSize: 15,
+    fontFamily: 'DM Sans',
+    fontWeight: '600',
   },
   empty: {
     paddingTop: 40,
     alignItems: 'center',
   },
   emptyText: {
-    color: 'rgba(255,255,255,0.2)',
     fontSize: 14,
     fontFamily: 'DM Sans',
   },

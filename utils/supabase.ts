@@ -57,3 +57,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: false,
   },
 });
+
+/**
+ * Optimized user retrieval: retrieves user from local session storage
+ * without firing redundant HTTP network requests to /auth/v1/user.
+ */
+export async function getCurrentUser() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.user) return session.user;
+  const { data: { user } } = await supabase.auth.getUser();
+  return user;
+}

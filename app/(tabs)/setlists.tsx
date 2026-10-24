@@ -6,158 +6,388 @@ import {
   StyleSheet,
   TouchableOpacity,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { Plus, ChevronRight, Calendar, Music2, Clock, ListMusic } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { CreateGigModal } from '../../components/gigs/CreateGigModal';
-import { useMyGigs } from '../../utils/hooks/useMusician';
+import {
+  Check,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  Trash2,
+  RotateCcw,
+  HardDrive,
+  CloudDownload,
+  Play,
+  Wand2,
+  Plus,
+  MoreVertical,
+  ChevronRight,
+  Layers,
+  Calendar,
+  Sparkles,
+} from 'lucide-react-native';
+import { useMyGigs, useGigSetlist, useSetlistSongs } from '@/utils/hooks/useMusician';
+import { useAppTheme } from '@/context/theme';
 
-
-const FILTERS = ['All', 'Upcoming', 'Past', 'Draft'];
+const SAMPLE_SETLIST = [
+  {
+    id: 's1',
+    num: '01',
+    title: 'Halik',
+    artist: 'Kamikazee',
+    key: 'G',
+    bpm: '120 BPM',
+    duration: '4:15',
+    lyricsReady: true,
+    audioReady: true,
+    isActive: true,
+  },
+  {
+    id: 's2',
+    num: '02',
+    title: 'Awit ng kabataan',
+    artist: 'Rivermaya',
+    key: 'G',
+    bpm: '120 BPM',
+    duration: '4:15',
+    lyricsReady: true,
+    audioReady: false,
+    isActive: false,
+  },
+  {
+    id: 's3',
+    num: '03',
+    title: 'Narda',
+    artist: 'Kamikazee',
+    key: 'G',
+    bpm: '120 BPM',
+    duration: '4:15',
+    lyricsReady: true,
+    audioReady: true,
+    isActive: false,
+  },
+  {
+    id: 's4',
+    num: '04',
+    title: 'Teenager',
+    artist: 'My Chemical Romance',
+    key: 'G',
+    bpm: '120 BPM',
+    duration: '4:15',
+    lyricsReady: true,
+    audioReady: true,
+    isActive: false,
+  },
+  {
+    id: 's5',
+    num: '05',
+    title: 'Raining in manila',
+    artist: 'Lola Amour',
+    key: 'G',
+    bpm: '120 BPM',
+    duration: '4:15',
+    lyricsReady: true,
+    audioReady: true,
+    isActive: false,
+  },
+  {
+    id: 's6',
+    num: '06',
+    title: 'Vst Medley',
+    artist: 'VST & Co.',
+    key: 'G',
+    bpm: '120 BPM',
+    duration: '4:15',
+    lyricsReady: true,
+    audioReady: true,
+    isActive: false,
+  },
+  {
+    id: 's7',
+    num: '07',
+    title: 'Rock baby rock',
+    artist: 'VST & Co.',
+    key: 'G',
+    bpm: '120 BPM',
+    duration: '4:15',
+    lyricsReady: true,
+    audioReady: false,
+    isActive: false,
+  },
+];
 
 export default function SetlistsScreen() {
   const router = useRouter();
-  const [activeFilter, setActiveFilter] = useState('All');
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  
-  const { data: gigs, isLoading } = useMyGigs();
+  const { colors, isDark } = useAppTheme();
+  const [activeTab, setActiveTab] = useState<'setlist' | 'gigs'>('setlist');
+  const [showPrepDetails, setShowPrepDetails] = useState(false);
 
-  const filtered = !gigs ? [] : activeFilter === 'All'
-    ? gigs
-    : gigs.filter((s: any) => {
-        // Simple logic for tags based on date if not present
-        const date = new Date(s.gig_date);
-        const isPast = date < new Date();
-        if (activeFilter === 'Upcoming') return !isPast;
-        if (activeFilter === 'Past') return isPast;
-        return true;
-      });
+  const { data: gigs, isLoading: isGigsLoading } = useMyGigs();
+  const currentGig = gigs?.[0];
+  const { data: setlist } = useGigSetlist(currentGig?.id);
+  const { data: songsData } = useSetlistSongs(setlist?.id);
 
-  const totalSongs = 0; // Will be calculated once we have setlists/songs
+  const songs = songsData && songsData.length > 0
+    ? songsData.map((item: any, idx: number) => ({
+        id: item.id || String(idx),
+        num: String(idx + 1).padStart(2, '0'),
+        title: item.song?.title || item.title || 'Untitled Song',
+        artist: item.song?.artist || item.artist || 'Unknown Artist',
+        key: item.song?.original_key || item.custom_key || 'G',
+        bpm: item.song?.bpm ? `${item.song.bpm} BPM` : '120 BPM',
+        duration: '4:15',
+        lyricsReady: true,
+        audioReady: idx % 3 !== 1,
+        isActive: idx === 0,
+      }))
+    : SAMPLE_SETLIST;
+
+  const gigTitle = currentGig?.name || 'Sample Band Live at Hard Rock Cafe';
+  const gigDate = currentGig?.gig_date
+    ? new Date(currentGig.gig_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : 'Sep 17, 2024 • 9:00 PM';
+
+  const downloadedCount = 8;
+  const totalSongsCount = songs.length;
+  const downloadPercent = Math.round((downloadedCount / totalSongsCount) * 100);
 
   return (
-    <View style={styles.container}>
-      <CreateGigModal visible={showCreateModal} onClose={() => setShowCreateModal(false)} />
-      <LinearGradient colors={['#071420', '#0d2d45']} style={StyleSheet.absoluteFill} />
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* ── Header ── */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.eyebrow}>MY GIGS</Text>
-          <Text style={styles.title}>Setlists</Text>
+      <View style={[styles.header, { backgroundColor: colors.bg, borderBottomColor: colors.border }]}>
+        <View style={styles.headerTop}>
+          <View>
+            <Text style={[styles.screenEyebrow, { color: colors.primary }]}>STAGE REPERTOIRE</Text>
+            <Text style={[styles.screenTitle, { color: colors.text }]}>Setlists</Text>
+          </View>
+
+          <View style={styles.headerRight}>
+            <TouchableOpacity 
+              style={[styles.addBtn, { backgroundColor: colors.primary }]}
+              activeOpacity={0.85}
+              onPress={() => router.push('/songs/add')}
+            >
+              <Plus size={18} color="#FFF" strokeWidth={2.5} />
+            </TouchableOpacity>
+          </View>
         </View>
-        <TouchableOpacity 
-          style={styles.addBtn} 
-          activeOpacity={0.8}
-          onPress={() => setShowCreateModal(true)}
-        >
-          <Plus size={20} color="#071420" strokeWidth={2.5} />
-        </TouchableOpacity>
+
+        {/* Tab Switcher */}
+        <View style={[styles.tabSwitch, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}>
+          <TouchableOpacity 
+            style={[
+              styles.tabBtn, 
+              activeTab === 'setlist' && [styles.tabBtnActive, { backgroundColor: colors.bgCard }]
+            ]}
+            onPress={() => setActiveTab('setlist')}
+            activeOpacity={0.7}
+          >
+            <Text style={[
+              styles.tabText, 
+              { color: activeTab === 'setlist' ? (isDark ? colors.accent : colors.primaryDark) : colors.textDim },
+              activeTab === 'setlist' && styles.tabTextActive
+            ]}>
+              ACTIVE SETLIST
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[
+              styles.tabBtn, 
+              activeTab === 'gigs' && [styles.tabBtnActive, { backgroundColor: colors.bgCard }]
+            ]}
+            onPress={() => setActiveTab('gigs')}
+            activeOpacity={0.7}
+          >
+            <Text style={[
+              styles.tabText, 
+              { color: activeTab === 'gigs' ? (isDark ? colors.accent : colors.primaryDark) : colors.textDim },
+              activeTab === 'gigs' && styles.tabTextActive
+            ]}>
+              MY GIGS ({gigs?.length || 1})
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* ── Summary Bar ── */}
-      <View style={styles.summaryRow}>
-        <View style={styles.summaryChip}>
-          <ListMusic size={13} color="#00D4FF" />
-          <Text style={styles.summaryChipText}>{gigs?.length || 0} gigs</Text>
-        </View>
-        <View style={styles.summaryChip}>
-          <Music2 size={13} color="rgba(255,255,255,0.4)" />
-          <Text style={styles.summaryChipText}>
-            {totalSongs} total songs
-          </Text>
-        </View>
-      </View>
-
-      {/* ── Filter Pills ── */}
-      <View style={styles.filterRow}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterScroll}
-        >
-          {FILTERS.map((f) => {
-            const active = activeFilter === f;
-            return (
-              <TouchableOpacity
-                key={f}
-                style={[styles.filterPill, active && styles.filterPillActive]}
-                onPress={() => setActiveFilter(f)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.filterText, active && styles.filterTextActive]}>{f}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
-
-      {/* ── Setlist Cards ── */}
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+      <ScrollView 
+        style={styles.scroll} 
+        contentContainerStyle={styles.scrollContent} 
         showsVerticalScrollIndicator={false}
       >
-        {filtered.map((gig: any) => {
-          const date = new Date(gig.gig_date);
-          const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-          const isPast = date < new Date();
-          const themeColor = isPast ? '#8B5CF6' : '#00D4FF';
-          const glowColor = isPast ? 'rgba(139,92,246,0.18)' : 'rgba(0,212,255,0.18)';
-          const borderColor = isPast ? 'rgba(139,92,246,0.22)' : 'rgba(0,212,255,0.22)';
+        {activeTab === 'setlist' ? (
+          <>
+            {/* ── Gig Showcase Banner ── */}
+            <View style={[styles.gigBanner, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+              <View style={styles.gigBannerTop}>
+                <View style={styles.gigTagRow}>
+                  <View style={[styles.liveDot, { backgroundColor: colors.primary }]} />
+                  <Text style={[styles.liveTagText, { color: colors.primaryDark }]}>UPCOMING PERFORMANCE</Text>
+                </View>
+                <Text style={[styles.gigDateText, { color: colors.textDim }]}>{gigDate}</Text>
+              </View>
 
-          return (
-            <TouchableOpacity
-              key={gig.id}
-              activeOpacity={0.8}
-              onPress={() => router.push({ pathname: '/setlist/[id]', params: { id: gig.id } })}
+              <Text style={[styles.gigTitle, { color: colors.text }]}>{gigTitle}</Text>
+            </View>
+
+            {/* ── AI Actions Row ── */}
+            <View style={styles.actionsRow}>
+              <TouchableOpacity 
+                style={[styles.regenerateBtn, { backgroundColor: isDark ? '#064E3B' : '#166534' }]} 
+                activeOpacity={0.85}
+                onPress={() => router.push('/ai-agent')}
+              >
+                <Wand2 size={16} color="#FFFFFF" strokeWidth={2.2} />
+                <Text style={styles.regenerateBtnText}>Regenerate with AI</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.addSongBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]} 
+                activeOpacity={0.7}
+                onPress={() => router.push('/profile/songs')}
+              >
+                <Plus size={20} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* ── Offline Preparation Card ── */}
+            <TouchableOpacity 
+              style={[styles.offlineCta, { backgroundColor: colors.bgCard, borderColor: colors.border }]} 
+              activeOpacity={0.85}
+              onPress={() => setShowPrepDetails(!showPrepDetails)}
             >
-              <View style={[styles.card, { borderColor }]}>
-                <View style={[styles.topAccent, { backgroundColor: themeColor }]} />
-                <View style={styles.cardInner}>
-                  <View style={styles.cardTop}>
-                    <View style={[styles.iconBubble, { backgroundColor: glowColor }]}>
-                      <Calendar size={18} color={themeColor} />
-                    </View>
-                    <View style={styles.titleArea}>
-                      <Text style={styles.setTitle} numberOfLines={1}>{gig.name}</Text>
-                      <Text style={styles.setVenue} numberOfLines={1}>{gig.venue}</Text>
-                      <Text style={styles.bandContext}>{gig.band?.name}</Text>
-                    </View>
-                    <View style={[styles.tagBadge, { backgroundColor: isPast ? 'rgba(139,92,246,0.1)' : 'rgba(0,212,255,0.1)', borderColor }]}>
-                      <Text style={[styles.tagText, { color: themeColor }]}>{isPast ? 'Past' : 'Upcoming'}</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.statsRow}>
-                    <View style={styles.statItem}>
-                      <Calendar size={12} color="rgba(255,255,255,0.35)" />
-                      <Text style={styles.statText}>{dateStr}</Text>
-                    </View>
-                    <View style={styles.statSep} />
-                    <View style={styles.statItem}>
-                      <Clock size={12} color="rgba(255,255,255,0.35)" />
-                      <Text style={styles.statText}>{gig.duration_min} min</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.cardFooter}>
-                    <Text style={styles.footerHint}>Tap to manage gig & setlist</Text>
-                    <ChevronRight size={16} color={themeColor} />
-                  </View>
+              <View style={styles.offlineCtaLeft}>
+                <View style={[styles.cloudIconBox, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}>
+                  <CloudDownload size={20} color={colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.offlineCtaTitle, { color: colors.text }]}>Prepare for Offline</Text>
+                  <Text style={[styles.offlineCtaSubtitle, { color: colors.textDim }]}>
+                    {downloadedCount} of {totalSongsCount} songs cached locally
+                  </Text>
                 </View>
               </View>
+              <ChevronRight size={18} color={colors.textDim} style={showPrepDetails ? { transform: [{ rotate: '90deg' }] } : {}} />
             </TouchableOpacity>
-          );
-        })}
 
-        {filtered.length === 0 && (
-          <View style={styles.emptyState}>
-            <ListMusic size={48} color="rgba(255,255,255,0.08)" />
-            <Text style={styles.emptyTitle}>No setlists found</Text>
-            <Text style={styles.emptyText}>Tap + to create your first setlist</Text>
+            {/* Expanded Prep Details */}
+            {showPrepDetails && (
+              <View style={[styles.prepDetailsBox, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}>
+                <View style={styles.progressRow}>
+                  <Text style={[styles.progressLabel, { color: colors.text }]}>Offline Sync Progress</Text>
+                  <Text style={[styles.progressPct, { color: colors.primary }]}>{downloadPercent}%</Text>
+                </View>
+                <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
+                  <View style={[styles.progressFill, { width: `${downloadPercent}%`, backgroundColor: colors.primary }]} />
+                </View>
+                <Text style={[styles.progressHint, { color: colors.textDim }]}>
+                  Lyrics and chords are stored locally in SQLite for zero-latency stage performance.
+                </Text>
+              </View>
+            )}
+
+            {/* ── Setlist Song List ── */}
+            <View style={styles.setlistHeader}>
+              <Text style={[styles.setlistSectionTitle, { color: colors.text }]}>
+                Setlist ({songs.length} songs)
+              </Text>
+              <Text style={[styles.setlistEstimate, { color: colors.primary }]}>EST. 48 MINS</Text>
+            </View>
+
+            <View style={styles.songsList}>
+              {songs.map((song) => (
+                <TouchableOpacity
+                  key={song.id}
+                  style={[
+                    styles.songCard,
+                    { backgroundColor: colors.bgCard, borderColor: colors.border },
+                    song.isActive && { borderColor: colors.primary, borderWidth: 1.5 },
+                  ]}
+                  activeOpacity={0.7}
+                  onPress={() => router.push(`/stage-mode?setlistId=${currentGig?.id || 'demo'}`)}
+                >
+                  <View style={styles.songCardLeft}>
+                    <View style={styles.numContainer}>
+                      <Text style={[styles.songNum, { color: song.isActive ? colors.primary : colors.textDim }]}>
+                        {song.num}
+                      </Text>
+                    </View>
+                    <View style={styles.songInfo}>
+                      <Text style={[styles.songTitle, { color: colors.text }]} numberOfLines={1}>{song.title}</Text>
+                      <View style={styles.songMetaRow}>
+                        <Text style={[styles.songMeta, { color: colors.textDim }]}>Key: {song.key}</Text>
+                        <Text style={[styles.songMetaBullet, { color: colors.textDim }]}>•</Text>
+                        <Text style={[styles.songMeta, { color: colors.textDim }]}>{song.bpm}</Text>
+                        <Text style={[styles.songMetaBullet, { color: colors.textDim }]}>•</Text>
+                        <Text style={[styles.songMeta, { color: colors.textDim }]}>{song.duration}</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={styles.songStatusRow}>
+                    {song.lyricsReady && <CheckCircle2 size={14} color={colors.primary} />}
+                    {song.audioReady ? (
+                      <CheckCircle2 size={14} color={colors.primary} />
+                    ) : (
+                      <AlertCircle size={14} color="#F59E0B" />
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* ── START GIG Button ── */}
+            <TouchableOpacity
+              style={[styles.startGigBtn, { backgroundColor: colors.primary }]}
+              activeOpacity={0.9}
+              onPress={() => router.push(`/stage-mode?setlistId=${currentGig?.id || 'demo'}`)}
+            >
+              <Play size={20} color="#FFFFFF" fill="#FFFFFF" />
+              <Text style={styles.startGigText}>START GIG</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          /* ── My Gigs List Tab ── */
+          <View style={styles.gigsList}>
+            {(gigs && gigs.length > 0 ? gigs : [currentGig]).map((gig: any, idx: number) => {
+              const name = gig?.name || 'Sample Band Live at Hard Rock Cafe';
+              const venue = gig?.venue || 'Hard Rock Cafe, Makati';
+              const date = gig?.gig_date 
+                ? new Date(gig.gig_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                : 'Sep 17, 2024';
+
+              return (
+                <View 
+                  key={gig?.id || idx} 
+                  style={[styles.gigItemCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+                >
+                  <View style={styles.gigItemHeader}>
+                    <View style={[styles.calendarIconBox, { backgroundColor: colors.primaryLight }]}>
+                      <Calendar size={18} color={colors.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.gigItemName, { color: colors.text }]}>{name}</Text>
+                      <Text style={[styles.gigItemVenue, { color: colors.textDim }]}>📍 {venue}</Text>
+                    </View>
+                  </View>
+
+                  <View style={[styles.gigItemDivider, { backgroundColor: colors.border }]} />
+
+                  <View style={styles.gigItemFooter}>
+                    <Text style={[styles.gigItemDate, { color: colors.textDim }]}>{date}</Text>
+                    <TouchableOpacity 
+                      style={[styles.openSetlistBtn, { backgroundColor: colors.primary }]}
+                      onPress={() => setActiveTab('setlist')}
+                    >
+                      <Text style={styles.openSetlistBtnText}>View Songs</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
           </View>
         )}
       </ScrollView>
@@ -168,268 +398,388 @@ export default function SetlistsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A0F1E',
   },
-
-  /* Header */
   header: {
-    paddingTop: Platform.OS === 'ios' ? 56 : 32,
     paddingHorizontal: 20,
-    paddingBottom: 12,
+    paddingTop: Platform.OS === 'ios' ? 52 : 36,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+  },
+  headerTop: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-  },
-  eyebrow: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#00D4FF',
-    letterSpacing: 1.8,
-    marginBottom: 4,
-    fontFamily: 'DM Sans',
-    opacity: 0.85,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    fontFamily: 'DM Sans Bold',
-  },
-  addBtn: {
-    backgroundColor: '#00D4FF',
-    width: 42,
-    height: 42,
-    borderRadius: 21,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-    boxShadow: [{
-      color: 'rgba(0, 212, 255, 0.4)',
-      offsetX: 0,
-      offsetY: 4,
-      blurRadius: 10,
-    }],
-    elevation: 8,
-  },
-
-  /* Summary */
-  summaryRow: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 20,
+    justifyContent: 'space-between',
     marginBottom: 14,
   },
-  summaryChip: {
+  screenEyebrow: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    fontFamily: 'DM Sans',
+    marginBottom: 2,
+  },
+  screenTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+    letterSpacing: -0.3,
+  },
+  headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    gap: 10,
   },
-  summaryChipText: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.5)',
-    fontFamily: 'DM Sans',
-  },
-
-  /* Filters */
-  filterRow: {
-    marginBottom: 8,
-    height: 44,
-  },
-  filterScroll: {
-    paddingHorizontal: 16,
-    gap: 8,
-    paddingVertical: 2,
-    alignItems: 'center',
-  },
-  filterPill: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    height: 36,
+  addBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  filterPillActive: {
-    backgroundColor: 'rgba(0,212,255,0.1)',
-    borderColor: '#00D4FF',
+  tabSwitch: {
+    flexDirection: 'row',
+    borderRadius: 12,
+    padding: 3,
+    borderWidth: 1,
   },
-  filterText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.45)',
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 7,
+    alignItems: 'center',
+    borderRadius: 10,
+  },
+  tabBtnActive: {
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  tabText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
     fontFamily: 'DM Sans',
   },
-  filterTextActive: {
-    color: '#00D4FF',
+  tabTextActive: {
+    fontWeight: '800',
   },
-
-  /* Scroll */
   scroll: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
+    paddingTop: 18,
     paddingBottom: 110,
-    gap: 12,
-    paddingTop: 4,
   },
-
-  /* Card */
-  card: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
+  gigBanner: {
     borderRadius: 20,
     borderWidth: 1,
-    overflow: 'hidden',
-  },
-  topAccent: {
-    height: 3,
-    width: '100%',
-    opacity: 0.9,
-  },
-  cardInner: {
     padding: 16,
-    gap: 12,
+    marginBottom: 14,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
   },
-
-  /* Card top row */
-  cardTop: {
+  gigBannerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  gigTagRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 6,
   },
-  iconBubble: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  liveTagText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    fontFamily: 'DM Sans',
+  },
+  gigDateText: {
+    fontSize: 12,
+    fontWeight: '600',
+    fontFamily: 'DM Sans',
+  },
+  gigTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+    letterSpacing: -0.2,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+  },
+  regenerateBtn: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
+    borderRadius: 14,
+    height: 48,
+    gap: 8,
+    shadowColor: '#166534',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  titleArea: {
-    flex: 1,
-    gap: 2,
-  },
-  setTitle: {
-    fontSize: 15,
+  regenerateBtnText: {
+    fontSize: 14,
     fontWeight: '700',
     color: '#FFFFFF',
-    fontFamily: 'DM Sans Bold',
-  },
-  setVenue: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.45)',
     fontFamily: 'DM Sans',
   },
-  bandContext: {
-    fontSize: 10,
-    color: '#00D4FF',
-    fontFamily: 'DM Sans Bold',
-    textTransform: 'uppercase',
+  addSongBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  offlineCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 16,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  offlineCtaLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  cloudIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  offlineCtaTitle: {
+    fontFamily: 'DM Sans',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  offlineCtaSubtitle: {
+    fontSize: 12,
+    fontFamily: 'DM Sans',
     marginTop: 2,
   },
-  tagBadge: {
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 20,
+  prepDetailsBox: {
+    borderRadius: 16,
     borderWidth: 1,
-    flexShrink: 0,
+    padding: 14,
+    marginBottom: 16,
+    gap: 8,
   },
-  tagText: {
-    fontSize: 10,
-    fontWeight: '700',
-    fontFamily: 'DM Sans',
-    letterSpacing: 0.3,
-  },
-
-  /* Stats row */
-  statsRow: {
+  progressRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 10,
   },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  statText: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.45)',
-    fontFamily: 'DM Sans',
-  },
-  statSep: {
-    width: 3,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-  },
-  songCountBadge: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  songCountText: {
+  progressLabel: {
     fontSize: 13,
     fontWeight: '700',
-    fontFamily: 'DM Sans Bold',
-  },
-  songCountLabel: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.4)',
     fontFamily: 'DM Sans',
   },
-
-  /* Progress */
+  progressPct: {
+    fontSize: 13,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+  },
   progressTrack: {
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    height: 6,
+    borderRadius: 3,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    borderRadius: 2,
-    opacity: 0.8,
+    borderRadius: 3,
   },
-
-  /* Footer */
-  cardFooter: {
+  progressHint: {
+    fontSize: 11,
+    fontFamily: 'DM Sans',
+    lineHeight: 15,
+  },
+  setlistHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    marginBottom: 10,
+  },
+  setlistSectionTitle: {
+    fontFamily: 'DM Sans',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  setlistEstimate: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    fontFamily: 'DM Sans',
+  },
+  songsList: {
+    gap: 8,
+    marginBottom: 20,
+  },
+  songCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 5,
+    elevation: 1,
+  },
+  songCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+    marginRight: 10,
+  },
+  numContainer: {
+    width: 24,
+    alignItems: 'center',
+  },
+  songNum: {
+    fontSize: 14,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+  },
+  songInfo: {
+    flex: 1,
+    gap: 3,
+  },
+  songTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: 'DM Sans',
+  },
+  songMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  songMeta: {
+    fontSize: 11,
+    fontFamily: 'DM Sans',
+  },
+  songMetaBullet: {
+    fontSize: 8,
+  },
+  songStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  startGigBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    height: 54,
+    gap: 10,
+    marginTop: 10,
+    marginBottom: 20,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  startGigText: {
+    fontFamily: 'DM Sans',
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  gigsList: {
+    gap: 12,
+  },
+  gigItemCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  gigItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  calendarIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gigItemName: {
+    fontSize: 15,
+    fontWeight: '700',
+    fontFamily: 'DM Sans',
+    marginBottom: 2,
+  },
+  gigItemVenue: {
+    fontSize: 12,
+    fontFamily: 'DM Sans',
+  },
+  gigItemDivider: {
+    height: 1,
+    marginVertical: 14,
+  },
+  gigItemFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  footerHint: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.2)',
+  gigItemDate: {
+    fontSize: 12,
     fontFamily: 'DM Sans',
+    fontWeight: '600',
   },
-
-  /* Empty */
-  emptyState: {
-    alignItems: 'center',
-    paddingTop: 80,
-    gap: 10,
+  openSetlistBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
   },
-  emptyTitle: {
-    fontSize: 16,
+  openSetlistBtnText: {
+    color: '#FFF',
+    fontSize: 12,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.2)',
-    fontFamily: 'DM Sans Bold',
-  },
-  emptyText: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.15)',
     fontFamily: 'DM Sans',
   },
 });

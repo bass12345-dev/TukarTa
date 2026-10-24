@@ -1,19 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Platform, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack } from 'expo-router';
-import { Search, ChevronLeft, Music, Plus, Check } from 'lucide-react-native';
-import { Pill } from '../ui/Pill';
+import { Search, ArrowLeft, Music, Plus, Check } from 'lucide-react-native';
 import { useSearchSongs, useAddSong } from '../../utils/hooks/useSongs';
-import { ActivityIndicator } from 'react-native';
+import { useAppTheme } from '../../context/theme';
 
-const COLORS = ['#00D4FF', '#8B5CF6', '#34D399', '#F59E0B', '#F472B6'];
-
-interface SongSearchProps {
-  onBack: () => void;
-}
-
-export function SongSearch({ onBack }: SongSearchProps) {
+export function SongSearch({ onBack }: { onBack: () => void }) {
+  const { colors, isDark } = useAppTheme();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState('All');
@@ -36,36 +30,42 @@ export function SongSearch({ onBack }: SongSearchProps) {
       setAddedSongs(prev => new Set([...prev, song.id]));
     } catch (error) {
       console.error('Failed to add song:', error);
-      alert('Failed to add song');
     }
   };
 
   const filters = ['All', 'OPM', 'Rock', 'Pop'];
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <LinearGradient colors={['#071420', '#0d2d45']} style={StyleSheet.absoluteFill} />
+      <LinearGradient
+        colors={isDark ? ['#132821', colors.bg] : ['#F0FDF4', '#FFFFFF']}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 0.3 }}
+        style={StyleSheet.absoluteFill}
+      />
       
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={onBack}>
-          <ChevronLeft size={24} color="#00D4FF" />
-          <Text style={styles.backButtonText}>Back</Text>
+        <TouchableOpacity 
+          style={[styles.backButton, { backgroundColor: colors.bgCard, borderColor: colors.border }]} 
+          onPress={onBack}
+        >
+          <ArrowLeft size={20} color={colors.text} />
         </TouchableOpacity>
         
-        <Text style={styles.title}>Search songs</Text>
-        <Text style={styles.subtitle}>
-          Powered by LRCLIB + TheAudioDB — no sign-up needed.
+        <Text style={[styles.title, { color: colors.text }]}>Search songs</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+          Search from 1M+ tracks powered by LRCLIB + TheAudioDB with synced chords & lyrics.
         </Text>
       </View>
 
       <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
-          <Search size={20} color="rgba(255, 255, 255, 0.4)" />
+        <View style={[styles.searchBar, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
+          <Search size={20} color={colors.primary} />
           <TextInput
-            style={styles.input}
-            placeholder="Hotel California"
-            placeholderTextColor="rgba(255, 255, 255, 0.3)"
+            style={[styles.input, { color: colors.inputText }]}
+            placeholder="Search by title or artist (e.g. Ang Huling El Bimbo)..."
+            placeholderTextColor={colors.inputPlaceholder}
             value={search}
             onChangeText={setSearch}
           />
@@ -74,60 +74,98 @@ export function SongSearch({ onBack }: SongSearchProps) {
 
       <View style={styles.filterContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
-          {filters.map((filter) => (
-            <TouchableOpacity key={filter} onPress={() => setActiveFilter(filter)}>
-              <Pill 
-                label={filter} 
-                variant={activeFilter === filter ? "cyan" : "outline"}
-                style={styles.filterPill}
-              />
-            </TouchableOpacity>
-          ))}
+          {filters.map((filter) => {
+            const isActive = activeFilter === filter;
+            return (
+              <TouchableOpacity 
+                key={filter} 
+                onPress={() => setActiveFilter(filter)}
+                style={[
+                  styles.filterPill,
+                  {
+                    backgroundColor: isActive ? '#10B981' : colors.bgCard,
+                    borderColor: isActive ? '#10B981' : colors.border,
+                  }
+                ]}
+              >
+                <Text 
+                  style={[
+                    styles.filterText, 
+                    { color: isActive ? '#FFFFFF' : colors.text },
+                    isActive && { fontWeight: '700' }
+                  ]}
+                >
+                  {filter}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
 
-      <Text style={styles.sectionTitle}>RESULTS FROM LRCLIB & THEAUDIODB</Text>
+      <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+        SEARCH RESULTS
+      </Text>
 
       <ScrollView contentContainerStyle={styles.resultsScroll} showsVerticalScrollIndicator={false}>
         {isLoading ? (
           <View style={styles.loaderContainer}>
-            <ActivityIndicator size="large" color="#00D4FF" />
-            <Text style={styles.loaderText}>Searching LRCLIB...</Text>
+            <ActivityIndicator size="large" color="#10B981" />
+            <Text style={[styles.loaderText, { color: colors.textSecondary }]}>Searching songs & lyrics...</Text>
           </View>
-        ) : results?.length === 0 ? (
+        ) : debouncedSearch && results?.length === 0 ? (
           <View style={styles.loaderContainer}>
-            <Text style={styles.loaderText}>No songs found for "{debouncedSearch}"</Text>
+            <Text style={[styles.loaderText, { color: colors.textSecondary }]}>No songs found for "{debouncedSearch}"</Text>
           </View>
         ) : (
           (results || []).map((song, idx) => (
-            <View key={song.id} style={styles.songCard}>
-              <View style={[styles.iconBox, { backgroundColor: `${COLORS[idx % COLORS.length]}15` }]}>
-                <Music size={22} color={COLORS[idx % COLORS.length]} />
+            <View key={song.id} style={[styles.songCard, { borderBottomColor: colors.border }]}>
+              <View style={[styles.iconBox, { backgroundColor: isDark ? '#16382C' : '#F0FDF4' }]}>
+                <Music size={22} color="#10B981" />
               </View>
               
               <View style={styles.songDetails}>
-                <Text style={styles.songTitle}>{song.title}</Text>
-                <Text style={styles.songSub}>
+                <Text style={[styles.songTitle, { color: colors.text }]}>{song.title}</Text>
+                <Text style={[styles.songSub, { color: colors.textSecondary }]}>
                   {song.artist} {song.album ? `· ${song.album}` : ''} {song.duration ? `· ${song.duration}` : ''}
                 </Text>
               </View>
 
               <View style={styles.actionContainer}>
-                <View style={[styles.badge, { backgroundColor: song.hasLyrics ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)' }]}>
-                  <Text style={[styles.badgeText, { color: song.hasLyrics ? '#10B981' : '#F59E0B' }]}>
-                    {song.hasLyrics ? '✓ Lyrics' : 'No lyrics'}
+                <View 
+                  style={[
+                    styles.badge, 
+                    { 
+                      backgroundColor: song.hasLyrics 
+                        ? (isDark ? '#16382C' : '#D1FAE5') 
+                        : (isDark ? '#2D2010' : '#FEF3C7') 
+                    }
+                  ]}
+                >
+                  <Text 
+                    style={[
+                      styles.badgeText, 
+                      { color: song.hasLyrics ? '#10B981' : '#D97706' }
+                    ]}
+                  >
+                    {song.hasLyrics ? '✓ Synced' : 'Chords'}
                   </Text>
                 </View>
+
                 <TouchableOpacity 
-                  style={[styles.addButton, addedSongs.has(song.id) && styles.addedButton]}
+                  style={[
+                    styles.addButton, 
+                    { borderColor: colors.border },
+                    addedSongs.has(song.id) && styles.addedButton
+                  ]}
                   onPress={() => handleAdd(song)}
                   disabled={addedSongs.has(song.id) || addSongMutation.isPending}
                 >
                   {addedSongs.has(song.id) ? (
-                    <Check size={18} color="#10B981" />
+                    <Check size={16} color="#FFFFFF" strokeWidth={2.5} />
                   ) : (
-                    <Plus size={18} color="rgba(255, 255, 255, 0.3)" />
-                  ) }
+                    <Plus size={16} color={colors.text} />
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
@@ -141,48 +179,47 @@ export function SongSearch({ onBack }: SongSearchProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#071420',
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
   },
   header: {
-    paddingHorizontal: 24,
-    marginBottom: 24,
+    paddingHorizontal: 20,
+    marginBottom: 20,
+    maxWidth: 640,
+    width: '100%',
+    alignSelf: 'center',
   },
   backButton: {
-    flexDirection: 'row',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
     alignItems: 'center',
-    marginLeft: -8,
-    marginBottom: 20,
-  },
-  backButtonText: {
-    fontSize: 16,
-    color: '#00D4FF',
-    fontFamily: 'DM Sans',
-    marginLeft: 4,
+    justifyContent: 'center',
+    marginBottom: 16,
   },
   title: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#FFF',
-    fontFamily: 'DM Sans Bold',
-    marginBottom: 8,
+    fontSize: 26,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+    letterSpacing: -0.5,
+    marginBottom: 6,
   },
   subtitle: {
-    fontSize: 15,
-    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 14,
     fontFamily: 'DM Sans',
-    lineHeight: 22,
+    lineHeight: 20,
   },
   searchContainer: {
-    paddingHorizontal: 24,
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    marginBottom: 16,
+    maxWidth: 640,
+    width: '100%',
+    alignSelf: 'center',
   },
   searchBar: {
-    height: 56,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 16,
+    height: 52,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
@@ -190,100 +227,110 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    color: '#FFF',
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: 'DM Sans',
   },
   filterContainer: {
-    marginBottom: 30,
+    marginBottom: 20,
+    maxWidth: 640,
+    width: '100%',
+    alignSelf: 'center',
   },
   filterScroll: {
-    paddingHorizontal: 24,
-    gap: 12,
+    paddingHorizontal: 20,
+    gap: 8,
   },
   filterPill: {
-    paddingHorizontal: 24,
-    height: 40,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  filterText: {
+    fontSize: 13,
+    fontFamily: 'DM Sans',
+    fontWeight: '500',
   },
   sectionTitle: {
     fontSize: 11,
-    fontWeight: '700',
-    color: 'rgba(150, 175, 200, 0.4)',
-    fontFamily: 'DM Sans Bold',
-    marginLeft: 24,
-    marginBottom: 16,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
     letterSpacing: 1,
+    marginLeft: 20,
+    marginBottom: 12,
+    maxWidth: 640,
+    alignSelf: 'center',
+    width: '100%',
+    paddingHorizontal: 20,
   },
   resultsScroll: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingBottom: 40,
+    maxWidth: 640,
+    width: '100%',
+    alignSelf: 'center',
   },
   songCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.04)',
   },
   iconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   songDetails: {
     flex: 1,
-    marginLeft: 16,
+    marginLeft: 14,
   },
   songTitle: {
-    fontSize: 17,
+    fontSize: 15.5,
     fontWeight: '700',
-    color: '#FFF',
-    fontFamily: 'DM Sans Bold',
-    marginBottom: 4,
+    fontFamily: 'DM Sans',
+    marginBottom: 3,
   },
   songSub: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: 12.5,
     fontFamily: 'DM Sans',
   },
   actionContainer: {
     alignItems: 'flex-end',
-    gap: 8,
+    gap: 6,
   },
   badge: {
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: 8,
   },
   badgeText: {
     fontSize: 10,
     fontWeight: '700',
-    fontFamily: 'DM Sans Bold',
+    fontFamily: 'DM Sans',
   },
   addButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   addedButton: {
     borderColor: '#10B981',
-    backgroundColor: 'rgba(16, 185, 129, 0.05)',
+    backgroundColor: '#10B981',
   },
   loaderContainer: {
     paddingVertical: 60,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
+    gap: 12,
   },
   loaderText: {
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.4)',
     fontFamily: 'DM Sans',
   },
 });

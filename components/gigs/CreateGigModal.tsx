@@ -11,14 +11,13 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
-  Keyboard,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { X, Calendar, MapPin, Music, Clock, ChevronRight, Users } from 'lucide-react-native';
+import { X, Calendar, MapPin, Clock, Users } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import { Button } from '../ui/Button';
 import { useMyBands, useCreateGig } from '../../utils/hooks/useMusician';
-import { Pill } from '../ui/Pill';
+import { useAppTheme } from '../../context/theme';
 
 interface CreateGigModalProps {
   visible: boolean;
@@ -26,6 +25,7 @@ interface CreateGigModalProps {
 }
 
 export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
+  const { colors, isDark } = useAppTheme();
   const [name, setName] = useState('');
   const [venue, setVenue] = useState('');
   const [dateObj, setDateObj] = useState(new Date());
@@ -54,7 +54,6 @@ export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
       });
       
       onClose();
-      // Reset form
       setName('');
       setVenue('');
       setDateObj(new Date());
@@ -69,25 +68,9 @@ export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
     if (Platform.OS === 'android') {
       setShowPicker(false);
     }
-    
-    if (event.type === 'dismissed') {
-      setShowPicker(false);
-      return;
-    }
-
     if (selectedDate) {
       setDateObj(selectedDate);
     }
-  };
-
-  const formatDateDisplay = (date: Date) => {
-    return date.toLocaleString([], {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
   };
 
   return (
@@ -97,160 +80,114 @@ export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
       animationType="slide"
       onRequestClose={onClose}
     >
-      <BlurView intensity={30} style={styles.backdrop} tint="dark">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      <BlurView intensity={25} style={styles.backdrop} tint={isDark ? 'dark' : 'light'}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.keyboardView}
         >
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
             <View style={styles.header}>
               <View>
-                <Text style={styles.eyebrow}>LOG NEW EVENT</Text>
-                <Text style={styles.title}>Create Gig</Text>
+                <Text style={[styles.eyebrow, { color: colors.primary }]}>SCHEDULE PERFORMANCE</Text>
+                <Text style={[styles.title, { color: colors.text }]}>New Gig</Text>
               </View>
-              <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                <X size={20} color="rgba(255,255,255,0.4)" />
+              <TouchableOpacity 
+                onPress={onClose} 
+                style={[styles.closeBtn, { backgroundColor: isDark ? colors.bgSecondary : '#F0FDF4' }]}
+              >
+                <X size={20} color={colors.text} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView 
-              style={styles.form} 
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              
-              {/* Band Selection */}
-              <Text style={styles.label}>Select Band</Text>
-              <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false} 
-                style={styles.bandScroll}
-                contentContainerStyle={styles.bandScrollContent}
-              >
-                {loadingBands ? (
-                  <ActivityIndicator color="#00D4FF" />
-                ) : bands?.map((item: any) => (
-                  <TouchableOpacity
-                    key={item.band.id}
-                    onPress={() => setSelectedBandId(item.band.id)}
-                    style={[
-                      styles.bandItem,
-                      selectedBandId === item.band.id && styles.bandItemActive
-                    ]}
-                  >
-                    <View style={styles.bandAvatar}>
-                      <Users size={16} color={selectedBandId === item.band.id ? '#071420' : '#00D4FF'} />
-                    </View>
-                    <Text style={[
-                      styles.bandName,
-                      selectedBandId === item.band.id && styles.bandNameActive
-                    ]}>
-                      {item.band.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
+            <ScrollView style={styles.form} showsVerticalScrollIndicator={false}>
+              {/* Band Select */}
+              <Text style={[styles.label, { color: colors.textSecondary }]}>SELECT BAND *</Text>
+              {loadingBands ? (
+                <ActivityIndicator color="#10B981" style={{ marginBottom: 16 }} />
+              ) : (
+                <ScrollView 
+                  horizontal 
+                  showsHorizontalScrollIndicator={false} 
+                  style={styles.bandScroll}
+                  contentContainerStyle={styles.bandScrollContent}
+                >
+                  {bands?.map((item: any) => {
+                    const isSelected = selectedBandId === item.band.id;
+                    return (
+                      <TouchableOpacity
+                        key={item.band.id}
+                        style={[
+                          styles.bandItem,
+                          {
+                            backgroundColor: isSelected ? '#10B981' : colors.bgSecondary,
+                            borderColor: isSelected ? '#10B981' : colors.border,
+                          }
+                        ]}
+                        onPress={() => setSelectedBandId(item.band.id)}
+                      >
+                        <View style={[styles.bandAvatar, { backgroundColor: isSelected ? '#047857' : (isDark ? '#1F3F34' : '#F0FDF4') }]}>
+                          <Users size={14} color={isSelected ? '#FFFFFF' : '#10B981'} />
+                        </View>
+                        <Text style={[styles.bandName, { color: isSelected ? '#FFFFFF' : colors.text }]}>
+                          {item.band.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              )}
 
+              {/* Gig Name */}
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Gig Name</Text>
-                <View style={styles.inputWrapper}>
-                  <Music size={18} color="rgba(255,255,255,0.3)" />
+                <Text style={[styles.label, { color: colors.textSecondary }]}>GIG NAME</Text>
+                <View style={[styles.inputWrapper, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
                   <TextInput
-                    style={styles.input}
-                    placeholder="e.g. Friday Night Jazz"
-                    placeholderTextColor="rgba(255,255,255,0.2)"
+                    style={[styles.input, { color: colors.inputText }]}
+                    placeholder="e.g. Saturday Night Live Set"
+                    placeholderTextColor={colors.inputPlaceholder}
                     value={name}
                     onChangeText={setName}
                   />
                 </View>
               </View>
 
+              {/* Venue */}
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Venue</Text>
-                <View style={styles.inputWrapper}>
-                  <MapPin size={18} color="rgba(255,255,255,0.3)" />
+                <Text style={[styles.label, { color: colors.textSecondary }]}>VENUE / LOCATION</Text>
+                <View style={[styles.inputWrapper, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
+                  <MapPin size={18} color="#10B981" />
                   <TextInput
-                    style={styles.input}
-                    placeholder="e.g. Blue Note Café"
-                    placeholderTextColor="rgba(255,255,255,0.2)"
+                    style={[styles.input, { color: colors.inputText }]}
+                    placeholder="e.g. Route 196, Katipunan"
+                    placeholderTextColor={colors.inputPlaceholder}
                     value={venue}
                     onChangeText={setVenue}
                   />
                 </View>
               </View>
 
+              {/* Date & Time */}
               <View style={styles.row}>
                 <View style={[styles.inputGroup, { flex: 1 }]}>
-                  <Text style={styles.label}>Date & Time</Text>
+                  <Text style={[styles.label, { color: colors.textSecondary }]}>DATE & TIME</Text>
                   <TouchableOpacity 
-                    style={[styles.inputWrapper, { zIndex: 100 }]}
-                    onPress={() => {
-                      console.log('Date picker triggered');
-                      Keyboard.dismiss();
-                      setShowPicker(!showPicker);
-                    }}
-                    activeOpacity={0.7}
+                    style={[styles.inputWrapper, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}
+                    onPress={() => setShowPicker(true)}
                   >
-                    <Calendar size={18} color="#00D4FF" />
-                    <Text style={styles.inputText}>
-                      {formatDateDisplay(dateObj)}
+                    <Calendar size={18} color="#10B981" />
+                    <Text style={[styles.inputText, { color: colors.text }]}>
+                      {dateObj.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </Text>
                   </TouchableOpacity>
-
-                  {showPicker && (
-                    Platform.OS === 'web' ? (
-                      <View style={styles.pickerContainer}>
-                        <TextInput
-                          style={styles.input}
-                          type="datetime-local"
-                          value={dateObj.toISOString().slice(0, 16)}
-                          onChangeText={(val) => {
-                            if (val) setDateObj(new Date(val));
-                          }}
-                        />
-                        <TouchableOpacity 
-                          style={styles.doneBtn} 
-                          onPress={() => setShowPicker(false)}
-                        >
-                          <Text style={styles.doneBtnText}>Confirm</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ) : Platform.OS === 'ios' ? (
-                      <View style={styles.pickerContainer}>
-                        <DateTimePicker
-                          value={dateObj}
-                          mode="datetime"
-                          display="inline"
-                          onChange={onDateChange}
-                          textColor="#FFF"
-                          accentColor="#00D4FF"
-                          themeVariant="dark"
-                        />
-                        <TouchableOpacity 
-                          style={styles.doneBtn} 
-                          onPress={() => setShowPicker(false)}
-                        >
-                          <Text style={styles.doneBtnText}>Done</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <DateTimePicker
-                        value={dateObj}
-                        mode="datetime"
-                        display="default"
-                        onChange={onDateChange}
-                      />
-                    )
-                  )}
                 </View>
-                <View style={[styles.inputGroup, { width: 100 }]}>
-                  <Text style={styles.label}>Min</Text>
-                  <View style={styles.inputWrapper}>
-                    <Clock size={16} color="rgba(255,255,255,0.3)" />
+
+                {/* Duration */}
+                <View style={[styles.inputGroup, { flex: 0.8 }]}>
+                  <Text style={[styles.label, { color: colors.textSecondary }]}>DURATION (MIN)</Text>
+                  <View style={[styles.inputWrapper, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
+                    <Clock size={18} color="#10B981" />
                     <TextInput
-                      style={styles.input}
-                      placeholder="60"
-                      placeholderTextColor="rgba(255,255,255,0.2)"
+                      style={[styles.input, { color: colors.inputText }]}
                       keyboardType="numeric"
                       value={duration}
                       onChangeText={setDuration}
@@ -259,19 +196,38 @@ export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
                 </View>
               </View>
 
-              <View style={{ height: 20 }} />
+              {/* Date Picker Component */}
+              {showPicker && (
+                <View style={[styles.pickerContainer, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}>
+                  <DateTimePicker
+                    value={dateObj}
+                    mode="datetime"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={onDateChange}
+                    textColor={colors.text}
+                  />
+                  {Platform.OS === 'ios' && (
+                    <TouchableOpacity 
+                      style={styles.doneBtn}
+                      onPress={() => setShowPicker(false)}
+                    >
+                      <Text style={styles.doneBtnText}>Confirm Date</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
             </ScrollView>
 
             <View style={styles.footer}>
               <Button
                 title="Cancel"
-                variant="ghost"
+                variant="outline-mint"
                 onPress={onClose}
                 style={{ flex: 1 }}
               />
               <Button
                 title={createGig.isPending ? "Creating..." : "Create Gig"}
-                variant="primary"
+                variant="mint"
                 onPress={handleCreate}
                 style={{ flex: 2 }}
                 disabled={createGig.isPending}
@@ -287,62 +243,59 @@ export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
   },
   keyboardView: {
     width: '100%',
   },
   modalContent: {
-    backgroundColor: '#071420',
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     paddingTop: 24,
     paddingHorizontal: 24,
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    maxWidth: 640,
+    width: '100%',
+    alignSelf: 'center',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   eyebrow: {
     fontSize: 10,
-    fontWeight: '700',
-    color: '#00D4FF',
+    fontWeight: '800',
     letterSpacing: 1.5,
     marginBottom: 4,
-    fontFamily: 'DM Sans Bold',
+    fontFamily: 'DM Sans',
   },
   title: {
     fontSize: 24,
-    fontWeight: '700',
-    color: '#FFF',
-    fontFamily: 'DM Sans Bold',
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
   },
   closeBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
   },
   form: {
-    maxHeight: 500,
+    maxHeight: 480,
   },
   label: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.4)',
-    fontWeight: '600',
+    fontSize: 11.5,
+    fontWeight: '700',
     marginBottom: 8,
     fontFamily: 'DM Sans',
+    letterSpacing: 0.5,
   },
   bandScroll: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   bandScrollContent: {
     gap: 10,
@@ -352,32 +305,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-  },
-  bandItemActive: {
-    backgroundColor: '#00D4FF',
-    borderColor: '#00D4FF',
   },
   bandAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    width: 26,
+    height: 26,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   bandName: {
-    fontSize: 13,
-    color: '#FFF',
-    fontFamily: 'DM Sans Bold',
-  },
-  bandNameActive: {
-    color: '#071420',
+    fontSize: 13.5,
+    fontFamily: 'DM Sans',
+    fontWeight: '700',
   },
   inputGroup: {
     marginBottom: 16,
@@ -386,52 +329,48 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderRadius: 16,
+    borderRadius: 14,
     paddingHorizontal: 16,
-    height: 54,
+    height: 52,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
   },
   input: {
     flex: 1,
-    color: '#FFF',
     fontSize: 15,
     fontFamily: 'DM Sans',
   },
   inputText: {
     flex: 1,
-    color: '#FFF',
-    fontSize: 15,
+    fontSize: 14.5,
     fontFamily: 'DM Sans',
+    fontWeight: '600',
   },
   row: {
     flexDirection: 'row',
     gap: 12,
   },
   pickerContainer: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 24,
-    marginTop: 10,
-    padding: 10,
+    borderRadius: 20,
+    marginTop: 8,
+    padding: 12,
     borderWidth: 1,
-    borderColor: 'rgba(0, 212, 255, 0.2)',
+    marginBottom: 16,
   },
   doneBtn: {
-    backgroundColor: '#00D4FF',
+    backgroundColor: '#10B981',
     padding: 12,
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 10,
   },
   doneBtnText: {
-    color: '#071420',
+    color: '#FFFFFF',
     fontWeight: '700',
-    fontFamily: 'DM Sans Bold',
+    fontFamily: 'DM Sans',
   },
   footer: {
     flexDirection: 'row',
     gap: 12,
-    marginTop: 12,
+    marginTop: 14,
   },
 });

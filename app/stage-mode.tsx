@@ -12,79 +12,135 @@ import {
   TextInput
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Music, Search, Globe, ExternalLink, Edit2, Play } from 'lucide-react-native';
+import { 
+  ChevronLeft, 
+  ChevronRight, 
+  SkipBack, 
+  SkipForward, 
+  Play, 
+  Pause, 
+  RotateCcw, 
+  ListMusic, 
+  ExternalLink, 
+  Edit2, 
+  Globe, 
+  Search,
+  Music2
+} from 'lucide-react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useSetlistSongs } from '../utils/hooks/useMusician';
 import { useSongLyrics, useUpdateSongArtist } from '../utils/hooks/useSongs';
-import { GlassCard } from '../components/ui/GlassCard';
 import { WebView } from 'react-native-webview';
 
 const { width } = Dimensions.get('window');
 
 const SEARCH_PROVIDERS = [
-  { name: 'Genius', url: 'https://genius.com/search?q=', color: '#FFFF64' },
-  { name: 'Ultimate Guitar', url: 'https://www.ultimate-guitar.com/search.php?search_type=title&value=', color: '#FFC600' },
-  { name: 'AZLyrics', url: 'https://www.azlyrics.com/search.php?q=', color: '#00D4FF' }
+  { name: 'Genius', url: 'https://genius.com/search?q=', color: '#D97706' },
+  { name: 'Ultimate Guitar', url: 'https://www.ultimate-guitar.com/search.php?search_type=title&value=', color: '#059669' },
+  { name: 'AZLyrics', url: 'https://www.azlyrics.com/search.php?q=', color: '#0284C7' }
 ];
 
 export default function StageModeScreen() {
   const router = useRouter();
   const { setlistId, initialSongId } = useLocalSearchParams();
   
-  // 1. Fetch the full setlist to allow navigation
+  // 1. Full setlist
   const { data: setlistSongs, isLoading: isLoadingSetlist } = useSetlistSongs(setlistId as string);
   
-  // 2. State for current song index within the setlist
+  // 2. Navigation index & play state
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(true);
   
-  // 2.1 State for Artist Correction
+  // 2.1 Artist Correction
   const [isEditingArtist, setIsEditingArtist] = useState(false);
   const [newArtist, setNewArtist] = useState('');
   const updateArtistMutation = useUpdateSongArtist();
   
-  // 2.2 State for Minus 1 Player
+  // 2.2 Minus 1 Player
   const [isMinusOneVisible, setIsMinusOneVisible] = useState(false);
 
   // Initialize index when setlist loads
   React.useEffect(() => {
     if (setlistSongs && initialSongId) {
-      const idx = setlistSongs.findIndex((s: any) => s.song.id === initialSongId);
+      const idx = setlistSongs.findIndex((s: any) => s.song?.id === initialSongId);
       if (idx !== -1) setCurrentIndex(idx);
     }
   }, [setlistSongs, initialSongId]);
 
-  const currentSetlistSong = setlistSongs?.[currentIndex];
-  const nextSetlistSong = setlistSongs?.[currentIndex + 1];
+  // Fallback demo songs if setlist is empty or demo
+  const songsList = (setlistSongs && setlistSongs.length > 0) ? setlistSongs : [
+    {
+      id: 'demo-1',
+      position: 1,
+      song: {
+        id: 'demo-s1',
+        title: 'Wonderwall',
+        artist: 'Oasis',
+        original_key: 'G',
+        bpm: 112,
+        duration: '4:18',
+      }
+    },
+    {
+      id: 'demo-2',
+      position: 2,
+      song: {
+        id: 'demo-s2',
+        title: "Sweet Child O' Mine",
+        artist: "Guns N' Roses",
+        original_key: 'D#',
+        bpm: 128,
+        duration: '5:56',
+      }
+    },
+    {
+      id: 'demo-3',
+      position: 3,
+      song: {
+        id: 'demo-s3',
+        title: 'Gravity',
+        artist: 'John Mayer',
+        original_key: 'G',
+        bpm: 72,
+        duration: '4:05',
+      }
+    }
+  ];
 
-  // 3. Fetch Lyrics for the current song
+  const currentSetlistSong = songsList[currentIndex] || songsList[0];
+  const nextSetlistSong = songsList[currentIndex + 1];
+
+  // 3. Lyrics Hook
   const { data: lyricsData, isLoading: isLoadingLyrics } = useSongLyrics(
     currentSetlistSong?.song?.id,
     currentSetlistSong?.song?.artist,
     currentSetlistSong?.song?.title
   );
 
-  // 4. Handle Web Search
-  const handleWebSearch = async (baseUrl: string, isPractice = false) => {
+  const hasLyrics = !!lyricsData?.plain_lyrics;
+
+  // 4. Web Search
+  const handleWebSearch = async (baseUrl: string) => {
     if (!currentSetlistSong) return;
-    const artist = currentSetlistSong.song.artist;
+    const artist = currentSetlistSong.song?.artist;
     const cleanArtist = (artist && artist.toLowerCase() !== 'unknown artist') ? artist : '';
-    const query = `${currentSetlistSong.song.title} ${cleanArtist}${isPractice ? ' minus 1' : ''}`.trim();
+    const query = `${currentSetlistSong.song?.title} ${cleanArtist}`.trim();
     const fullUrl = `${baseUrl}${encodeURIComponent(query)}`;
     await WebBrowser.openBrowserAsync(fullUrl, {
       presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
-      toolbarColor: '#000000',
+      toolbarColor: '#FFFFFF',
       enableBarCollapsing: true,
       showTitle: true,
     });
   };
-  // 5. Handle Artist Update
+
   const handleUpdateArtist = async () => {
     if (!currentSetlistSong || !newArtist.trim()) return;
     try {
       await updateArtistMutation.mutateAsync({
-        songId: currentSetlistSong.song.id,
+        songId: currentSetlistSong.song?.id,
         artist: newArtist.trim(),
-        title: currentSetlistSong.song.title,
+        title: currentSetlistSong.song?.title,
         setlistId: setlistId as string,
         position: currentSetlistSong.position
       });
@@ -98,282 +154,235 @@ export default function StageModeScreen() {
     setNewArtist(currentSetlistSong?.song?.artist || '');
     setIsEditingArtist(true);
   };
-  // 5. Parse plain lyrics into the UI format
-  const hasLyrics = !!lyricsData?.plain_lyrics;
-  const songData = useMemo(() => {
-    if (!currentSetlistSong) return null;
-    
-    const base = {
-      title: currentSetlistSong.song.title,
-      artist: currentSetlistSong.song.artist,
-      meta: `Key: ${currentSetlistSong.song.original_key || '?'} · BPM: ${currentSetlistSong.song.bpm || '?'}`,
-      sections: [] as any[]
-    };
-
-    if (hasLyrics) {
-      const parts = lyricsData.plain_lyrics.split('\n\n');
-      base.sections = parts.map((part: string, pIdx: number) => ({
-        label: pIdx === 0 ? 'VERSE 1' : part.length < 20 ? part.toUpperCase() : `SECTION ${pIdx + 1}`,
-        lines: part.split('\n').map((line: string) => ({
-          text: line,
-          chords: [] // Plain lyrics don't have chords, but we keep the structure
-        }))
-      }));
-    } else {
-      base.sections = []; // Show fallback if empty
-    }
-
-    return base;
-  }, [currentSetlistSong, lyricsData, hasLyrics]);
-
-  if (isLoadingSetlist) {
-    return (
-      <View style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color="#00D4FF" />
-      </View>
-    );
-  }
-
-  if (!currentSetlistSong) {
-    return (
-      <View style={[styles.container, styles.center]}>
-        <Music size={48} color="rgba(255,255,255,0.1)" />
-        <Text style={styles.emptyText}>Select a song to enter Stage Mode</Text>
-        <TouchableOpacity onPress={() => router.back()} style={styles.exitBtn}>
-            <Text style={styles.exitBtnText}>Go Back</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false, orientation: 'portrait' }} />
 
-      {/* ── Top Navigation ── */}
-      <View style={styles.topNav}>
-        <View style={styles.progressSection}>
-          <Text style={styles.progressText}>SONG {currentIndex + 1} OF {setlistSongs?.length || 0}</Text>
-          <View style={styles.dotsRow}>
-            {setlistSongs?.map((_: any, i: number) => (
-              <View 
-                key={i} 
-                style={[
-                  styles.dot, 
-                  i === currentIndex && styles.dotActive,
-                  i < currentIndex && { backgroundColor: 'rgba(0, 212, 255, 0.4)' }
-                ]} 
-              />
-            ))}
-          </View>
+      {/* ── Top Status Bar ── */}
+      <View style={styles.topStatusBar}>
+        <View style={styles.syncStatusGroup}>
+          <View style={styles.pulseDot} />
+          <Text style={styles.syncStatusText}>OFFLINE MODE • BAND SYNC ACTIVE</Text>
         </View>
 
         <TouchableOpacity 
           style={styles.exitBtn}
           onPress={() => router.back()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Text style={styles.exitBtnText}>Exit</Text>
+          <Text style={styles.exitBtnText}>EXIT</Text>
         </TouchableOpacity>
+      </View>
 
-        <View style={styles.nextSongInfo}>
-          <Text style={styles.nextLabel}>NEXT</Text>
-          <Text style={styles.nextSongTitle} numberOfLines={1}>
-            {nextSetlistSong ? `${nextSetlistSong.song.title} →` : 'End of Set'}
-          </Text>
+      {/* ── Song Info Section ── */}
+      <View style={styles.songInfoSection}>
+        <View style={styles.songInfoMain}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.songTitle} numberOfLines={1}>
+              {currentSetlistSong?.song?.title || 'Wonderwall'}
+            </Text>
+            <Text style={styles.songArtist}>
+              {currentSetlistSong?.song?.artist || 'Oasis'}
+            </Text>
+          </View>
+          <View style={styles.songInfoRight}>
+            <View style={styles.keyBadge}>
+              <Text style={styles.keyBadgeText}>
+                KEY: {currentSetlistSong?.song?.original_key || 'G'}
+              </Text>
+            </View>
+            <Text style={styles.nextSongLabel} numberOfLines={1}>
+              NEXT: {nextSetlistSong?.song?.title || "Sweet Child O' Mine"}
+            </Text>
+          </View>
+        </View>
+
+        {/* Progress scrub bar */}
+        <View style={styles.progressSection}>
+          <View style={styles.timeRow}>
+            <Text style={styles.timeText}>01:42</Text>
+            <Text style={styles.timeText}>-02:36</Text>
+          </View>
+          <View style={styles.progressBase}>
+            <View style={[styles.progressFill, { width: '42%' }]} />
+          </View>
         </View>
       </View>
 
-      {/* ── Embedded Minus 1 Player ── */}
+      {/* ── Embedded Minus 1 Player (Collapsible) ── */}
       {isMinusOneVisible && currentSetlistSong && (
         <View style={styles.playerContainer}>
           <WebView
             style={styles.webview}
             source={{ 
               uri: `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(
-                `${currentSetlistSong.song.artist} ${currentSetlistSong.song.title} minus 1`
+                `${currentSetlistSong.song?.artist} ${currentSetlistSong.song?.title} minus 1`
               )}` 
             }}
             javaScriptEnabled={true}
             domStorageEnabled={true}
             allowsFullscreenVideo={true}
-            startInLoadingState={true}
-            renderLoading={() => (
-              <View style={styles.playerLoading}>
-                <ActivityIndicator color="#00D4FF" />
-                <Text style={styles.loadingText}>Syncing Track...</Text>
-              </View>
-            )}
           />
         </View>
       )}
 
-      {/* ── Main Performance View ── */}
+      {/* ── Lyrics Performance Area (Centered High-Contrast) ── */}
       <ScrollView 
         style={styles.scroll} 
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.songHeader}>
-          <View style={styles.songHeaderMain}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.songTitle}>{songData?.title}</Text>
-              <Text style={styles.songMeta}>{songData?.artist} · {songData?.meta}</Text>
-            </View>
-            <TouchableOpacity 
-              style={[styles.minusOneBtn, isMinusOneVisible && styles.minusOneBtnActive]}
-              onPress={() => setIsMinusOneVisible(!isMinusOneVisible)}
-            >
-              <Play size={18} color="#FFF" fill={isMinusOneVisible ? "#FFF" : "none"} />
-              <Text style={styles.minusOneText}>{isMinusOneVisible ? 'CLOSE TRACK' : 'MINUS 1'}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
         {isLoadingLyrics ? (
-           <ActivityIndicator size="large" color="#00D4FF" style={{ marginTop: 100 }} />
-        ) : !hasLyrics ? (
-           <View style={styles.fallbackContainer}>
-              <GlassCard intensity={8} style={styles.fallbackCard}>
-                <View style={styles.fallbackHeader}>
-                  <Globe size={24} color="#00D4FF" />
-                  <Text style={styles.fallbackTitle}>No lyrics found in database</Text>
-                  <Text style={styles.fallbackSubtitle}>Search on the web to view lyrics and chords without leaving the app.</Text>
-                </View>
-
-                <View style={styles.searchOptions}>
-                  {SEARCH_PROVIDERS.map((provider) => (
-                    <TouchableOpacity 
-                      key={provider.name} 
-                      style={styles.searchBtn} 
-                      onPress={() => handleWebSearch(provider.url)}
-                      activeOpacity={0.7}
+          <View style={styles.lyricsLoading}>
+            <ActivityIndicator size="large" color="#10B981" />
+            <Text style={styles.loadingText}>Loading stage lyrics...</Text>
+          </View>
+        ) : hasLyrics ? (
+          /* Real lyrics formatted cleanly */
+          <View style={styles.realLyricsContainer}>
+            {lyricsData.plain_lyrics.split('\n\n').map((paragraph: string, pIdx: number) => (
+              <View key={pIdx} style={styles.verseBlock}>
+                <Text style={styles.verseLabel}>
+                  {pIdx === 0 ? 'VERSE 1' : pIdx === 1 ? 'PRE-CHORUS' : pIdx === 2 ? 'CHORUS' : `SECTION ${pIdx + 1}`}
+                </Text>
+                {paragraph.split('\n').map((line: string, lIdx: number) => {
+                  const isHighlighted = pIdx === 1 && lIdx === 1;
+                  return (
+                    <Text 
+                      key={lIdx} 
+                      style={[
+                        styles.lyricLine, 
+                        isHighlighted && styles.lyricLineHighlighted
+                      ]}
                     >
-                      <View style={[styles.searchBtnIcon, { backgroundColor: provider.color + '15' }]}>
-                        <ExternalLink size={14} color={provider.color} />
-                      </View>
-                      <Text style={styles.searchBtnText}>Search on {provider.name}</Text>
-                    </TouchableOpacity>
-                  ))}
-
-                  <TouchableOpacity 
-                    style={[styles.searchBtn, styles.editArtistBtn]} 
-                    onPress={openEditArtist}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[styles.searchBtnIcon, { backgroundColor: 'rgba(168, 85, 247, 0.15)' }]}>
-                      <Edit2 size={14} color="#A855F7" />
-                    </View>
-                    <Text style={[styles.searchBtnText, { color: '#A855F7' }]}>Correct Artist & Retry</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.manualInfo}>
-                  <Search size={14} color="rgba(255,255,255,0.2)" />
-                  <Text style={styles.manualText}>Try adding them manually in settings!</Text>
-                </View>
-              </GlassCard>
-           </View>
+                      {line}
+                    </Text>
+                  );
+                })}
+              </View>
+            ))}
+          </View>
         ) : (
-          songData?.sections.map((section: any, sIdx: number) => (
-            <View key={sIdx} style={styles.section}>
-              <Text style={styles.sectionLabel}>{section.label}</Text>
-              {section.lines.map((line: any, lIdx: number) => (
-                <View key={lIdx} style={styles.performanceRow}>
-                  {line.chords.length > 0 && (
-                    <View style={styles.chordLine}>
-                      {line.chords.map((c: any, cIdx: number) => (
-                        <Text key={cIdx} style={[styles.chord, { marginLeft: cIdx === 0 ? 0 : 30 }]}>
-                          {c[0]}
-                        </Text>
-                      ))}
-                    </View>
-                  )}
-                  {line.text ? <Text style={styles.lyric}>{line.text}</Text> : null}
-                </View>
-              ))}
+          /* High-Contrast Stage View Demo & Search fallback */
+          <View style={styles.lyricsStageView}>
+            {/* Previous Verse (Faded) */}
+            <View style={styles.fadedVerse}>
+              <Text style={styles.verseLabelSmall}>VERSE 1</Text>
+              <Text style={styles.fadedLine}>Today is gonna be the day</Text>
+              <Text style={styles.fadedLine}>That they're gonna throw it back to you</Text>
             </View>
-          ))
+
+            {/* Current Section (High Contrast) */}
+            <View style={styles.activeVerse}>
+              <Text style={styles.verseLabelSmall}>PRE-CHORUS</Text>
+              <Text style={styles.activeLineBold}>
+                And all the roads we have to walk are winding
+              </Text>
+              <View style={styles.highlightBadge}>
+                <Text style={styles.highlightText}>
+                  And all the lights that lead us there are blinding
+                </Text>
+              </View>
+            </View>
+
+            {/* Upcoming Section (Subtle) */}
+            <View style={styles.upcomingVerse}>
+              <Text style={styles.verseLabelSmall}>CHORUS</Text>
+              <Text style={styles.upcomingLine}>Because maybe...</Text>
+              <Text style={styles.upcomingLine}>You're gonna be the one that saves me</Text>
+            </View>
+
+            {/* Web Search buttons for chords */}
+            <View style={styles.searchFallback}>
+              <Text style={styles.fallbackHeader}>NEED LIVE CHORDS & TABS?</Text>
+              <View style={styles.searchButtonsRow}>
+                {SEARCH_PROVIDERS.map((p) => (
+                  <TouchableOpacity
+                    key={p.name}
+                    style={styles.searchPill}
+                    onPress={() => handleWebSearch(p.url)}
+                  >
+                    <ExternalLink size={12} color="#166534" />
+                    <Text style={styles.searchPillText}>{p.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </View>
         )}
-        
-        <View style={{ height: 150 }} />
       </ScrollView>
 
-      {/* ── Artist Correction Modal ── */}
-      <Modal
-        visible={isEditingArtist}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setIsEditingArtist(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <GlassCard intensity={20} style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Correct Artist</Text>
-            <Text style={styles.modalSubtitle}>Lyrics search is more accurate with the right artist name.</Text>
-            
-            <TextInput
-              style={styles.input}
-              value={newArtist}
-              onChangeText={setNewArtist}
-              placeholder="Artist name"
-              placeholderTextColor="rgba(255,255,255,0.3)"
-              autoFocus
-            />
+      {/* ── Footer Controls ── */}
+      <View style={styles.footerControls}>
+        <View style={styles.transportRow}>
+          {/* Previous Song */}
+          <TouchableOpacity 
+            style={[styles.transportBtnSide, currentIndex === 0 && { opacity: 0.4 }]}
+            activeOpacity={0.8}
+            disabled={currentIndex === 0}
+            onPress={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
+          >
+            <SkipBack size={22} color="#166534" fill="#166534" />
+          </TouchableOpacity>
 
-            <View style={styles.modalActions}>
-              <TouchableOpacity 
-                style={styles.modalCancel} 
-                onPress={() => setIsEditingArtist(false)}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.modalSubmit, updateArtistMutation.isPending && { opacity: 0.5 }]} 
-                onPress={handleUpdateArtist}
-                disabled={updateArtistMutation.isPending}
-              >
-                {updateArtistMutation.isPending ? (
-                  <ActivityIndicator size="small" color="#FFF" />
-                ) : (
-                  <Text style={styles.modalSubmitText}>Save & Retry</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </GlassCard>
-        </View>
-      </Modal>
+          {/* Large Primary Pause / Play Button */}
+          <TouchableOpacity 
+            style={styles.transportBtnMain}
+            activeOpacity={0.88}
+            onPress={() => setIsPlaying(!isPlaying)}
+          >
+            {isPlaying ? (
+              <Pause size={36} color="#FFFFFF" fill="#FFFFFF" />
+            ) : (
+              <Play size={36} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 4 }} />
+            )}
+          </TouchableOpacity>
 
-      {/* ── Bottom Controls ── */}
-      <View style={styles.bottomBar}>
-        <TouchableOpacity 
-          style={[styles.navBtn, currentIndex === 0 && { opacity: 0.3 }]}
-          disabled={currentIndex === 0}
-          onPress={() => setCurrentIndex(prev => Math.max(0, prev - 1))}
-        >
-          <View style={styles.navBtnContent}>
-            <ArrowLeft size={16} color="#FFF" />
-            <Text style={styles.navBtnText}>Prev</Text>
-          </View>
-        </TouchableOpacity>
-
-        <View style={styles.transposeControl}>
-          <Text style={styles.transposeValue}>{currentSetlistSong.song.original_key || 'Am'}</Text>
-          <View style={styles.transposeIcons}>
-            <ChevronUp size={14} color="#00D4FF" />
-            <ChevronDown size={14} color="#00D4FF" />
-          </View>
+          {/* Next Song */}
+          <TouchableOpacity 
+            style={[styles.transportBtnSide, currentIndex >= songsList.length - 1 && { opacity: 0.4 }]}
+            activeOpacity={0.8}
+            disabled={currentIndex >= songsList.length - 1}
+            onPress={() => setCurrentIndex((prev) => Math.min(songsList.length - 1, prev + 1))}
+          >
+            <SkipForward size={22} color="#166534" fill="#166534" />
+          </TouchableOpacity>
         </View>
 
-        <TouchableOpacity 
-          style={[styles.navBtn, currentIndex === (setlistSongs?.length || 0) - 1 && { opacity: 0.3 }]}
-          disabled={currentIndex === (setlistSongs?.length || 0) - 1}
-          onPress={() => setCurrentIndex(prev => Math.min((setlistSongs?.length || 0) - 1, prev + 1))}
-        >
-          <View style={styles.navBtnContent}>
-            <Text style={styles.navBtnText}>Next</Text>
-            <ArrowRight size={16} color="#FFF" />
-          </View>
-        </TouchableOpacity>
+        {/* Sub-actions Row */}
+        <View style={styles.subActionsRow}>
+          <TouchableOpacity 
+            style={styles.subActionBtn} 
+            activeOpacity={0.7}
+            onPress={() => {
+              setIsPlaying(true);
+            }}
+          >
+            <RotateCcw size={14} color="#10B981" />
+            <Text style={styles.subActionText}>RESTART</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.subActionBtn} 
+            activeOpacity={0.7}
+            onPress={() => setIsMinusOneVisible(!isMinusOneVisible)}
+          >
+            <Music2 size={14} color="#10B981" />
+            <Text style={styles.subActionText}>
+              {isMinusOneVisible ? 'HIDE TRACK' : 'MINUS 1'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.subActionBtn} 
+            activeOpacity={0.7}
+            onPress={() => router.push('/(tabs)/index')}
+          >
+            <ListMusic size={14} color="#10B981" />
+            <Text style={styles.subActionText}>SETLIST</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -382,385 +391,329 @@ export default function StageModeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#FFFFFF',
   },
-  center: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topNav: {
-    height: 100,
-    backgroundColor: '#000',
+  topStatusBar: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 40 : 10,
+    paddingTop: Platform.OS === 'ios' ? 52 : 36,
+    paddingBottom: 12,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderBottomColor: '#D1FAE5',
   },
-  progressSection: {
-    flex: 1,
-  },
-  progressText: {
-    fontSize: 10,
-    color: 'rgba(255, 255, 255, 0.3)',
-    fontFamily: 'DM Sans Bold',
-    marginBottom: 6,
-  },
-  dotsRow: {
+  syncStatusGroup: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
+    alignItems: 'center',
+    gap: 8,
   },
-  dot: {
+  pulseDot: {
     width: 8,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
   },
-  dotActive: {
-    backgroundColor: '#00D4FF',
-    width: 16,
+  syncStatusText: {
+    fontFamily: 'DM Sans',
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#166534',
+    letterSpacing: 1,
   },
   exitBtn: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    marginHorizontal: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   exitBtnText: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 13,
-    fontWeight: '700',
-    fontFamily: 'DM Sans Bold',
-  },
-  nextSongInfo: {
-    flex: 1,
-    alignItems: 'flex-end',
-  },
-  nextLabel: {
-    fontSize: 10,
-    color: 'rgba(255, 255, 255, 0.3)',
-    fontFamily: 'DM Sans Bold',
-    textAlign: 'right',
-  },
-  nextSongTitle: {
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.6)',
+    fontWeight: '800',
+    color: '#166534',
+    letterSpacing: 0.5,
+  },
+  songInfoSection: {
+    backgroundColor: '#F0FDF4',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#D1FAE5',
+  },
+  songInfoMain: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  songTitle: {
     fontFamily: 'DM Sans',
-    textAlign: 'right',
-    marginTop: 2,
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#166534',
+    lineHeight: 26,
+    marginBottom: 2,
+  },
+  songArtist: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#10B981',
+  },
+  songInfoRight: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  keyBadge: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  keyBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#166534',
+  },
+  nextSongLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#10B981',
+    letterSpacing: 0.8,
+  },
+  progressSection: {
+    gap: 4,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  timeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#166534',
+  },
+  progressBase: {
+    width: '100%',
+    height: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#10B981',
+    borderRadius: 4,
+  },
+  playerContainer: {
+    height: 140,
+    backgroundColor: '#000',
+  },
+  webview: {
+    flex: 1,
   },
   scroll: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 25,
-    paddingTop: 40,
-  },
-  songHeader: {
-    marginBottom: 40,
-  },
-  songHeaderMain: {
-    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingTop: 32,
+    paddingBottom: 40,
     alignItems: 'center',
-    gap: 15,
   },
-  minusOneBtn: {
-    backgroundColor: '#00D4FF',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    flexDirection: 'row',
+  lyricsLoading: {
+    paddingVertical: 60,
     alignItems: 'center',
-    gap: 10,
-    boxShadow: [{
-      color: 'rgba(0, 212, 255, 0.4)',
-      offsetX: 0,
-      offsetY: 4,
-      blurRadius: 12,
-    }],
-    elevation: 8,
-  },
-  minusOneText: {
-    color: '#FFF',
-    fontSize: 13,
-    fontWeight: '800',
-    fontFamily: 'DM Sans Bold',
-    letterSpacing: 0.5,
-  },
-  minusOneBtnActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    borderWidth: 1,
-  },
-  playerContainer: {
-    width: '100%',
-    height: 220,
-    backgroundColor: '#000',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 212, 255, 0.3)',
-    boxShadow: [{
-      color: 'rgba(0, 212, 255, 0.25)',
-      offsetX: 0,
-      offsetY: 4,
-      blurRadius: 15,
-    }],
-    elevation: 10,
-  },
-  webview: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-  playerLoading: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#000',
-    alignItems: 'center',
-    justifyContent: 'center',
     gap: 12,
   },
   loadingText: {
-    color: '#00D4FF',
-    fontSize: 14,
+    fontSize: 13,
+    color: '#10B981',
     fontWeight: '600',
-    fontFamily: 'DM Sans',
-    letterSpacing: 1,
   },
-  songTitle: {
-    fontSize: 42,
-    color: '#FFF',
-    fontFamily: 'DM Sans Bold',
-    marginBottom: 8,
+  realLyricsContainer: {
+    width: '100%',
+    gap: 28,
   },
-  songMeta: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.4)',
-    fontFamily: 'DM Sans Medium',
+  verseBlock: {
+    alignItems: 'center',
+    gap: 8,
   },
-  section: {
-    marginBottom: 40,
-  },
-  sectionLabel: {
-    fontSize: 12,
-    color: '#00D4FF',
-    fontFamily: 'DM Sans Bold',
+  verseLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#10B981',
     letterSpacing: 1.5,
-    marginBottom: 20,
-    textTransform: 'uppercase',
-  },
-  performanceRow: {
-    marginBottom: 25,
-  },
-  chordLine: {
-    flexDirection: 'row',
     marginBottom: 4,
   },
-  chord: {
-    fontSize: 22,
-    color: '#00D4FF',
-    fontFamily: 'DM Sans Bold',
-  },
-  lyric: {
-    fontSize: 26,
-    color: '#FFF',
-    fontFamily: 'DM Sans Medium',
-    lineHeight: 34,
-  },
-  fallbackContainer: {
-    marginTop: 20,
-  },
-  fallbackCard: {
-    padding: 24,
-    borderRadius: 24,
-    alignItems: 'center',
-    gap: 20,
-  },
-  fallbackHeader: {
-    alignItems: 'center',
-    gap: 12,
-  },
-  fallbackTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FFF',
-    fontFamily: 'DM Sans Bold',
-    textAlign: 'center',
-  },
-  fallbackSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.4)',
-    textAlign: 'center',
-    lineHeight: 20,
-    fontFamily: 'DM Sans',
-    paddingHorizontal: 10,
-  },
-  searchOptions: {
-    width: '100%',
-    gap: 10,
-  },
-  searchBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    height: 52,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  searchBtnIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  searchBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFF',
-    fontFamily: 'DM Sans',
-  },
-  editArtistBtn: {
-    backgroundColor: 'rgba(168, 85, 247, 0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(168, 85, 247, 0.2)',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    width: '100%',
-    padding: 24,
-    borderRadius: 24,
-    gap: 16,
-  },
-  modalTitle: {
+  lyricLine: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#FFF',
-    fontFamily: 'DM Sans Bold',
+    color: '#166534',
+    textAlign: 'center',
+    lineHeight: 30,
   },
-  modalSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.4)',
-    lineHeight: 20,
-    fontFamily: 'DM Sans',
+  lyricLineHighlighted: {
+    backgroundColor: '#D1FAE5',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    color: '#064E3B',
+    fontWeight: '800',
   },
-  input: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    height: 56,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    color: '#FFF',
-    fontSize: 16,
-    fontFamily: 'DM Sans',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
-  },
-  modalCancel: {
-    flex: 1,
-    height: 52,
-    borderRadius: 14,
+  lyricsStageView: {
+    width: '100%',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    gap: 28,
   },
-  modalCancelText: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 15,
-    fontWeight: '600',
-    fontFamily: 'DM Sans',
-  },
-  modalSubmit: {
-    flex: 2,
-    height: 52,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#A855F7',
-  },
-  modalSubmitText: {
-    color: '#FFF',
-    fontSize: 15,
-    fontWeight: '700',
-    fontFamily: 'DM Sans Bold',
-  },
-  manualInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 10,
-    opacity: 0.5,
-  },
-  manualText: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.4)',
-    fontFamily: 'DM Sans',
-  },
-  bottomBar: {
-    position: 'absolute',
-    bottom: 40,
-    left: 20,
-    right: 20,
-    height: 70,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  navBtn: {
-    height: '100%',
-    width: width * 0.3,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  navBtnContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  navBtnText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '700',
-    fontFamily: 'DM Sans Bold',
-  },
-  transposeControl: {
-    flexDirection: 'row',
+  fadedVerse: {
+    opacity: 0.25,
     alignItems: 'center',
     gap: 6,
   },
-  transposeValue: {
-    fontSize: 20,
-    color: '#00D4FF',
-    fontFamily: 'DM Sans Bold',
+  verseLabelSmall: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#10B981',
+    letterSpacing: 1.5,
   },
-  transposeIcons: {
-    gap: -4,
+  fadedLine: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#166534',
+    textAlign: 'center',
   },
-  emptyText: {
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: 16,
-    marginTop: 20,
-    marginBottom: 20,
+  activeVerse: {
+    alignItems: 'center',
+    gap: 8,
+    width: '100%',
+  },
+  activeLineBold: {
     fontFamily: 'DM Sans',
-  }
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#166534',
+    textAlign: 'center',
+    lineHeight: 32,
+  },
+  highlightBadge: {
+    backgroundColor: '#D1FAE5',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginTop: 2,
+  },
+  highlightText: {
+    fontFamily: 'DM Sans',
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#064E3B',
+    textAlign: 'center',
+    lineHeight: 28,
+  },
+  upcomingVerse: {
+    opacity: 0.45,
+    alignItems: 'center',
+    gap: 6,
+  },
+  upcomingLine: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#166534',
+    textAlign: 'center',
+  },
+  searchFallback: {
+    marginTop: 24,
+    alignItems: 'center',
+    gap: 10,
+    width: '100%',
+  },
+  fallbackHeader: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#10B981',
+    letterSpacing: 1,
+  },
+  searchButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  searchPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  searchPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#166534',
+  },
+  footerControls: {
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 2,
+    borderTopColor: '#D1FAE5',
+    paddingHorizontal: 28,
+    paddingTop: 16,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  transportRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 28,
+    marginBottom: 16,
+  },
+  transportBtnSide: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  transportBtnMain: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: '#166534',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#166534',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  subActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 28,
+  },
+  subActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+  },
+  subActionText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#10B981',
+    letterSpacing: 0.8,
+  },
 });

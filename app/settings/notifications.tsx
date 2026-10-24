@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Platform, Switch } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronLeft, Bell, MessageSquare, Music, Star, Zap } from 'lucide-react-native';
-import { GlassCard } from '../../components/ui/GlassCard';
+import { useAppTheme } from '../../context/theme';
 
 export default function NotificationsScreen() {
   const router = useRouter();
+  const { colors, isDark } = useAppTheme();
   const [settings, setSettings] = useState({
     gigs: true,
     messages: true,
@@ -20,29 +20,33 @@ export default function NotificationsScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <LinearGradient colors={['#071420', '#0d2d45']} style={StyleSheet.absoluteFill} />
 
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <ChevronLeft size={24} color="#FFF" />
+      <View style={[styles.header, { backgroundColor: colors.bg, borderBottomColor: colors.border }]}>
+        <TouchableOpacity 
+          onPress={() => router.back()} 
+          style={[styles.backBtn, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}
+          activeOpacity={0.7}
+        >
+          <ChevronLeft size={22} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notifications</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Notifications</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>GIGS & BAND</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>GIGS & BAND</Text>
           <NotificationToggle 
             label="Gig Invitations" 
             sublabel="When someone invites you to join a gig"
             Icon={Music} 
             value={settings.gigs} 
             onToggle={() => toggle('gigs')} 
+            colors={colors}
           />
           <NotificationToggle 
             label="Setlist Updates" 
@@ -50,68 +54,69 @@ export default function NotificationsScreen() {
             Icon={Zap} 
             value={settings.setlists} 
             onToggle={() => toggle('setlists')} 
+            colors={colors}
           />
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>COMMUNICATION</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>COMMUNITY</Text>
           <NotificationToggle 
             label="Direct Messages" 
-            sublabel="Alerts for new chat messages"
+            sublabel="Musicians messaging you about opportunities"
             Icon={MessageSquare} 
             value={settings.messages} 
             onToggle={() => toggle('messages')} 
+            colors={colors}
+          />
+          <NotificationToggle 
+            label="Ratings & Reviews" 
+            sublabel="When an organizer leaves feedback on your profile"
+            Icon={Star} 
+            value={settings.reviews} 
+            onToggle={() => toggle('reviews')} 
+            colors={colors}
           />
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>PLATFORM</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>ANNOUNCEMENTS</Text>
           <NotificationToggle 
-            label="Ratings & Reviews" 
-            sublabel="When a student or band leaves a review"
-            Icon={Star} 
-            value={settings.reviews} 
-            onToggle={() => toggle('reviews')} 
-          />
-          <NotificationToggle 
-            label="Marketplace Offers" 
-            sublabel="Special deals on gear and services"
-            Icon={Zap} 
+            label="Gear Offers & Tips" 
+            sublabel="Stage Mode updates, tips, and promotions"
+            Icon={Bell} 
             value={settings.offers} 
             onToggle={() => toggle('offers')} 
+            colors={colors}
           />
         </View>
-
-        <TouchableOpacity style={styles.systemSettingsBtn}>
-           <Text style={styles.systemSettingsText}>Manage System Notifications</Text>
-        </TouchableOpacity>
 
       </ScrollView>
     </View>
   );
 }
 
-function NotificationToggle({ label, sublabel, Icon, value, onToggle }: any) {
+function NotificationToggle({ label, sublabel, Icon, value, onToggle, colors }: any) {
   return (
     <View style={styles.toggleWrapper}>
-      <GlassCard style={styles.toggleCard} intensity={12} noPadding contentContainerStyle={styles.toggleContent}>
-        <View style={styles.toggleLeft}>
-          <View style={styles.iconBubble}>
-            <Icon size={18} color="#00D4FF" />
+      <View style={[styles.toggleCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+        <View style={styles.toggleContent}>
+          <View style={styles.toggleLeft}>
+            <View style={[styles.iconBubble, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}>
+              <Icon size={20} color={colors.primary} />
+            </View>
+            <View style={styles.labelArea}>
+              <Text style={[styles.toggleLabel, { color: colors.text }]}>{label}</Text>
+              <Text style={[styles.toggleSublabel, { color: colors.textDim }]}>{sublabel}</Text>
+            </View>
           </View>
-          <View style={styles.labelArea}>
-            <Text style={styles.toggleLabel}>{label}</Text>
-            <Text style={styles.toggleSublabel}>{sublabel}</Text>
-          </View>
+          <Switch 
+            value={value} 
+            onValueChange={onToggle}
+            trackColor={{ false: colors.border, true: colors.primary }}
+            thumbColor={Platform.OS === 'ios' ? undefined : (value ? '#FFFFFF' : '#9CA3AF')}
+          />
         </View>
-        <Switch 
-          value={value} 
-          onValueChange={onToggle}
-          trackColor={{ false: 'rgba(255,255,255,0.05)', true: 'rgba(0, 212, 255, 0.4)' }}
-          thumbColor={value ? '#00D4FF' : '#455a64'}
-          ios_backgroundColor="rgba(255,255,255,0.05)"
-        />
-      </GlassCard>
+      </View>
     </View>
   );
 }
@@ -119,31 +124,28 @@ function NotificationToggle({ label, sublabel, Icon, value, onToggle }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#071420',
   },
   header: {
-    height: 100,
+    height: Platform.OS === 'ios' ? 100 : 70,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'ios' ? 40 : 10,
     borderBottomWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
   },
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: '700',
-    color: '#FFF',
-    fontFamily: 'DM Sans Bold',
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
   },
   scroll: {
     flex: 1,
@@ -154,22 +156,28 @@ const styles = StyleSheet.create({
   },
   section: {
     paddingHorizontal: 20,
-    marginBottom: 32,
+    marginBottom: 28,
   },
   sectionTitle: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.3)',
-    fontWeight: '700',
+    fontWeight: '800',
     letterSpacing: 1.2,
-    marginBottom: 16,
-    fontFamily: 'DM Sans Bold',
+    marginBottom: 12,
+    fontFamily: 'DM Sans',
+    paddingLeft: 4,
   },
   toggleWrapper: {
-    marginBottom: 12,
+    marginBottom: 10,
   },
   toggleCard: {
     borderRadius: 20,
-    minHeight: 80,
+    borderWidth: 1,
+    minHeight: 76,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
   toggleContent: {
     flex: 1,
@@ -183,13 +191,13 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 14,
   },
   iconBubble: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0, 212, 255, 0.1)',
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -198,25 +206,14 @@ const styles = StyleSheet.create({
     paddingRight: 10,
   },
   toggleLabel: {
-    fontSize: 16,
-    color: '#FFF',
-    fontFamily: 'DM Sans Bold',
+    fontSize: 15,
+    fontWeight: '700',
+    fontFamily: 'DM Sans',
     marginBottom: 2,
   },
   toggleSublabel: {
     fontSize: 12,
-    color: 'rgba(150, 175, 200, 0.5)',
     fontFamily: 'DM Sans',
     lineHeight: 16,
   },
-  systemSettingsBtn: {
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  systemSettingsText: {
-    color: 'rgba(255,255,255,0.2)',
-    fontSize: 12,
-    fontFamily: 'DM Sans Medium',
-    textDecorationLine: 'underline',
-  }
 });

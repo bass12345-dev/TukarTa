@@ -1,27 +1,17 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { ChevronLeft, MoreVertical, Music, Sparkles, Play, Plus, Video, BookOpen, Layers } from 'lucide-react-native';
-import { GlassCard } from '@/components/ui/GlassCard';
+import { ArrowLeft, MoreVertical, Music, Sparkles, Play, Plus, Video, BookOpen } from 'lucide-react-native';
 import { Orb } from '@/components/ui/Orb';
 import { useGigDetails, useGigSetlists, useSetlistSongs, useToggleLearnStatus, useCreateSetlist } from '@/utils/hooks/useMusician';
 import { SongPickerModal } from '@/components/setlists/SongPickerModal';
-
-const THEME = {
-  bg: '#071420',
-  text: '#F0F4FF',
-  textSec: 'rgba(200, 215, 235, 0.6)',
-  textDim: 'rgba(150, 175, 200, 0.35)',
-  surface: 'rgba(255, 255, 255, 0.04)',
-  glassBorder: 'rgba(255, 255, 255, 0.10)',
-  cyan: '#00D4FF',
-};
-
+import { useAppTheme } from '@/context/theme';
 
 export default function SetlistDetailsScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const { colors, isDark } = useAppTheme();
   const [showPicker, setShowPicker] = React.useState(false);
   const [activeSetlistIdx, setActiveSetlistIdx] = React.useState(0);
 
@@ -51,7 +41,7 @@ export default function SetlistDetailsScreen() {
 
   const handleAddSet = async () => {
     if (!gig) return;
-    const setName = `Set ${ (setlists?.length || 0) + 1 }`;
+    const setName = `Set ${(setlists?.length || 0) + 1}`;
     try {
       await createSetlist.mutateAsync({
         gigId: id as string,
@@ -66,8 +56,8 @@ export default function SetlistDetailsScreen() {
 
   if (loadingGig || loadingSetlists) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator color="#00D4FF" size="large" />
+      <View style={[styles.container, styles.centered, { backgroundColor: colors.bg }]}>
+        <ActivityIndicator color="#10B981" size="large" />
       </View>
     );
   }
@@ -77,7 +67,7 @@ export default function SetlistDetailsScreen() {
     : 'No Date';
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
 
       <SongPickerModal 
@@ -87,40 +77,62 @@ export default function SetlistDetailsScreen() {
         currentSongCount={songs?.length || 0}
       />
 
-      <View style={styles.header}>
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <View style={styles.navRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <ChevronLeft size={24} color="#FFF" />
+          <TouchableOpacity 
+            onPress={() => router.back()} 
+            style={[styles.backBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+          >
+            <ArrowLeft size={20} color={colors.text} />
           </TouchableOpacity>
-          <TouchableOpacity>
-            <MoreVertical size={20} color="#FFF" />
+          <TouchableOpacity style={[styles.backBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+            <MoreVertical size={18} color={colors.text} />
           </TouchableOpacity>
         </View>
 
         <View style={styles.titleRow}>
-          <Text style={styles.title}>{gig?.name || 'Untitled Gig'}</Text>
-          <View style={styles.statusBadge}>
+          <Text style={[styles.title, { color: colors.text }]}>{gig?.name || 'Untitled Gig'}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: isDark ? '#16382C' : '#D1FAE5' }]}>
             <Text style={styles.statusText}>{songs?.length || 0} songs</Text>
           </View>
         </View>
-        <Text style={styles.subtitle}>{gig?.venue || 'No Venue'} · {gig?.band?.name} · {dateStr}</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+          {gig?.venue || 'No Venue'} · {gig?.band?.name} · {dateStr}
+        </Text>
       </View>
 
       {/* Sets Tabs */}
-      <View style={styles.tabsContainer}>
+      <View style={[styles.tabsContainer, { borderBottomColor: colors.border }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScroll}>
-          {setlists?.map((sl: any, idx: number) => (
-            <TouchableOpacity 
-              key={sl.id} 
-              style={[styles.tab, activeSetlistIdx === idx && styles.activeTab]}
-              onPress={() => setActiveSetlistIdx(idx)}
-            >
-              <Text style={[styles.tabText, activeSetlistIdx === idx && styles.activeTabText]}>{sl.name}</Text>
-              {activeSetlistIdx === idx && <View style={styles.tabIndicator} />}
-            </TouchableOpacity>
-          ))}
-          <TouchableOpacity style={styles.addSetTab} onPress={handleAddSet}>
-            <Plus size={14} color="#00D4FF" />
+          {setlists?.map((sl: any, idx: number) => {
+            const isActive = activeSetlistIdx === idx;
+            return (
+              <TouchableOpacity 
+                key={sl.id} 
+                style={[
+                  styles.tab, 
+                  { backgroundColor: isActive ? (isDark ? '#16382C' : '#ECFDF5') : 'transparent' }
+                ]}
+                onPress={() => setActiveSetlistIdx(idx)}
+              >
+                <Text 
+                  style={[
+                    styles.tabText, 
+                    { color: isActive ? '#10B981' : colors.textSecondary },
+                    isActive && { fontWeight: '700' }
+                  ]}
+                >
+                  {sl.name}
+                </Text>
+                {isActive && <View style={styles.tabIndicator} />}
+              </TouchableOpacity>
+            );
+          })}
+          <TouchableOpacity 
+            style={[styles.addSetTab, { borderColor: colors.border }]} 
+            onPress={handleAddSet}
+          >
+            <Plus size={14} color="#10B981" />
             <Text style={styles.addSetText}>Add Set</Text>
           </TouchableOpacity>
         </ScrollView>
@@ -128,50 +140,52 @@ export default function SetlistDetailsScreen() {
 
       <View style={styles.actionRow}>
         <TouchableOpacity 
-          style={styles.agentBtn} 
+          style={[styles.agentBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]} 
           activeOpacity={0.8} 
           onPress={() => router.push({ pathname: '/ai-agent', params: { gigId: id } })}
         >
-          <Sparkles size={18} color="#FFF" style={{ marginRight: 8 }} />
-          <Text style={styles.btnText}>AI Agent</Text>
+          <Sparkles size={18} color="#10B981" style={{ marginRight: 8 }} />
+          <Text style={[styles.btnText, { color: colors.text }]}>AI Agent</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
-          style={styles.addManualBtn} 
+          style={[styles.addManualBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]} 
           activeOpacity={0.8} 
           onPress={() => setShowPicker(true)}
         >
-           <Plus size={18} color="#FFF" style={{ marginRight: 8 }} />
-           <Text style={styles.btnText}>Add Song</Text>
+          <Plus size={18} color="#10B981" style={{ marginRight: 8 }} />
+          <Text style={[styles.btnText, { color: colors.text }]}>Add Song</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
           style={styles.stageBtn} 
-          activeOpacity={0.8} 
+          activeOpacity={0.85} 
           onPress={() => router.push({ 
             pathname: '/stage-mode', 
             params: { setlistId: currentSetlist?.id } 
           })}
         >
-           <Play size={18} color="#FFF" fill="#FFF" />
+          <Play size={18} color="#FFF" fill="#FFF" />
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {loadingSongs ? (
-          <ActivityIndicator color="#00D4FF" style={{ marginTop: 20 }} />
+          <ActivityIndicator color="#10B981" style={{ marginTop: 30 }} />
         ) : songs?.length === 0 ? (
           <View style={styles.emptyState}>
-            <Music size={48} color="rgba(255,255,255,0.05)" />
-            <Text style={styles.emptyTitle}>Empty Setlist</Text>
-            <Text style={styles.emptySubtitle}>Tap "Add Song" or use the AI Agent to build your set.</Text>
+            <Music size={44} color={colors.border} />
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>Empty Setlist</Text>
+            <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+              Tap "Add Song" or use the AI Agent to build your performance set.
+            </Text>
           </View>
         ) : (
           songs?.map((item: any, index: number) => {
             const needsLearn = item.notes?.includes('[LEARN]');
             
             return (
-              <View key={item.id} style={styles.songRowContainer}>
+              <View key={item.id} style={[styles.songRowContainer, { borderBottomColor: colors.border }]}>
                 <TouchableOpacity 
                   style={styles.songRow} 
                   activeOpacity={0.7} 
@@ -180,30 +194,34 @@ export default function SetlistDetailsScreen() {
                     params: { setlistId: currentSetlist?.id, initialSongId: item.song.id } 
                   })}
                 >
-                   <Text style={styles.songIndex}>{String(index + 1).padStart(2, '0')}</Text>
+                  <Text style={[styles.songIndex, { color: colors.textSecondary }]}>
+                    {String(index + 1).padStart(2, '0')}
+                  </Text>
                    
-                   <Orb variant={getSongVariant(index)} size={40} style={styles.orb}>
-                      <Music size={16} color={getSongColor(index)} />
-                   </Orb>
+                  <View style={[styles.iconBox, { backgroundColor: isDark ? '#16382C' : '#F0FDF4' }]}>
+                    <Music size={16} color="#10B981" />
+                  </View>
 
-                   <View style={styles.songInfo}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Text style={styles.songTitle}>{item.song.title}</Text>
-                        {needsLearn && (
-                          <View style={styles.learnBadge}>
-                             <Text style={styles.learnBadgeText}>LEARN</Text>
-                          </View>
-                        )}
-                      </View>
-                      <Text style={styles.songArtist}>{item.song.artist}</Text>
-                   </View>
+                  <View style={styles.songInfo}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={[styles.songTitle, { color: colors.text }]}>{item.song.title}</Text>
+                      {needsLearn && (
+                        <View style={styles.learnBadge}>
+                          <Text style={styles.learnBadgeText}>LEARN</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={[styles.songArtist, { color: colors.textSecondary }]}>{item.song.artist}</Text>
+                  </View>
 
-                   <View style={styles.songMeta}>
-                      <View style={styles.keyBadge}>
-                         <Text style={styles.keyText}>{item.song.original_key || '?'}</Text>
-                      </View>
-                      <Text style={styles.durationText}>{Math.floor((item.song.duration_sec || 0) / 60)}:{(item.song.duration_sec || 0) % 60}</Text>
-                   </View>
+                  <View style={styles.songMeta}>
+                    <View style={[styles.keyBadge, { backgroundColor: isDark ? '#16382C' : '#ECFDF5', borderColor: '#10B981' }]}>
+                      <Text style={styles.keyText}>{item.song.original_key || 'C'}</Text>
+                    </View>
+                    <Text style={[styles.durationText, { color: colors.textSecondary }]}>
+                      {Math.floor((item.song.duration_sec || 0) / 60)}:{(item.song.duration_sec || 0) % 60 < 10 ? '0' : ''}{(item.song.duration_sec || 0) % 60}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
                 
                 <View style={styles.rowActions}>
@@ -211,14 +229,14 @@ export default function SetlistDetailsScreen() {
                     style={styles.actionBtn}
                     onPress={() => handleToggleLearn(item.song.id, item.notes)}
                   >
-                    <BookOpen size={18} color={needsLearn ? "#F59E0B" : "rgba(255,255,255,0.2)"} />
+                    <BookOpen size={18} color={needsLearn ? "#F59E0B" : colors.textSecondary} />
                   </TouchableOpacity>
 
                   <TouchableOpacity 
                     style={styles.youtubeBtn}
                     onPress={() => handleYoutubeSearch(item.song.title, item.song.artist)}
                   >
-                    <Video size={20} color="#FF0000" />
+                    <Video size={18} color="#EF4444" />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -230,85 +248,74 @@ export default function SetlistDetailsScreen() {
   );
 }
 
-function getSongVariant(index: number) {
-  const variants = ['cyan', 'purple', 'gold', 'green', 'pink'];
-  return variants[index % variants.length] as any;
-}
-
-function getSongColor(index: number) {
-  const colors = ['#00D4FF', '#8B5CF6', '#F59E0B', '#10B981', '#EC4899'];
-  return colors[index % colors.length];
-}
-
-function getVariantColor(variant: string) {
-  switch (variant) {
-    case 'cyan': return '#00D4FF';
-    case 'purple': return '#8B5CF6';
-    case 'gold': return '#F59E0B';
-    case 'green': return '#10B981';
-    case 'pink': return '#EC4899';
-    default: return '#00D4FF';
-  }
-}
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEME.bg,
-  },
-  header: {
-    paddingTop: 24,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-  },
-  navRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  backBtn: {
-    padding: 4,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#FFF',
-    fontFamily: 'DM Sans Bold',
-  },
-  statusBadge: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    paddingVertical: 5,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-  },
-  statusText: {
-    fontSize: 13,
-    color: '#10B981',
-    fontWeight: '700',
-    fontFamily: 'DM Sans',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.4)',
-    fontFamily: 'DM Sans',
   },
   centered: {
     alignItems: 'center',
     justifyContent: 'center',
   },
+  header: {
+    paddingTop: Platform.OS === 'ios' ? 56 : 38,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    maxWidth: 640,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  navRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+    letterSpacing: -0.5,
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#10B981',
+    fontFamily: 'DM Sans',
+  },
+  subtitle: {
+    fontSize: 13,
+    fontFamily: 'DM Sans',
+  },
   tabsContainer: {
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+    maxWidth: 640,
+    width: '100%',
+    alignSelf: 'center',
   },
   tabsScroll: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     paddingVertical: 10,
+    gap: 8,
   },
   tab: {
     paddingHorizontal: 16,
@@ -317,26 +324,17 @@ const styles = StyleSheet.create({
     position: 'relative',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
-  },
-  activeTab: {
-    backgroundColor: 'rgba(0, 212, 255, 0.1)',
   },
   tabText: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: 14,
-    fontWeight: '600',
-    fontFamily: 'DM Sans Medium',
-  },
-  activeTabText: {
-    color: '#00D4FF',
+    fontSize: 13.5,
+    fontFamily: 'DM Sans',
   },
   tabIndicator: {
     position: 'absolute',
-    bottom: 0,
-    width: 20,
+    bottom: 2,
+    width: 16,
     height: 3,
-    backgroundColor: '#00D4FF',
+    backgroundColor: '#10B981',
     borderRadius: 2,
   },
   addSetTab: {
@@ -346,64 +344,60 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(0, 212, 255, 0.3)',
     borderStyle: 'dashed',
-    marginLeft: 10,
+    marginLeft: 6,
   },
   addSetText: {
-    color: '#00D4FF',
+    color: '#10B981',
     fontSize: 13,
-    fontWeight: '600',
-    fontFamily: 'DM Sans Medium',
+    fontWeight: '700',
+    fontFamily: 'DM Sans',
     marginLeft: 6,
   },
   actionRow: {
     flexDirection: 'row',
     paddingHorizontal: 20,
+    paddingTop: 16,
     gap: 10,
-    marginBottom: 24,
+    marginBottom: 16,
+    maxWidth: 640,
+    width: '100%',
+    alignSelf: 'center',
   },
   agentBtn: {
     flex: 1.5,
-    height: 50,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    height: 48,
     borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   addManualBtn: {
     flex: 1.5,
-    height: 50,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    height: 48,
     borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   stageBtn: {
-    width: 50,
-    height: 50,
-    backgroundColor: '#00D4FF',
+    width: 48,
+    height: 48,
+    backgroundColor: '#10B981',
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: [{
-      color: 'rgba(0, 212, 255, 0.3)',
-      offsetX: 0,
-      offsetY: 4,
-      blurRadius: 10,
-    }],
-    elevation: 8,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   btnText: {
     fontSize: 14,
-    color: '#FFF',
-    fontWeight: '600',
+    fontWeight: '700',
     fontFamily: 'DM Sans',
   },
   emptyState: {
@@ -414,15 +408,13 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 18,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.2)',
-    fontFamily: 'DM Sans Bold',
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
   },
   emptySubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.15)',
+    fontSize: 13.5,
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 19,
     fontFamily: 'DM Sans',
   },
   scroll: {
@@ -430,12 +422,14 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 60,
+    maxWidth: 640,
+    width: '100%',
+    alignSelf: 'center',
   },
   songRowContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.04)',
   },
   songRow: {
     flex: 1,
@@ -444,19 +438,32 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 20,
   },
-  youtubeBtn: {
-    paddingHorizontal: 15,
-    height: '100%',
-    justifyContent: 'center',
+  songIndex: {
+    fontSize: 13,
+    fontFamily: 'JetBrains Mono',
+    width: 24,
+    marginRight: 10,
   },
-  rowActions: {
-    flexDirection: 'row',
+  iconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     alignItems: 'center',
-  },
-  actionBtn: {
-    paddingHorizontal: 10,
-    height: '100%',
     justifyContent: 'center',
+    marginRight: 12,
+  },
+  songInfo: {
+    flex: 1,
+  },
+  songTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    fontFamily: 'DM Sans',
+    marginBottom: 2,
+  },
+  songArtist: {
+    fontSize: 12.5,
+    fontFamily: 'DM Sans',
   },
   learnBadge: {
     backgroundColor: 'rgba(245, 158, 11, 0.15)',
@@ -469,59 +476,46 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: '#F59E0B',
     fontWeight: '700',
-    fontFamily: 'DM Sans Bold',
-  },
-  songIndex: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.2)',
-    fontFamily: 'JetBrains Mono',
-    width: 24,
-    marginRight: 12,
-  },
-  orb: {
-    marginRight: 16,
-  },
-  songInfo: {
-    flex: 1,
-  },
-  songTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFF',
-    fontFamily: 'DM Sans Bold',
-    marginBottom: 2,
-  },
-  songArtist: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.4)',
     fontFamily: 'DM Sans',
   },
   songMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
   },
   keyBadge: {
-    backgroundColor: 'rgba(0, 212, 255, 0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(0, 212, 255, 0.3)',
     borderRadius: 6,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    minWidth: 34,
+    paddingVertical: 2,
+    paddingHorizontal: 7,
+    minWidth: 32,
     alignItems: 'center',
   },
   keyText: {
-    fontSize: 12,
-    color: '#00D4FF',
+    fontSize: 11.5,
+    color: '#10B981',
     fontWeight: '700',
     fontFamily: 'JetBrains Mono',
   },
   durationText: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.25)',
+    fontSize: 12.5,
     fontFamily: 'DM Sans',
-    width: 38,
+    width: 36,
     textAlign: 'right',
+  },
+  rowActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 12,
+  },
+  actionBtn: {
+    paddingHorizontal: 8,
+    height: 44,
+    justifyContent: 'center',
+  },
+  youtubeBtn: {
+    paddingHorizontal: 8,
+    height: 44,
+    justifyContent: 'center',
   },
 });

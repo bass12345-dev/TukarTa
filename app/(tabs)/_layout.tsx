@@ -1,90 +1,90 @@
 import { BlurView } from 'expo-blur';
 import { Tabs, useRouter } from 'expo-router';
-import { Home, Music, Search, User, Users } from 'lucide-react-native';
+import { LayoutDashboard, ListMusic, Users, Search, User } from 'lucide-react-native';
 import React from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAppTheme } from '../../context/theme';
 
 export default function TabLayout() {
-  const isDark = true; // Forcing dark mode for the fixed dark theme
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { colors, isDark } = useAppTheme();
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
       <Tabs
         screenOptions={{
-          tabBarActiveTintColor: '#00D4FF',
-          tabBarInactiveTintColor: 'rgba(150,175,200,0.35)',
+          tabBarActiveTintColor: colors.tabActive,
+          tabBarInactiveTintColor: colors.tabInactive,
           tabBarStyle: {
-            backgroundColor: 'transparent',
+            backgroundColor: colors.tabBg,
             position: 'absolute',
-            borderTopWidth: 0,
-            elevation: 0,
-            height: 64 + insets.bottom,
-            paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
-            paddingTop: 12,
+            borderTopWidth: 1,
+            borderTopColor: colors.tabBorder,
+            elevation: 10,
+            height: Platform.OS === 'web' ? 70 : 66 + insets.bottom,
+            paddingBottom: Platform.OS === 'web' ? 12 : Math.max(insets.bottom, 10),
+            paddingTop: 8,
+            shadowColor: '#10B981',
+            shadowOffset: { width: 0, height: -4 },
+            shadowOpacity: isDark ? 0.25 : 0.06,
+            shadowRadius: 12,
           },
-          tabBarBackground: () => (
-            <BlurView
-              tint="dark"
-              intensity={80}
-              style={StyleSheet.absoluteFill}
-            />
-          ),
           tabBarLabelStyle: {
             fontFamily: 'DM Sans',
             fontSize: 10,
-            fontWeight: '500',
-            paddingBottom: 4,
+            fontWeight: '700',
+            letterSpacing: 0.4,
+            paddingBottom: 2,
           },
           headerShown: false,
         }}>
         <Tabs.Screen
           name="index"
           options={{
-            title: 'Home',
-            tabBarIcon: ({ color }) => <Home size={22} color={color} />,
+            title: 'Dashboard',
+            tabBarIcon: ({ color }) => <LayoutDashboard size={21} color={color} strokeWidth={2.4} />,
           }}
         />
         <Tabs.Screen
           name="setlists"
           options={{
             title: 'Setlists',
-            tabBarIcon: ({ color }) => <Music size={22} color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="discover"
-          options={{
-            title: 'Discover',
-            tabBarIcon: ({ color }) => <Search size={22} color={color} />,
+            tabBarIcon: ({ color }) => <ListMusic size={21} color={color} strokeWidth={2.4} />,
           }}
         />
         <Tabs.Screen
           name="bands"
           options={{
             title: 'Bands',
-            tabBarIcon: ({ color }) => <Users size={22} color={color} />,
+            tabBarIcon: ({ color }) => <Users size={21} color={color} strokeWidth={2.4} />,
+          }}
+        />
+        <Tabs.Screen
+          name="discover"
+          options={{
+            title: 'Discover',
+            tabBarIcon: ({ color }) => <Search size={21} color={color} strokeWidth={2.4} />,
           }}
         />
         <Tabs.Screen
           name="profile"
           options={{
             title: 'Profile',
-            tabBarIcon: ({ color }) => <User size={22} color={color} />,
+            tabBarIcon: ({ color }) => <User size={21} color={color} strokeWidth={2.4} />,
           }}
         />
       </Tabs>
 
       {/* Floating AI Robot Mascot */}
-      <View style={[styles.floatingContainer, { bottom: 85 + insets.bottom }]}>
+      <View style={[styles.floatingContainer, { bottom: (Platform.OS === 'web' ? 78 : 74) + insets.bottom }]}>
         <TouchableOpacity 
-          activeOpacity={0.8} 
+          activeOpacity={0.85} 
           onPress={() => router.push('/ai-agent')}
           style={styles.floatingButton}
         >
-          <View style={styles.robotWrapper}>
+          <View style={[styles.robotWrapper, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
              <Image 
                source={require('../../assets/images/ai-robot-removebg-preview.png')} 
                style={styles.robotImage}
@@ -103,53 +103,54 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
   },
   floatingContainer: {
     position: 'absolute',
-    right: 15,
+    right: 16,
     zIndex: 999,
   },
   floatingButton: {
-    width: 90,
-    height: 90,
+    width: 68,
+    height: 68,
     alignItems: 'center',
     justifyContent: 'center',
   },
   robotWrapper: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: 'rgba(7, 20, 32, 0.6)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(0, 212, 255, 0.3)',
-    shadowColor: '#00D4FF',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#D1FAE5',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
     elevation: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
   robotImage: {
-    width: 80,
-    height: 80,
+    width: 50,
+    height: 50,
   },
   badge: {
     position: 'absolute',
-    top: 0,
-    right: 0,
-    backgroundColor: '#00D4FF',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-    borderWidth: 1,
+    top: -2,
+    right: -2,
+    backgroundColor: '#10B981',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1.5,
     borderColor: '#FFF',
     zIndex: 10,
   },
   badgeText: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: '900',
-    color: '#071420',
+    color: '#FFFFFF',
     letterSpacing: 0.5,
   }
 });

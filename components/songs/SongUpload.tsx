@@ -1,15 +1,14 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack } from 'expo-router';
-import { Check, Plus, Upload, X } from 'lucide-react-native';
-import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Platform, Image, Modal } from 'react-native';
+import { Plus, Upload, X, ArrowLeft } from 'lucide-react-native';
+import React, { useState, useRef } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Platform, Image, Modal, ActivityIndicator, Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Button } from '../ui/Button';
 import { supabase } from '../../utils/supabase';
 import { useAnalyzeScreenshot } from '../../utils/hooks/useSongs';
-import { ActivityIndicator, Alert } from 'react-native';
-import { useRef } from 'react';
 import { readAsArrayBuffer } from '../../utils/file';
+import { useAppTheme } from '../../context/theme';
 
 interface SongUploadProps {
   onBack: () => void;
@@ -18,22 +17,23 @@ interface SongUploadProps {
 }
 
 export function SongUpload({ onBack, onAnalyze, onSearch }: SongUploadProps) {
+  const { colors, isDark } = useAppTheme();
   const [images, setImages] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [currentProgress, setCurrentProgress] = useState(0); // For bulk upload progress
-  const [selectedImage, setSelectedImage] = useState<string | null>(null); // For full preview
+  const [currentProgress, setCurrentProgress] = useState(0);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const analyzeMutation = useAnalyzeScreenshot();
 
   const pickImage = async () => {
     if (images.length >= 5) {
-      alert("Maximum 5 images allowed.");
+      Alert.alert('Limit Reached', 'Maximum 5 images allowed per upload.');
       return;
     }
 
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      allowsEditing: false, // Must be false when allowsMultipleSelection is true
+      allowsEditing: false,
       allowsMultipleSelection: true,
       selectionLimit: 5 - images.length,
       quality: 0.7,
@@ -52,9 +52,9 @@ export function SongUpload({ onBack, onAnalyze, onSearch }: SongUploadProps) {
   const normalize = (str: string) => {
     return str
       .toLowerCase()
-      .replace(/\s*\(.*?\)\s*/g, ' ') // Remove parentheses content e.g. (Live)
-      .replace(/\s*\[.*?\]\s*/g, ' ') // Remove bracket content e.g. [Official]
-      .replace(/[^a-z0-9 ]/g, '')     // Remove special characters
+      .replace(/\s*\(.*?\)\s*/g, ' ')
+      .replace(/\s*\[.*?\]\s*/g, ' ')
+      .replace(/[^a-z0-9 ]/g, '')
       .trim();
   };
 
@@ -70,20 +70,16 @@ export function SongUpload({ onBack, onAnalyze, onSearch }: SongUploadProps) {
       if (!user) throw new Error('Not authenticated');
 
       for (let i = 0; i < images.length; i++) {
-        // Double check cancellation before each major step
         if (abortControllerRef.current?.signal.aborted) break;
         
         setCurrentProgress(i + 1);
         const imageUri = images[i];
         
-        // 1. Prepare file
         const fileName = `${Date.now()}-${i}-${Math.random().toString(36).substring(7)}.jpg`;
         const filePath = `${user.id}/${fileName}`;
         
-        // 2. Read file as ArrayBuffer safely (Universal helper)
         const arrayBuffer = await readAsArrayBuffer(imageUri);
 
-        // 3. Upload to Supabase Storage
         const { error: uploadError } = await supabase.storage
           .from('song-screenshots')
           .upload(filePath, arrayBuffer, {
@@ -92,41 +88,32 @@ export function SongUpload({ onBack, onAnalyze, onSearch }: SongUploadProps) {
           });
 
         if (uploadError) throw uploadError;
-
-        // 3. Trigger AI Analysis
-        // Note: Mutation itself doesn't easily support signal in mutateAsync 
-        // without wrapping, so we'll just check signal before and after.
         if (abortControllerRef.current?.signal.aborted) break;
-        
+
         const songs = await analyzeMutation.mutateAsync(filePath);
         
         if (abortControllerRef.current?.signal.aborted) break;
         allExtractedSongs.push(...songs);
       }
       
-      // If user cancelled, don't proceed to review
       if (abortControllerRef.current?.signal.aborted) {
         return;
       }
       
-      // 4. De-duplicate results intelligently
       const uniqueSongsMap = new Map<string, { title: string; artist: string; genre: string }>();
       
       allExtractedSongs.forEach(song => {
         const key = `${normalize(song.title)}|${normalize(song.artist)}`;
-        // If we don't have this song yet, or the current one has a better artist name (not "Unknown Artist")
         if (!uniqueSongsMap.has(key) || (song.artist.toLowerCase() !== 'unknown artist' && uniqueSongsMap.get(key)?.artist.toLowerCase() === 'unknown artist')) {
           uniqueSongsMap.set(key, { title: song.title, artist: song.artist, genre: song.genre });
         }
       });
 
       const uniqueSongs = Array.from(uniqueSongsMap.values());
-
-      // 5. Proceed to review
       onAnalyze(uniqueSongs);
     } catch (error: any) {
       console.error('Analysis failed:', error);
-      alert('Failed to analyze: ' + error.message);
+      Alert.alert('Analysis Failed', error.message || 'Could not process images.');
     } finally {
       setUploading(false);
       setCurrentProgress(0);
@@ -143,81 +130,86 @@ export function SongUpload({ onBack, onAnalyze, onSearch }: SongUploadProps) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <LinearGradient colors={['#071420', '#0d2d45']} style={StyleSheet.absoluteFill} />
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <LinearGradient
+        colors={isDark ? ['#132821', colors.bg] : ['#F0FDF4', '#FFFFFF']}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 0.3 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={onBack}>
-            <Text style={styles.backButtonText}>← Back</Text>
+          <TouchableOpacity style={[styles.backButton, { backgroundColor: colors.bgCard, borderColor: colors.border }]} onPress={onBack}>
+            <ArrowLeft size={20} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.title}>Upload screenshots</Text>
-          <Text style={styles.subtitle}>
-            Drop in photos of your song list. AI reads handwriting, typed text, even blurry photos.
+          <Text style={[styles.title, { color: colors.text }]}>Upload screenshots</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+            Drop in photos of your song list or sheet music. AI extracts titles and artists automatically.
           </Text>
         </View>
 
         <TouchableOpacity 
-          style={styles.uploadHero} 
+          style={[styles.uploadHero, { backgroundColor: isDark ? colors.bgCard : '#F0FDF4', borderColor: '#10B981' }]} 
           activeOpacity={0.8}
           onPress={pickImage}
         >
           <View style={styles.uploadRing}>
-            <Upload size={32} color="#00D4FF" />
+            <Upload size={30} color="#FFFFFF" strokeWidth={2.5} />
           </View>
-          <Text style={styles.uploadHeroTitle}>Tap to upload</Text>
-          <Text style={styles.uploadHeroSubtitle}>
+          <Text style={[styles.uploadHeroTitle, { color: colors.text }]}>Tap to select screenshots</Text>
+          <Text style={[styles.uploadHeroSubtitle, { color: colors.textSecondary }]}>
             PNG, JPG, HEIC · Up to 5 images
           </Text>
         </TouchableOpacity>
 
-         <View style={styles.thumbnailSection}>
+        <View style={styles.thumbnailSection}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.thumbnailRow}>
-             {images.map((uri, idx) => (
-                <TouchableOpacity 
-                  key={idx} 
-                  style={[styles.thumbnailCard, styles.thumbnailFilled]}
-                  onPress={() => setSelectedImage(uri)}
-                >
-                   <Image source={{ uri }} style={styles.thumbnailImage} resizeMode="cover" />
-                   <View style={styles.thumbnailOverlay}>
-                     <Text style={styles.thumbnailText} numberOfLines={1}>
-                       Image {idx + 1}
-                     </Text>
-                   </View>
-                   <TouchableOpacity style={styles.removeIcon} onPress={() => removeImage(idx)}>
-                     <X size={14} color="#FFF" />
-                   </TouchableOpacity>
+            {images.map((uri, idx) => (
+              <TouchableOpacity 
+                key={idx} 
+                style={[styles.thumbnailCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+                onPress={() => setSelectedImage(uri)}
+              >
+                <Image source={{ uri }} style={styles.thumbnailImage} resizeMode="cover" />
+                <View style={styles.thumbnailOverlay}>
+                  <Text style={styles.thumbnailText} numberOfLines={1}>
+                    Photo {idx + 1}
+                  </Text>
+                </View>
+                <TouchableOpacity style={styles.removeIcon} onPress={() => removeImage(idx)}>
+                  <X size={12} color="#FFF" />
                 </TouchableOpacity>
-             ))}
+              </TouchableOpacity>
+            ))}
 
-             {images.length < 5 && (
-               <TouchableOpacity 
-                  onPress={pickImage}
-                  style={[styles.thumbnailCard, styles.thumbnailAdd]}
-               >
-                  <View style={styles.addCircle}>
-                    <Plus size={16} color="rgba(255, 255, 255, 0.4)" />
-                  </View>
-                  <Text style={styles.addText}>Add more</Text>
-               </TouchableOpacity>
-             )}
+            {images.length < 5 && (
+              <TouchableOpacity 
+                onPress={pickImage}
+                style={[styles.thumbnailCard, styles.thumbnailAdd, { backgroundColor: isDark ? colors.bgCard : '#F8FAFC', borderColor: colors.border }]}
+              >
+                <View style={[styles.addCircle, { backgroundColor: isDark ? '#16382C' : '#F0FDF4' }]}>
+                  <Plus size={16} color="#10B981" />
+                </View>
+                <Text style={[styles.addText, { color: colors.textSecondary }]}>Add photo</Text>
+              </TouchableOpacity>
+            )}
 
-             {images.length === 0 && (
-               <View style={[styles.thumbnailCard, styles.thumbnailEmpty]}>
-                  <View style={styles.addCircle}>
-                    <Plus size={16} color="rgba(255, 255, 255, 0.4)" />
-                  </View>
-                  <Text style={styles.addText}>No file selected</Text>
-               </View>
-             )}
+            {images.length === 0 && (
+              <View style={[styles.thumbnailCard, styles.thumbnailEmpty, { backgroundColor: isDark ? colors.bgCard : '#F8FAFC', borderColor: colors.border }]}>
+                <View style={[styles.addCircle, { backgroundColor: isDark ? '#16382C' : '#F0FDF4' }]}>
+                  <Plus size={16} color="#10B981" />
+                </View>
+                <Text style={[styles.addText, { color: colors.textSecondary }]}>No photo yet</Text>
+              </View>
+            )}
           </ScrollView>
         </View>
 
         <View style={styles.btnSection}>
           <Button 
-            title={uploading ? `Analyzing (${currentProgress}/${images.length})...` : "Analyze with AI →"} 
-            variant="cyan" 
+            title={uploading ? `Extracting (${currentProgress}/${images.length})...` : "Analyze with AI →"} 
+            variant="mint" 
             onPress={handleAnalyze}
             disabled={images.length === 0 || uploading}
             style={{ opacity: (images.length > 0 && !uploading) ? 1 : 0.6 }}
@@ -236,7 +228,7 @@ export function SongUpload({ onBack, onAnalyze, onSearch }: SongUploadProps) {
           {!uploading && (
             <Button 
               title="Search manually instead" 
-              variant="ghost" 
+              variant="outline-mint" 
               onPress={onSearch} 
             />
           )}
@@ -273,79 +265,71 @@ export function SongUpload({ onBack, onAnalyze, onSearch }: SongUploadProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#071420',
   },
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingBottom: 40,
+    maxWidth: 640,
+    width: '100%',
+    alignSelf: 'center',
   },
   header: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   backButton: {
-    alignSelf: 'flex-start',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 16,
-  },
-  backButtonText: {
-    fontSize: 15,
-    color: '#00D4FF',
-    fontFamily: 'DM Sans',
   },
   title: {
     fontSize: 26,
-    fontWeight: '700',
-    color: '#FFF',
-    fontFamily: 'DM Sans Bold',
-    marginBottom: 8,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+    letterSpacing: -0.5,
+    marginBottom: 6,
   },
   subtitle: {
-    fontSize: 15,
-    color: 'rgba(255, 255, 255, 0.6)',
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 20,
     fontFamily: 'DM Sans',
   },
   uploadHero: {
-    backgroundColor: 'rgba(15, 23, 42, 0.4)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(0, 212, 255, 0.25)',
+    borderWidth: 2,
     borderStyle: 'dashed',
-    borderRadius: 32,
-    padding: 36,
+    borderRadius: 24,
+    padding: 32,
     alignItems: 'center',
-    gap: 16,
-    marginVertical: 16,
-    height: 280,
+    gap: 12,
+    marginVertical: 18,
+    height: 240,
     justifyContent: 'center',
-    overflow: 'hidden',
   },
   uploadRing: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    backgroundColor: 'rgba(15, 23, 42, 0.8)',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 212, 255, 0.3)',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#10B981',
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: [{
-      color: 'rgba(0, 212, 255, 0.6)',
-      offsetX: 0,
-      offsetY: 0,
-      blurRadius: 24,
-    }],
-    elevation: 8,
-    marginBottom: 8,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 4,
+    marginBottom: 4,
   },
   uploadHeroTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
-    color: '#FFF',
-    fontFamily: 'DM Sans Bold',
+    fontFamily: 'DM Sans',
   },
   uploadHeroSubtitle: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 12.5,
     textAlign: 'center',
     fontFamily: 'DM Sans',
   },
@@ -375,60 +359,50 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(7, 20, 32, 0.6)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     paddingVertical: 4,
     paddingHorizontal: 8,
   },
   removeIcon: {
     position: 'absolute',
-    top: -6,
-    right: -6,
+    top: 6,
+    right: 6,
     backgroundColor: '#EF4444',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
   },
-  thumbnailFilled: {
-    backgroundColor: '#1E293B',
-    borderColor: 'rgba(255, 255, 255, 0.05)',
-  },
   thumbnailEmpty: {
-    backgroundColor: '#0F172A',
-    borderColor: 'rgba(255, 255, 255, 0.05)',
     borderStyle: 'dashed',
   },
   thumbnailAdd: {
-    backgroundColor: '#162032',
-    borderColor: 'rgba(255, 255, 255, 0.05)',
     borderStyle: 'dashed',
   },
   thumbnailText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: '#FFFFFF',
     textAlign: 'center',
-    fontFamily: 'DM Sans Bold',
-    lineHeight: 18,
+    fontFamily: 'DM Sans',
   },
   addCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   addText: {
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.4)',
     fontFamily: 'DM Sans',
+    fontWeight: '600',
   },
   btnSection: {
-    gap: 10,
+    gap: 12,
     paddingBottom: 32,
   },
   cancelButton: {
@@ -449,7 +423,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
   },

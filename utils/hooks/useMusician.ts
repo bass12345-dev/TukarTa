@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '../supabase';
+import { supabase, getCurrentUser } from '../supabase';
 
 export function useMusicianProfile(userId: string | undefined) {
   return useQuery({
@@ -16,6 +16,7 @@ export function useMusicianProfile(userId: string | undefined) {
       return data;
     },
     enabled: !!userId,
+    staleTime: 1000 * 60 * 5, // 5 mins
   });
 }
 
@@ -23,7 +24,7 @@ export function useMyBands() {
   return useQuery({
     queryKey: ['my-bands'],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error('Not authenticated');
 
       const { data, error } = await supabase
@@ -43,6 +44,7 @@ export function useMyBands() {
       if (error) throw error;
       return data;
     },
+    staleTime: 1000 * 60 * 3, // 3 mins
   });
 }
 
@@ -71,6 +73,7 @@ export function useSongStats(userId: string | undefined) {
       };
     },
     enabled: !!userId,
+    staleTime: 1000 * 60 * 3, // 3 mins
   });
 }
 
@@ -79,7 +82,7 @@ export function useCreateBand() {
 
   return useMutation({
     mutationFn: async ({ name, genres, city, lat, lng }: { name: string; genres: string[]; city: string; lat?: number | null; lng?: number | null }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error('Not authenticated');
 
       // 1. Create the band
@@ -156,7 +159,7 @@ export function useMyInvites() {
   return useQuery({
     queryKey: ['my-invites'],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return [];
 
       const { data, error } = await supabase
@@ -176,6 +179,7 @@ export function useMyInvites() {
       if (error) throw error;
       return data;
     },
+    staleTime: 1000 * 60 * 2, // 2 mins
   });
 }
 
@@ -184,7 +188,7 @@ export function useAcceptInvite() {
 
   return useMutation({
     mutationFn: async (inviteId: string) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error('Not authenticated');
 
       // 1. Get invite details
@@ -255,6 +259,7 @@ export function useBandDetails(bandId: string | undefined) {
       return data;
     },
     enabled: !!bandId,
+    staleTime: 1000 * 60 * 5,
   });
 }
 
@@ -281,6 +286,7 @@ export function useBandMembers(bandId: string | undefined) {
       return data;
     },
     enabled: !!bandId,
+    staleTime: 1000 * 60 * 3,
   });
 }
 
@@ -297,7 +303,7 @@ export function useUpdateProfile() {
       role?: string;
       rate?: number | null;
     }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error('Not authenticated');
 
       // 1. Update User Record
@@ -327,7 +333,7 @@ export function useUpdateProfile() {
         if (musicianError) throw musicianError;
       }
     },
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['musician-profile'] });
     },
   });
@@ -337,10 +343,9 @@ export function useMyGigs() {
   return useQuery({
     queryKey: ['my-gigs'],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return [];
 
-      // Fetch gigs from bands where user is leader or active member
       const { data, error } = await supabase
         .from('gigs')
         .select(`
@@ -356,6 +361,7 @@ export function useMyGigs() {
       if (error) throw error;
       return data;
     },
+    staleTime: 1000 * 60 * 3, // 3 mins
   });
 }
 
@@ -376,7 +382,7 @@ export function useCreateGig() {
       date: string; 
       duration?: number;
     }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error('Not authenticated');
 
       const { data, error } = await supabase
@@ -419,6 +425,7 @@ export function useGigDetails(gigId: string | undefined) {
       return data;
     },
     enabled: !!gigId,
+    staleTime: 1000 * 60 * 5,
   });
 }
 
@@ -437,7 +444,7 @@ export function useGigSetlists(gigId: string | undefined) {
       
       // If no setlists, create the default "Set 1"
       if (data && data.length === 0) {
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getCurrentUser();
         if (!user) throw new Error('Not authenticated');
         
         const gigRes = await supabase.from('gigs').select('band_id').eq('id', gigId).single();
@@ -460,6 +467,7 @@ export function useGigSetlists(gigId: string | undefined) {
       return data;
     },
     enabled: !!gigId,
+    staleTime: 1000 * 60 * 3,
   });
 }
 
@@ -468,7 +476,7 @@ export function useCreateSetlist() {
 
   return useMutation({
     mutationFn: async ({ gigId, bandId, name }: { gigId: string; bandId: string; name: string }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error('Not authenticated');
 
       const { data, error } = await supabase
@@ -487,6 +495,7 @@ export function useCreateSetlist() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['gig-setlists', variables.gigId] });
+      queryClient.invalidateQueries({ queryKey: ['gig-setlist', variables.gigId] });
     },
   });
 }
@@ -496,10 +505,9 @@ export function useGigSetlist(gigId: string | undefined) {
     queryKey: ['gig-setlist', gigId],
     queryFn: async () => {
       if (!gigId) return null;
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error('Not authenticated');
 
-      // 1. Try to find existing setlist
       let { data, error } = await supabase
         .from('setlists')
         .select('*')
@@ -508,13 +516,13 @@ export function useGigSetlist(gigId: string | undefined) {
         .limit(1)
         .maybeSingle();
 
-      // 2. If not found, create it
       if (!data && !error) {
+        const gigBandRes = await supabase.from('gigs').select('band_id').eq('id', gigId).single();
         const { data: newSetlist, error: createError } = await supabase
           .from('setlists')
           .insert({
             gig_id: gigId,
-            band_id: (await supabase.from('gigs').select('band_id').eq('id', gigId).single()).data?.band_id,
+            band_id: gigBandRes.data?.band_id,
             name: 'Set 1',
             created_by: user.id
           })
@@ -529,6 +537,7 @@ export function useGigSetlist(gigId: string | undefined) {
       return data;
     },
     enabled: !!gigId,
+    staleTime: 1000 * 60 * 3,
   });
 }
 
@@ -550,6 +559,7 @@ export function useSetlistSongs(setlistId: string | undefined) {
       return data;
     },
     enabled: !!setlistId,
+    staleTime: 1000 * 60 * 2, // 2 mins
   });
 }
 
@@ -557,7 +567,7 @@ export function useMyKnownSongs() {
   return useQuery({
     queryKey: ['my-known-songs'],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return [];
 
       const { data, error } = await supabase
@@ -571,6 +581,7 @@ export function useMyKnownSongs() {
       if (error) throw error;
       return data;
     },
+    staleTime: 1000 * 60 * 3, // 3 mins
   });
 }
 
@@ -602,7 +613,6 @@ export function useAddSongToSetlist() {
 
   return useMutation({
     mutationFn: async ({ setlistId, songId, position }: { setlistId: string; songId: string; position: number }) => {
-      // 1. Try to upsert directly
       const { error } = await supabase
         .from('setlist_songs')
         .upsert({
@@ -611,9 +621,7 @@ export function useAddSongToSetlist() {
           position
         }, { onConflict: 'setlist_id, song_id' });
       
-      // 2. Handle position conflict (23505)
       if (error && error.code === '23505' && error.message.includes('position')) {
-        // Find who is occupying that spot
         const { data: occupant } = await supabase
           .from('setlist_songs')
           .select('song_id')
@@ -622,15 +630,12 @@ export function useAddSongToSetlist() {
           .single();
 
         if (occupant && occupant.song_id !== songId) {
-          // Temporarily move the occupant to a high number to free the spot
-          // We use 999 + current position to avoid further conflicts
           await supabase
             .from('setlist_songs')
             .update({ position: 900 + position })
             .eq('setlist_id', setlistId)
             .eq('song_id', occupant.song_id);
 
-          // Retry the target move
           const { error: retryError } = await supabase
             .from('setlist_songs')
             .upsert({
@@ -668,15 +673,22 @@ export function useSetlistAI() {
         }
       });
       
-      if (error) throw error;
+      if (error) {
+        let errorDetail = error.message;
+        try {
+          if ((error as any).context?.json) {
+            const jsonBody = await (error as any).context.json();
+            if (jsonBody?.error) errorDetail = jsonBody.error;
+          }
+        } catch (_) {}
+        throw new Error(errorDetail);
+      }
       return data;
     },
     onSuccess: (_, variables) => {
-      // Refresh history for the current session
       if (variables.sessionId) {
         queryClient.invalidateQueries({ queryKey: ['ai-history', variables.sessionId] });
       }
-      // Refresh session list just in case a new one was auto-created
       queryClient.invalidateQueries({ queryKey: ['ai-sessions'] });
     },
   });
@@ -686,7 +698,7 @@ export function useAISessions() {
   return useQuery({
     queryKey: ['ai-sessions'],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return [];
 
       const { data, error } = await supabase
@@ -698,11 +710,10 @@ export function useAISessions() {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
-
-
       if (error) throw error;
       return data;
     },
+    staleTime: 1000 * 60 * 2, // 2 mins
   });
 }
 
@@ -721,6 +732,7 @@ export function useAIChatHistory(sessionId: string | undefined) {
       return data;
     },
     enabled: !!sessionId,
+    staleTime: 1000 * 30, // 30s
   });
 }
 
@@ -729,7 +741,7 @@ export function useCreateAISession() {
 
   return useMutation({
     mutationFn: async ({ gigId, title }: { gigId?: string; title?: string }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error('Not authenticated');
 
       const { data, error } = await supabase
@@ -750,11 +762,12 @@ export function useCreateAISession() {
     },
   });
 }
+
 export function useDiscoverMusicians() {
   return useQuery({
     queryKey: ['discover-musicians'],
     queryFn: async () => {
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      const currentUser = await getCurrentUser();
       if (!currentUser) throw new Error('Not authenticated');
 
       // 1. Fetch current user's song knowledge IDs
@@ -766,8 +779,7 @@ export function useDiscoverMusicians() {
       if (mySongsError) throw mySongsError;
       const mySongIds = mySongs?.map(s => s.song_id) || [];
 
-      // 2. Fetch all musicians (profiles + users)
-      // Exclude current user
+      // 2. Fetch all musicians (profiles + users), exclude current user
       const { data: profiles, error: profileError } = await supabase
         .from('users')
         .select('*, musician_profiles(*)')
@@ -775,36 +787,38 @@ export function useDiscoverMusicians() {
 
       if (profileError) throw profileError;
 
-      // 3. Efficient Match Score Calculation
-      // Fetch all knowledge entries for other musicians that match our song IDs
-      const { data: matches, error: matchesError } = await supabase
-        .from('musician_song_knowledge')
-        .select('musician_id')
-        .neq('musician_id', currentUser.id)
-        .in('song_id', mySongIds);
+      // 3. Match score calculation (only query if user has songs)
+      let counts: Record<string, number> = {};
+      if (mySongIds.length > 0) {
+        const { data: matches, error: matchesError } = await supabase
+          .from('musician_song_knowledge')
+          .select('musician_id')
+          .neq('musician_id', currentUser.id)
+          .in('song_id', mySongIds);
 
-      if (matchesError) throw matchesError;
+        if (!matchesError && matches) {
+          counts = matches.reduce((acc, match) => {
+            acc[match.musician_id] = (acc[match.musician_id] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>);
+        }
+      }
 
-      // Count occurrences of each musician_id (number of shared songs)
-      const counts = matches?.reduce((acc, match) => {
-        acc[match.musician_id] = (acc[match.musician_id] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>) || {};
-
-      // 4. Enrich and Filter (only show if they have a musician profile)
+      // 4. Enrich and Filter
       const enrichedProfiles = profiles
         .filter(p => p.musician_profiles && p.musician_profiles.length > 0)
         .map(p => ({
           ...p,
-          musician_profile: p.musician_profiles[0], // Flatten the array from the join
+          musician_profile: p.musician_profiles[0],
           match_score: counts[p.id] || 0
         }));
 
-      // Sort by match score descending
       return enrichedProfiles.sort((a, b) => b.match_score - a.match_score);
     },
+    staleTime: 1000 * 60 * 5, // 5 mins
   });
 }
+
 export function useMusicianSongs(userId: string | undefined) {
   return useQuery({
     queryKey: ['musician-songs', userId],
@@ -822,8 +836,10 @@ export function useMusicianSongs(userId: string | undefined) {
       return data;
     },
     enabled: !!userId,
+    staleTime: 1000 * 60 * 5,
   });
 }
+
 export function useMusicianReviews(musicianId?: string) {
   return useQuery({
     queryKey: ['musician-reviews', musicianId],
@@ -845,17 +861,18 @@ export function useMusicianReviews(musicianId?: string) {
       return data;
     },
     enabled: !!musicianId,
+    staleTime: 1000 * 60 * 5,
   });
 }
+
 export function useAddSongToKnowledge() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ title, artist, genre }: { title: string; artist: string; genre?: string }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error('Not authenticated');
 
-      // 1. Upsert global song entry
       const { data: song, error: songError } = await supabase
         .from('songs')
         .upsert(
@@ -867,7 +884,6 @@ export function useAddSongToKnowledge() {
       
       if (songError) throw songError;
 
-      // 2. Link to user's knowledge bank
       const { error: knowledgeError } = await supabase
         .from('musician_song_knowledge')
         .upsert({

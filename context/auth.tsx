@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../utils/supabase';
 
@@ -18,8 +18,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean>(true); // Default true so we don't flash onboarding
   const [isLoading, setIsLoading] = useState(true);
+  const lastFetchedUserId = useRef<string | null>(null);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (userId: string, force = false) => {
+    if (!force && lastFetchedUserId.current === userId) return;
+    lastFetchedUserId.current = userId;
     try {
       const { data, error } = await supabase
         .from('users')
@@ -31,12 +34,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setOnboardingCompleted(data?.onboarding_completed ?? false);
     } catch (err) {
       console.warn('Error fetching user profile:', err);
-      setOnboardingCompleted(false); // Assume not completed if error
+      setOnboardingCompleted(false);
     }
   };
 
   const refreshProfile = async () => {
-    if (user) await fetchProfile(user.id);
+    if (user) await fetchProfile(user.id, true);
   };
 
   useEffect(() => {
@@ -58,6 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (session?.user) {
         fetchProfile(session.user.id);
       } else {
+        lastFetchedUserId.current = null;
         setOnboardingCompleted(true);
       }
       setIsLoading(false);
@@ -69,6 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = async () => {
+    lastFetchedUserId.current = null;
     await supabase.auth.signOut();
   };
 

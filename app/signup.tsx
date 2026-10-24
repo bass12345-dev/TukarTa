@@ -9,17 +9,17 @@ import {
   TouchableOpacity,
   View,
   Alert,
-  ActivityIndicator,
   KeyboardAvoidingView,
-  Image,
 } from 'react-native';
 import { supabase } from '../utils/supabase';
-import { ArrowLeft, Mail, Lock, User } from 'lucide-react-native';
+import { ArrowLeft, Mail, Lock, User, Music2, CheckCircle2 } from 'lucide-react-native';
 import { TextField } from '../components/ui/TextField';
 import { Button } from '../components/ui/Button';
+import { useAppTheme } from '../context/theme';
 
 export default function SignupScreen() {
   const router = useRouter();
+  const { colors, isDark } = useAppTheme();
   const [isLoggingIn, setIsLoggingIn] = React.useState(false);
   const [isSubmitted, setIsSubmitted] = React.useState(false);
   const [email, setEmail] = React.useState('');
@@ -55,20 +55,15 @@ export default function SignupScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Background gradient */}
       <LinearGradient
-        colors={['#071420', '#0d2d45', '#071420']}
-        start={{ x: 0.3, y: 0 }}
-        end={{ x: 0.7, y: 1 }}
+        colors={isDark ? ['#132821', colors.bg] : ['#F0FDF4', '#FFFFFF']}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 0.35 }}
         style={StyleSheet.absoluteFill}
       />
-
-      {/* Ambient glow orbs */}
-      <View style={styles.orbTopLeft} />
-      <View style={styles.orbBottomRight} />
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -78,49 +73,51 @@ export default function SignupScreen() {
         <View style={styles.header}>
           <TouchableOpacity 
             onPress={() => router.back()}
-            style={styles.backBtn}
+            style={[styles.backBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <ArrowLeft size={24} color="#00D4FF" />
+            <ArrowLeft size={20} color={colors.text} />
           </TouchableOpacity>
-          <Image 
-            source={require('../assets/images/icon.png')} 
-            style={styles.logoImage} 
-            resizeMode="contain" 
-          />
+          <View style={styles.brandBadge}>
+            <Music2 size={20} color="#FFFFFF" strokeWidth={2.5} />
+          </View>
         </View>
 
-        {/* ── Focused Auth Card ── */}
+        {/* ── Auth Card ── */}
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={styles.authCard}>
-            <View style={[styles.topAccent, { backgroundColor: '#00D4FF' }]} />
+          <View style={[styles.authCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+            <View style={styles.topAccent} />
 
             <View style={styles.authCardInner}>
               {isSubmitted ? (
                 <View style={styles.successView}>
-                  <View style={styles.successIconBubble}>
-                    <Mail size={32} color="#00D4FF" />
+                  <View style={[styles.successIconBubble, { backgroundColor: isDark ? colors.bgSecondary : '#F0FDF4', borderColor: colors.border }]}>
+                    <CheckCircle2 size={36} color="#10B981" />
                   </View>
-                  <Text style={styles.successTitle}>Check your email</Text>
-                  <Text style={styles.successSubtitle}>
-                    We've sent a confirmation link to <Text style={styles.successEmail}>{email}</Text>. Please click the link in the email to activate your account.
+                  <Text style={[styles.successTitle, { color: colors.text }]}>Check your email</Text>
+                  <Text style={[styles.successSubtitle, { color: colors.textSecondary }]}>
+                    We've sent a verification link to <Text style={[styles.successEmail, { color: colors.primary }]}>{email}</Text>. Please click it to activate your account.
                   </Text>
                   <Button 
-                    title="Back to Log In" 
+                    variant="mint"
+                    title="Back to Sign In" 
                     onPress={() => router.replace('/login')}
                   />
                 </View>
               ) : (
                 <>
-                  <Text style={styles.authTitle}>Create Account</Text>
-                  <Text style={styles.authSubtitle}>Join the Cebuano musicians network and build smarter setlists.</Text>
+                  <Text style={[styles.authTitle, { color: colors.text }]}>Create Account</Text>
+                  <Text style={[styles.authSubtitle, { color: colors.textSecondary }]}>
+                    Join TukarTa to manage setlists, extract songs, and sync with fellow bandmates.
+                  </Text>
 
                   <View style={styles.form}>
                     <TextField
                       label="Full Name"
-                      placeholder="Marco Rivera"
+                      placeholder="e.g. Ely Buendia"
                       value={fullName}
                       onChangeText={setFullName}
-                      leftIcon={<User size={18} color="#FFF" />}
+                      leftIcon={<User size={18} color={colors.primary} />}
                     />
                     <TextField
                       label="Email Address"
@@ -128,7 +125,7 @@ export default function SignupScreen() {
                       keyboardType="email-address"
                       value={email}
                       onChangeText={setEmail}
-                      leftIcon={<Mail size={18} color="#FFF" />}
+                      leftIcon={<Mail size={18} color={colors.primary} />}
                     />
                     <TextField
                       label="Password"
@@ -136,10 +133,11 @@ export default function SignupScreen() {
                       secureTextEntry
                       value={password}
                       onChangeText={setPassword}
-                      leftIcon={<Lock size={18} color="#FFF" />}
+                      leftIcon={<Lock size={18} color={colors.primary} />}
                     />
 
                     <Button
+                      variant="mint"
                       title={isLoggingIn ? 'Creating account...' : 'Create Account'}
                       onPress={handleSignup}
                       disabled={isLoggingIn}
@@ -148,18 +146,12 @@ export default function SignupScreen() {
 
                   <TouchableOpacity 
                     style={styles.toggleMode}
-                    onPress={() => router.replace('/login')}
+                    onPress={() => router.push('/login')}
                   >
-                    <Text style={styles.toggleText}>
-                      Already have an account? Log In
+                    <Text style={[styles.toggleText, { color: colors.textSecondary }]}>
+                      Already have an account? <Text style={styles.toggleHighlight}>Sign In</Text>
                     </Text>
                   </TouchableOpacity>
-
-                  <Text style={styles.footerText}>
-                    By signing up, you agree to our{' '}
-                    <Text style={styles.footerLink}>Terms</Text> &{' '}
-                    <Text style={styles.footerLink}>Privacy Policy</Text>
-                  </Text>
                 </>
               )}
             </View>
@@ -173,137 +165,107 @@ export default function SignupScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#071420',
-  },
-  orbTopLeft: {
-    position: 'absolute',
-    top: -80,
-    left: -80,
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: 'rgba(0, 212, 255, 0.07)',
-  },
-  orbBottomRight: {
-    position: 'absolute',
-    bottom: 60,
-    right: -100,
-    width: 320,
-    height: 320,
-    borderRadius: 160,
-    backgroundColor: 'rgba(139, 92, 246, 0.07)',
   },
   scrollContent: {
-    flexGrow: 1,
-    paddingTop: Platform.OS === 'ios' ? 64 : 40,
-    paddingBottom: 40,
     paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 56 : 40,
+    paddingBottom: 48,
+    maxWidth: 480,
+    width: '100%',
+    alignSelf: 'center',
   },
   header: {
-    marginBottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
   },
   backBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 212, 255, 0.2)',
+  },
+  brandBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#10B981',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   authCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    borderRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(0, 212, 255, 0.2)',
+    borderRadius: 22,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 3,
     overflow: 'hidden',
-  },
-  logoImage: {
-    width: 60,
-    height: 60,
-    alignSelf: 'center',
-    marginTop: -10,
   },
   topAccent: {
     height: 3,
+    backgroundColor: '#10B981',
     width: '100%',
-    opacity: 0.9,
   },
   authCardInner: {
-    padding: 20,
-    gap: 14,
+    padding: 22,
   },
   authTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    fontFamily: 'DM Sans Bold',
+    fontFamily: 'DM Sans',
+    fontSize: 22,
+    fontWeight: '800',
+    marginBottom: 6,
   },
   authSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontFamily: 'DM Sans',
-    lineHeight: 20,
-    marginBottom: 10,
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 20,
   },
   form: {
-    gap: 4,
+    gap: 12,
   },
   toggleMode: {
     alignItems: 'center',
-    paddingVertical: 10,
+    marginTop: 20,
+    paddingVertical: 6,
   },
   toggleText: {
-    color: '#00D4FF',
-    fontSize: 14,
-    fontFamily: 'DM Sans Medium',
-    opacity: 0.8,
+    fontSize: 13,
   },
-  footerText: {
-    textAlign: 'center',
-    fontSize: 11,
-    color: 'rgba(150, 175, 200, 0.3)',
-    fontFamily: 'DM Sans',
-    lineHeight: 18,
-    marginTop: 10,
-  },
-  footerLink: {
-    color: 'rgba(0, 212, 255, 0.5)',
+  toggleHighlight: {
+    color: '#10B981',
+    fontWeight: '700',
   },
   successView: {
     alignItems: 'center',
-    paddingVertical: 20,
-    gap: 16,
+    paddingVertical: 16,
+    gap: 12,
   },
   successIconBubble: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(0, 212, 255, 0.1)',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 212, 255, 0.25)',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   successTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    fontFamily: 'DM Sans Bold',
-    textAlign: 'center',
+    fontFamily: 'DM Sans',
+    fontSize: 20,
+    fontWeight: '800',
   },
   successSubtitle: {
-    fontSize: 15,
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontFamily: 'DM Sans',
+    fontSize: 13,
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 10,
+    lineHeight: 19,
+    marginBottom: 12,
   },
   successEmail: {
-    color: '#00D4FF',
-    fontFamily: 'DM Sans Bold',
+    fontWeight: '700',
   },
 });

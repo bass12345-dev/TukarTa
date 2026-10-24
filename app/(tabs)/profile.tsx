@@ -1,4 +1,5 @@
 import { useAuth } from '@/context/auth';
+import { useAppTheme } from '@/context/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import {
@@ -24,6 +25,7 @@ const { width } = Dimensions.get('window');
 export default function ProfileScreen() {
   const { user } = useAuth();
   const router = useRouter();
+  const { colors, isDark } = useAppTheme();
   
   const { data: profileData, isLoading: isProfileLoading } = useMusicianProfile(user?.id);
   const { data: bandData } = useMyBands();
@@ -51,7 +53,7 @@ export default function ProfileScreen() {
   const displayName = profile?.display_name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || "Guest Musician";
   const handle = `@${displayName.toLowerCase().replace(/\s/g, '') || 'musician'}`;
   const location = profile?.city || "Unknown Location";
-  const initials = displayName.split(' ').map((n: any) => n[0]).join('').toUpperCase().slice(0, 2);
+  const initials = (displayName || 'Musician').split(' ').map((n: any) => n?.[0] || '').join('').toUpperCase().slice(0, 2);
   const roles = mProfile?.roles || [];
   const rate = mProfile?.rate_amount ? `₱${mProfile.rate_amount} / gig` : 'Rate on request';
   const yearsExp = mProfile?.years_exp || '1+';
@@ -66,13 +68,13 @@ export default function ProfileScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         
         {/* Header Cover Section */}
         <View style={styles.headerCover}>
           <LinearGradient 
-            colors={['#1e3a7a', '#071420']} 
+            colors={['#166534', '#064E3B']} 
             start={{ x: 0, y: 0 }} 
             end={{ x: 0, y: 1 }} 
             style={StyleSheet.absoluteFill} 
@@ -111,11 +113,11 @@ export default function ProfileScreen() {
         {/* Identity & Tags */}
         <View style={styles.content}>
           <View style={styles.identity}>
-            <Text style={styles.name}>{displayName}</Text>
+            <Text style={[styles.name, { color: colors.text }]}>{displayName}</Text>
             <View style={styles.handleRow}>
-              <Text style={styles.handleText}>{handle}</Text>
-              <Text style={styles.dot}>·</Text>
-              <Text style={styles.locationText}>{location}</Text>
+              <Text style={[styles.handleText, { color: colors.textDim }]}>{handle}</Text>
+              <Text style={[styles.dot, { color: colors.textDim }]}>·</Text>
+              <Text style={[styles.locationText, { color: colors.textDim }]}>{location}</Text>
             </View>
           </View>
 
@@ -128,7 +130,7 @@ export default function ProfileScreen() {
           </View>
 
           {/* Stats Bar */}
-          <View style={styles.statsContainer}>
+          <View style={[styles.statsContainer, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}>
             <StatItem value={String(statsData?.total || 0)} label="Songs" hasBorder />
             <StatItem value={String(myGigs?.length || 0)} label="Gigs" hasBorder />
             <StatItem value={String(avgRating)} label="Rating" hasBorder isRating />
@@ -253,16 +255,23 @@ export default function ProfileScreen() {
             <Text style={styles.sectionLabel}>MY BANDS</Text>
             <View style={{ gap: 12 }}>
               {bandData?.length ? (
-                bandData.map((item: any) => (
-                  <BandCard 
-                    key={item.id}
-                    title={item.band.name} 
-                    subtitle={`${item.band.member_count?.[0]?.count || 1} members · ${item.band.genres?.join(', ') || 'Various'}`} 
-                    initials={item.band.name.split(' ').map((n: any) => n[0]).join('').toUpperCase().slice(0, 2)} 
-                    role={item.role.toUpperCase()} 
-                    roleVariant={item.role === 'leader' ? 'cyan' : 'purple'} 
-                  />
-                ))
+                bandData.map((item: any) => {
+                  const bName = item.band?.name || 'Band';
+                  const bInitials = bName.split(' ').map((n: any) => n?.[0] || '').join('').toUpperCase().slice(0, 2);
+                  const bRole = (item.role || 'Member').toUpperCase();
+                  const memberCount = item.band?.member_count?.[0]?.count || 1;
+                  const genresText = item.band?.genres?.join(', ') || 'Various';
+                  return (
+                    <BandCard 
+                      key={item.id}
+                      title={bName} 
+                      subtitle={`${memberCount} members · ${genresText}`} 
+                      initials={bInitials} 
+                      role={bRole} 
+                      roleVariant={(item.role || '').toLowerCase() === 'leader' ? 'mint' : 'mint-dark'} 
+                    />
+                  );
+                })
               ) : (
                 <Text style={styles.emptyText}>Not a member of any bands yet</Text>
               )}
@@ -285,7 +294,7 @@ function BandCard({ title, subtitle, initials, role, roleVariant }: any) {
     >
       <View style={styles.bandIcon}>
         <LinearGradient
-          colors={['#1e3a7a', '#071420']}
+          colors={['#166534', '#064E3B']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
@@ -354,7 +363,7 @@ function RatingBar({ level, percentage, count }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#071420',
+    backgroundColor: '#FFFFFF',
   },
   center: {
     alignItems: 'center',
@@ -408,9 +417,9 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#0b1e30',
+    backgroundColor: '#F0FDF4',
     borderWidth: 4,
-    borderColor: '#071420',
+    borderColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -421,7 +430,7 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     fontSize: 32,
-    color: '#00D4FF',
+    color: '#10B981',
     fontFamily: 'DM Sans Bold',
   },
   content: {
@@ -433,7 +442,7 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 28,
-    color: '#F0F4FF',
+    color: '#166534',
     fontFamily: 'DM Sans Bold',
     marginBottom: 4,
   },
@@ -444,15 +453,15 @@ const styles = StyleSheet.create({
   },
   handleText: {
     fontSize: 14,
-    color: 'rgba(150, 175, 200, 0.8)',
+    color: '#10B981',
     fontFamily: 'DM Sans',
   },
   dot: {
-    color: 'rgba(150, 175, 200, 0.4)',
+    color: '#64748B',
   },
   locationText: {
     fontSize: 14,
-    color: 'rgba(150, 175, 200, 0.8)',
+    color: '#10B981',
     fontFamily: 'DM Sans',
   },
   tagRow: {
@@ -463,9 +472,9 @@ const styles = StyleSheet.create({
   },
   statsContainer: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    backgroundColor: '#F0FDF4',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: '#D1FAE5',
     borderRadius: 0,
     paddingVertical: 15,
     marginBottom: 30,
@@ -478,17 +487,17 @@ const styles = StyleSheet.create({
   },
   statBorder: {
     borderRightWidth: 1,
-    borderRightColor: 'rgba(255, 255, 255, 0.05)',
+    borderRightColor: '#D1FAE5',
   },
   statValue: {
     fontSize: 22,
-    color: '#F0F4FF',
+    color: '#166534',
     fontFamily: 'DM Sans Bold',
     marginBottom: 2,
   },
   statLabel: {
     fontSize: 11,
-    color: 'rgba(150, 175, 200, 0.5)',
+    color: '#10B981',
     fontFamily: 'DM Sans Medium',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -499,14 +508,14 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: 'rgba(200, 215, 235, 0.5)',
+    color: '#166534',
     letterSpacing: 1.2,
     fontFamily: 'DM Sans Bold',
     marginBottom: 15,
   },
   bioText: {
     fontSize: 15,
-    color: 'rgba(200, 215, 235, 0.8)',
+    color: '#475569',
     lineHeight: 24,
     fontFamily: 'DM Sans',
   },
@@ -517,7 +526,7 @@ const styles = StyleSheet.create({
   },
   hr: {
     height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: '#D1FAE5',
     marginBottom: 35,
   },
   checkList: {
@@ -536,7 +545,7 @@ const styles = StyleSheet.create({
   },
   checkLabel: {
     fontSize: 15,
-    color: 'rgba(200, 215, 235, 0.9)',
+    color: '#166534',
     fontFamily: 'DM Sans',
   },
   sectionHeaderRow: {
@@ -547,7 +556,7 @@ const styles = StyleSheet.create({
   },
   addText: {
     fontSize: 13,
-    color: '#00D4FF',
+    color: '#10B981',
     fontFamily: 'DM Sans Bold',
   },
   songList: {
@@ -572,12 +581,12 @@ const styles = StyleSheet.create({
   },
   songTitle: {
     fontSize: 16,
-    color: '#F0F4FF',
+    color: '#166534',
     fontFamily: 'DM Sans Bold',
   },
   songSubtitle: {
     fontSize: 13,
-    color: 'rgba(150, 175, 200, 0.6)',
+    color: '#10B981',
     fontFamily: 'DM Sans',
   },
   songMeta: {
@@ -594,7 +603,7 @@ const styles = StyleSheet.create({
   },
   viewAllText: {
     fontSize: 14,
-    color: '#00D4FF',
+    color: '#10B981',
     fontFamily: 'DM Sans Bold',
   },
   ratingOverview: {
@@ -609,12 +618,12 @@ const styles = StyleSheet.create({
   },
   ratingBig: {
     fontSize: 44,
-    color: '#F0F4FF',
+    color: '#166534',
     fontFamily: 'DM Sans Bold',
   },
   reviewSub: {
     fontSize: 12,
-    color: 'rgba(150, 175, 200, 0.5)',
+    color: '#10B981',
     fontFamily: 'DM Sans',
   },
   ratingBars: {
@@ -628,13 +637,13 @@ const styles = StyleSheet.create({
   },
   ratingBarLevel: {
     fontSize: 10,
-    color: 'rgba(150, 175, 200, 0.6)',
+    color: '#10B981',
     width: 10,
   },
   ratingBarTrack: {
     flex: 1,
     height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: '#D1FAE5',
     borderRadius: 2,
     overflow: 'hidden',
   },
@@ -645,7 +654,7 @@ const styles = StyleSheet.create({
   },
   ratingBarCount: {
     fontSize: 10,
-    color: 'rgba(150, 175, 200, 0.4)',
+    color: '#64748B',
     width: 10,
     textAlign: 'right',
   },
@@ -677,12 +686,12 @@ const styles = StyleSheet.create({
   },
   reviewerName: {
     fontSize: 14,
-    color: '#F0F4FF',
+    color: '#166534',
     fontFamily: 'DM Sans Bold',
   },
   reviewDate: {
     fontSize: 11,
-    color: 'rgba(150, 175, 200, 0.4)',
+    color: '#64748B',
     fontFamily: 'DM Sans',
   },
   reviewStars: {
@@ -691,7 +700,7 @@ const styles = StyleSheet.create({
   },
   reviewBody: {
     fontSize: 13,
-    color: 'rgba(200, 215, 235, 0.8)',
+    color: '#475569',
     lineHeight: 20,
     fontFamily: 'DM Sans',
     fontStyle: 'italic',
@@ -719,7 +728,7 @@ const styles = StyleSheet.create({
   },
   bandInitials: {
     fontSize: 14,
-    color: '#00D4FF',
+    color: '#10B981',
     fontFamily: 'DM Sans Bold',
     zIndex: 1,
   },
@@ -734,12 +743,12 @@ const styles = StyleSheet.create({
   },
   bandSubtitle: {
     fontSize: 13,
-    color: 'rgba(150, 175, 200, 0.6)',
+    color: '#10B981',
     fontFamily: 'DM Sans',
   },
   emptyText: {
     fontSize: 13,
-    color: 'rgba(150, 175, 200, 0.4)',
+    color: '#64748B',
     fontFamily: 'DM Sans',
     fontStyle: 'italic',
   }

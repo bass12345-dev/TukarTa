@@ -25,6 +25,16 @@ function decodeSafe(token: string) {
   }
 }
 
+// Groq models prioritized by availability and speed
+const CANDIDATE_MODELS = [
+  'llama-3.1-8b-instant',
+  'llama-3.3-70b-versatile',
+  'llama-3.1-70b-versatile',
+  'llama3-70b-8192',
+  'llama3-8b-8192',
+  'mixtral-8x7b-32768'
+];
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders, status: 200 })
@@ -39,7 +49,7 @@ serve(async (req) => {
 
     const { gigId, message, setlistId, sessionId } = await req.json()
 
-    // 1. Get User ID from JWT (Robust check for ES256 algorithm issues)
+    // 1. Get User ID from JWT
     const authHeader = req.headers.get('Authorization')
     const customAuthHeader = req.headers.get('X-Auth-Token')
     
@@ -205,30 +215,50 @@ serve(async (req) => {
       if (insertError) throw new Error(`Failed to save user message: ${insertError.message}`);
     }
 
-    // 7. Call Groq
-    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...history,
-          { role: 'user', content: message }
-        ],
-        temperature: 0.7,
-      })
-    })
+    // 7. Call Groq with Multi-Model Fallback
+    let result: any = null;
+    let lastError: any = null;
 
-    if (!groqRes.ok) {
-      const errorData = await groqRes.json()
-      throw new Error(`Groq API Error: ${errorData.error?.message || groqRes.statusText}`)
+    for (const modelName of CANDIDATE_MODELS) {
+      try {
+        console.log(`Attempting Groq completion with model: ${modelName}`);
+        const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${GROQ_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: modelName,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              ...history,
+              { role: 'user', content: message }
+            ],
+            temperature: 0.7,
+          })
+        });
+
+        if (groqRes.ok) {
+          result = await groqRes.json();
+          console.log(`Groq success using model: ${modelName}`);
+          break;
+        } else {
+          const errorData = await groqRes.json();
+          const errDetail = errorData.error?.message || groqRes.statusText;
+          lastError = new Error(`Groq API Error (${modelName}): ${errDetail}`);
+          console.warn(`Model ${modelName} returned error, checking next candidate: ${errDetail}`);
+        }
+      } catch (callErr: any) {
+        lastError = callErr;
+        console.warn(`Model ${modelName} call exception:`, callErr.message);
+      }
     }
 
-    const result = await groqRes.json()
+    if (!result) {
+      throw lastError || new Error('All candidate Groq models failed to respond.');
+    }
+
     let aiMessage = result.choices[0].message.content
 
     // Programmatic Safety Filter: Scrub UUIDs from natural language text (before ACTIONS block)

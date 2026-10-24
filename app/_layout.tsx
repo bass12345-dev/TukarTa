@@ -22,10 +22,22 @@ import {
   JetBrainsMono_700Bold 
 } from '@expo-google-fonts/jetbrains-mono';
 import { AuthProvider, useAuth } from '../context/auth';
+import { AppThemeProvider, useAppTheme } from '../context/theme';
 import { useRouter, useSegments } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 3, // 3 minutes: keeps data fresh across tab switches without redundant refetches
+      gcTime: 1000 * 60 * 15,   // 15 minutes cache retention
+      refetchOnWindowFocus: false, // Prevents redundant refetch bursts on window focus
+      refetchOnMount: false,       // Reuses fresh cached data when returning to screens
+      refetchOnReconnect: true,
+      retry: 1,
+    },
+  },
+});
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -69,23 +81,25 @@ export default function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <RootLayoutNav />
-      </AuthProvider>
+      <AppThemeProvider>
+        <AuthProvider>
+          <RootLayoutNav />
+        </AuthProvider>
+      </AppThemeProvider>
     </QueryClientProvider>
   );
 }
 
 function RootLayoutNav() {
-  const colorScheme = useColorScheme();
+  const { isDark } = useAppTheme();
   const { setColorScheme } = useNativeWindColorScheme();
   const { session, isLoading, onboardingCompleted } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
-    setColorScheme(colorScheme ?? 'light');
-  }, [colorScheme]);
+    setColorScheme(isDark ? 'dark' : 'light');
+  }, [isDark]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -109,7 +123,7 @@ function RootLayoutNav() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <ThemeProvider value={isDark ? DarkTheme : DefaultTheme}>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal' }} />

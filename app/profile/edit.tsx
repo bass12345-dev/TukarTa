@@ -14,7 +14,7 @@ import {
 import { useRouter, Stack } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { 
-  ChevronLeft, 
+  ArrowLeft, 
   Camera, 
   User, 
   ShieldCheck, 
@@ -23,17 +23,18 @@ import {
   Globe,
   Music,
   DollarSign,
-  MapPin
+  MapPin,
+  ChevronRight
 } from 'lucide-react-native';
 import { useAuth } from '../../context/auth';
 import { supabase } from '../../utils/supabase';
-import { GlassCard } from '../../components/ui/GlassCard';
 import { LocationPicker } from '../../components/ui/LocationPicker';
-import { useUpdateProfile } from '../../utils/hooks/useMusician';
+import { useAppTheme } from '../../context/theme';
 
 export default function EditProfileScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { colors, isDark } = useAppTheme();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -61,40 +62,65 @@ export default function EditProfileScreen() {
         .single();
 
       if (error) throw error;
+
       if (data) {
-        setDisplayName(data.display_name || '');
+        setDisplayName(data.display_name || user?.user_metadata?.full_name || '');
         setLocation(data.city || '');
-        setCoords({ lat: data.lat?.toString() || null, lng: data.lng?.toString() || null });
-        const mProfile = data.musician_profiles?.[0];
-        if (mProfile) {
-          setRole(mProfile.roles?.[0] || '');
-          setRate(mProfile.rate_amount?.toString() || '');
+        if (data.lat && data.lng) {
+          setCoords({ lat: data.lat.toString(), lng: data.lng.toString() });
+        }
+        
+        // Profiles
+        const profile = Array.isArray(data.musician_profiles) 
+          ? data.musician_profiles[0] 
+          : data.musician_profiles;
+          
+        if (profile) {
+          setRole(profile.roles ? profile.roles.join(', ') : '');
+          setRate(profile.rate_amount ? profile.rate_amount.toString() : '');
         }
       }
-    } catch (err) {
-      console.error('Error fetching profile:', err);
+    } catch (err: any) {
+      console.error('Fetch profile error:', err.message);
     } finally {
       setLoading(false);
     }
   }
 
-  const updateProfile = useUpdateProfile();
-
   async function handleSave() {
-    if (!user) return;
     try {
       setSaving(true);
-      await updateProfile.mutateAsync({
-        displayName,
-        city: location,
-        lat: coords.lat ? parseFloat(coords.lat) : null,
-        lng: coords.lng ? parseFloat(coords.lng) : null,
-        role,
-        rate: rate ? parseFloat(rate) : null
-      });
+      
+      const rolesArray = role.split(',').map(r => r.trim()).filter(Boolean);
+      const rateNum = rate ? parseFloat(rate) : null;
 
-      Alert.alert('Success', 'Profile updated successfully!');
-      router.back();
+      // 1. Update basic users table
+      const { error: userError } = await supabase
+        .from('users')
+        .update({
+          display_name: displayName,
+          city: location,
+          lat: coords.lat ? parseFloat(coords.lat) : null,
+          lng: coords.lng ? parseFloat(coords.lng) : null,
+        })
+        .eq('id', user?.id);
+
+      if (userError) throw userError;
+
+      // 2. Update musician_profiles
+      const { error: profileError } = await supabase
+        .from('musician_profiles')
+        .update({
+          roles: rolesArray,
+          rate_amount: rateNum,
+        })
+        .eq('user_id', user?.id);
+
+      if (profileError) throw profileError;
+
+      Alert.alert('Success', 'Profile updated successfully!', [
+        { text: 'OK', onPress: () => router.back() }
+      ]);
     } catch (err: any) {
       Alert.alert('Error', err.message);
     } finally {
@@ -104,8 +130,8 @@ export default function EditProfileScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color="#00D4FF" />
+      <View style={[styles.container, styles.center, { backgroundColor: colors.bg }]}>
+        <ActivityIndicator size="large" color="#10B981" />
       </View>
     );
   }
@@ -113,113 +139,128 @@ export default function EditProfileScreen() {
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.bg }]}
     >
       <Stack.Screen options={{ headerShown: false }} />
-      <LinearGradient colors={['#071420', '#0d2d45']} style={StyleSheet.absoluteFill} />
+      <LinearGradient
+        colors={isDark ? ['#132821', colors.bg] : ['#F0FDF4', '#FFFFFF']}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 0.3 }}
+        style={StyleSheet.absoluteFill}
+      />
 
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <ChevronLeft size={24} color="#FFF" />
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <TouchableOpacity 
+          onPress={() => router.back()} 
+          style={[styles.backBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+        >
+          <ArrowLeft size={20} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Update Profile</Text>
-        <TouchableOpacity onPress={handleSave} disabled={saving}>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Edit Profile</Text>
+        <TouchableOpacity 
+          onPress={handleSave} 
+          disabled={saving}
+          style={styles.doneBtnBox}
+        >
           {saving ? (
-            <ActivityIndicator size="small" color="#00D4FF" />
+            <ActivityIndicator size="small" color="#10B981" />
           ) : (
-            <Text style={styles.doneBtn}>Done</Text>
+            <Text style={styles.doneBtn}>Save</Text>
           )}
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
+      <ScrollView 
+        style={styles.scroll} 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={styles.scrollContent}
+      >
         {/* Profile Info Section */}
         <View style={styles.avatarSection}>
           <View style={styles.avatarWrapper}>
-            <View style={styles.avatar}>
-               <User size={48} color="#00D4FF" />
+            <View style={[styles.avatar, { backgroundColor: isDark ? '#16382C' : '#F0FDF4', borderColor: colors.border }]}>
+              <User size={44} color="#10B981" />
             </View>
             <TouchableOpacity style={styles.cameraIcon}>
-              <Camera size={18} color="#FFF" />
+              <Camera size={16} color="#FFF" />
             </TouchableOpacity>
           </View>
-          <Text style={styles.avatarSubtext}>Tap to change photo</Text>
+          <Text style={[styles.avatarSubtext, { color: colors.textSecondary }]}>Change profile photo</Text>
         </View>
 
         <View style={styles.formSection}>
-          <Text style={styles.sectionTitle}>GENERAL INFO</Text>
-          <GlassCard style={styles.inputGroup} intensity={12}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>GENERAL INFO</Text>
+          <View style={[styles.cardBox, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
             <View style={styles.inputItem}>
-              <User size={18} color="rgba(255,255,255,0.4)" />
+              <User size={18} color="#10B981" />
               <TextInput 
-                style={styles.input}
+                style={[styles.input, { color: colors.inputText }]}
                 placeholder="Full Name"
-                placeholderTextColor="rgba(255,255,255,0.2)"
+                placeholderTextColor={colors.inputPlaceholder}
                 value={displayName}
                 onChangeText={setDisplayName}
               />
             </View>
-            <View style={styles.hr} />
+            <View style={[styles.hr, { backgroundColor: colors.border }]} />
             <View style={styles.inputItem}>
-              <Text style={styles.atSymbol}>@</Text>
+              <Text style={[styles.atSymbol, { color: colors.textSecondary }]}>@</Text>
               <TextInput 
-                style={styles.input}
+                style={[styles.input, { color: colors.textSecondary }]}
                 placeholder="handle"
-                placeholderTextColor="rgba(255,255,255,0.2)"
-                editable={false} // Placeholder for handle logic
-                value={displayName.toLowerCase().replace(' ', '')}
+                placeholderTextColor={colors.inputPlaceholder}
+                editable={false}
+                value={displayName.toLowerCase().replace(/\s+/g, '')}
               />
             </View>
-          </GlassCard>
+          </View>
         </View>
 
         <View style={styles.formSection}>
-          <Text style={styles.sectionTitle}>MUSICIAN DETAILS</Text>
-          <GlassCard style={styles.inputGroup} intensity={12}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>MUSICIAN DETAILS</Text>
+          <View style={[styles.cardBox, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
             <View style={styles.inputItem}>
-              <Music size={18} color="rgba(255,255,255,0.4)" />
+              <Music size={18} color="#10B981" />
               <TextInput 
-                style={styles.input}
-                placeholder="Primary Role (e.g. Singer)"
-                placeholderTextColor="rgba(255,255,255,0.2)"
+                style={[styles.input, { color: colors.inputText }]}
+                placeholder="Primary Role (e.g. Singer, Guitarist)"
+                placeholderTextColor={colors.inputPlaceholder}
                 value={role}
                 onChangeText={setRole}
               />
             </View>
-          </GlassCard>
+          </View>
         </View>
 
         <View style={styles.formSection}>
-          <Text style={styles.sectionTitle}>LOCATION & RATE</Text>
-          <GlassCard style={styles.inputGroup} intensity={12}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>LOCATION & RATE</Text>
+          <View style={[styles.cardBox, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
             <TouchableOpacity 
               style={styles.inputItem} 
               onPress={() => setShowPicker(true)}
               activeOpacity={0.7}
             >
-              <MapPin size={18} color="rgba(255,255,255,0.4)" />
+              <MapPin size={18} color="#10B981" />
               <View style={styles.locationDisplay}>
-                <Text style={[styles.locationText, !location && { color: 'rgba(255,255,255,0.2)' }]}>
+                <Text style={[styles.locationText, { color: location ? colors.text : colors.inputPlaceholder }]}>
                   {location || 'Select City'}
                 </Text>
               </View>
-              <ChevronLeft size={16} color="rgba(255,255,255,0.2)" style={{ transform: [{ rotate: '180deg' }] }} />
+              <ChevronRight size={18} color={colors.textSecondary} />
             </TouchableOpacity>
-            <View style={styles.hr} />
+            <View style={[styles.hr, { backgroundColor: colors.border }]} />
             <View style={styles.inputItem}>
-              <DollarSign size={18} color="rgba(255,255,255,0.4)" />
+              <DollarSign size={18} color="#10B981" />
               <TextInput 
-                style={styles.input}
-                placeholder="Hourly Rate (₱)"
-                placeholderTextColor="rgba(255,255,255,0.2)"
+                style={[styles.input, { color: colors.inputText }]}
+                placeholder="Hourly or Per Gig Rate (₱)"
+                placeholderTextColor={colors.inputPlaceholder}
                 keyboardType="numeric"
                 value={rate}
                 onChangeText={setRate}
               />
             </View>
-          </GlassCard>
+          </View>
         </View>
 
         <LocationPicker
@@ -231,35 +272,35 @@ export default function EditProfileScreen() {
           }}
         />
 
-        {/* Security Section (Based on screenshot) */}
+        {/* Security Section */}
         <View style={styles.formSection}>
-          <Text style={styles.sectionTitle}>SECURITY & PRIVACY</Text>
-          <GlassCard style={styles.inputGroup} intensity={12}>
-            <SecurityLink label="Change Password" Icon={Lock} />
-            <SecurityLink label="Two-Factor Auth" Icon={ShieldCheck} status="Off" />
-            <SecurityLink label="Bio Visibility" Icon={Eye} status="Public" />
-            <SecurityLink label="Location Sharing" Icon={Globe} status="On" />
-          </GlassCard>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>SECURITY & PRIVACY</Text>
+          <View style={[styles.cardBox, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+            <SecurityLink label="Change Password" Icon={Lock} colors={colors} />
+            <SecurityLink label="Two-Factor Auth" Icon={ShieldCheck} status="Off" colors={colors} />
+            <SecurityLink label="Bio Visibility" Icon={Eye} status="Public" colors={colors} />
+            <SecurityLink label="Location Sharing" Icon={Globe} status="On" isLast colors={colors} />
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-function SecurityLink({ label, Icon, status }: any) {
+function SecurityLink({ label, Icon, status, isLast, colors }: any) {
   return (
     <View>
       <TouchableOpacity style={styles.securityItem} activeOpacity={0.7}>
         <View style={styles.securityLabelRow}>
-          <Icon size={18} color="rgba(255,255,255,0.6)" />
-          <Text style={styles.securityText}>{label}</Text>
+          <Icon size={18} color="#10B981" />
+          <Text style={[styles.securityText, { color: colors.text }]}>{label}</Text>
         </View>
         <View style={styles.securityRight}>
-          {status && <Text style={styles.securityStatus}>{status}</Text>}
-          <Text style={styles.chevron}>›</Text>
+          {status && <Text style={[styles.securityStatus, { color: colors.textSecondary }]}>{status}</Text>}
+          <ChevronRight size={16} color={colors.textSecondary} />
         </View>
       </TouchableOpacity>
-      <View style={styles.hr} />
+      {!isLast && <View style={[styles.hr, { backgroundColor: colors.border }]} />}
     </View>
   );
 }
@@ -267,140 +308,141 @@ function SecurityLink({ label, Icon, status }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#071420',
   },
   center: {
     justifyContent: 'center',
     alignItems: 'center',
   },
   header: {
-    height: 100,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 40 : 10,
+    paddingTop: Platform.OS === 'ios' ? 56 : 38,
+    paddingBottom: 16,
     borderBottomWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
   },
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#FFF',
-    fontFamily: 'DM Sans Bold',
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+  },
+  doneBtnBox: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#10B981',
   },
   doneBtn: {
-    color: '#00D4FF',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
-    fontFamily: 'DM Sans Bold',
+    color: '#FFFFFF',
+    fontFamily: 'DM Sans',
   },
   scroll: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 40,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 48,
+    maxWidth: 640,
+    width: '100%',
+    alignSelf: 'center',
   },
   avatarSection: {
     alignItems: 'center',
-    marginTop: 30,
-    marginBottom: 40,
+    marginVertical: 16,
   },
   avatarWrapper: {
     position: 'relative',
   },
   avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(0, 212, 255, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 212, 255, 0.3)',
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cameraIcon: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: '#00D4FF',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    bottom: 2,
+    right: 2,
+    backgroundColor: '#10B981',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: '#071420',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
   avatarSubtext: {
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: 12,
-    marginTop: 12,
+    marginTop: 10,
+    fontSize: 13,
     fontFamily: 'DM Sans',
+    fontWeight: '600',
   },
   formSection: {
-    paddingHorizontal: 20,
-    marginBottom: 30,
+    marginBottom: 22,
   },
   sectionTitle: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.3)',
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    marginBottom: 12,
-    fontFamily: 'DM Sans Bold',
+    fontSize: 11,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+    letterSpacing: 1,
+    marginBottom: 8,
+    marginLeft: 4,
   },
-  inputGroup: {
-    borderRadius: 16,
+  cardBox: {
+    borderRadius: 18,
+    borderWidth: 1,
     overflow: 'hidden',
   },
   inputItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 56,
     paddingHorizontal: 16,
+    height: 52,
     gap: 12,
-  },
-  atSymbol: {
-    fontSize: 18,
-    color: 'rgba(255,255,255,0.4)',
-    fontWeight: '700',
-    width: 18,
-    textAlign: 'center',
   },
   input: {
     flex: 1,
-    height: '100%',
-    color: '#FFF',
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: 'DM Sans',
+    height: '100%',
+  },
+  atSymbol: {
+    fontSize: 16,
+    fontWeight: '700',
+    fontFamily: 'DM Sans',
+  },
+  hr: {
+    height: 1,
+    marginHorizontal: 16,
   },
   locationDisplay: {
     flex: 1,
   },
   locationText: {
-    fontSize: 16,
-    color: '#FFF',
+    fontSize: 15,
     fontFamily: 'DM Sans',
-  },
-  hr: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    marginLeft: 46,
   },
   securityItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    height: 56,
     paddingHorizontal: 16,
+    height: 52,
   },
   securityLabelRow: {
     flexDirection: 'row',
@@ -408,23 +450,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   securityText: {
-    fontSize: 16,
-    color: '#FFF',
+    fontSize: 14.5,
     fontFamily: 'DM Sans',
+    fontWeight: '600',
   },
   securityRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   securityStatus: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.4)',
+    fontSize: 13,
     fontFamily: 'DM Sans',
   },
-  chevron: {
-    fontSize: 20,
-    color: 'rgba(255,255,255,0.2)',
-    marginTop: -2,
-  }
 });
