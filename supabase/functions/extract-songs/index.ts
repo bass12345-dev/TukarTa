@@ -100,6 +100,8 @@ serve(async (req) => {
     // Attempt Groq Vision models
     if (GROQ_API_KEY) {
       const groqVisionModels = [
+        'qwen/qwen3.8-27b',
+        'qwen-3.8-27b',
         'meta-llama/llama-4-scout-17b-16e-instruct',
       ];
 
