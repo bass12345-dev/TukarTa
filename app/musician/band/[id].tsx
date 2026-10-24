@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -7,226 +7,298 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
-  Dimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { 
-  ChevronLeft, 
-  Users, 
-  Music, 
-  MapPin, 
-  Plus, 
-  Settings, 
+import {
+  ChevronLeft,
+  Users,
+  Music,
+  MapPin,
   Calendar,
-  Share2,
-  UserPlus
+  UserPlus,
+  Crown,
+  Radio,
+  ChevronRight,
 } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-import { useBandDetails, useBandMembers } from '../../../utils/hooks/useMusician';
+import { useQuery } from '@tanstack/react-query';
+import { useBandDetails, useBandMembers, useMyGigs } from '../../../utils/hooks/useMusician';
 import { useAuth } from '../../../context/auth';
-import { GlassCard } from '../../../components/ui/GlassCard';
-import { Pill } from '../../../components/ui/Pill';
-
-const { width } = Dimensions.get('window');
+import { useAppTheme } from '../../../context/theme';
+import { supabase } from '../../../utils/supabase';
 
 export default function BandHubScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuth();
-  
+  const { colors, isDark } = useAppTheme();
+
   const { data: band, isLoading: loadingBand } = useBandDetails(id);
   const { data: members, isLoading: loadingMembers } = useBandMembers(id);
+  const { data: allGigs } = useMyGigs();
+
+  const bandGigs = (allGigs || []).filter((g: any) => g.band_id === id);
+
+  const { data: setlistCount } = useQuery({
+    queryKey: ['band-setlist-count', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { count } = await supabase
+        .from('setlists')
+        .select('id', { count: 'exact', head: true })
+        .eq('band_id', id);
+      return count || 0;
+    },
+  });
 
   if (loadingBand) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#00D4FF" />
+      <View style={[styles.center, { backgroundColor: colors.bg }]}>
+        <ActivityIndicator size="large" color="#10B981" />
       </View>
     );
   }
 
   if (!band) {
     return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Band not found</Text>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backLink}>
-          <Text style={styles.backLinkText}>Go Back</Text>
+      <View style={[styles.center, { backgroundColor: colors.bg, gap: 16 }]}>
+        <Text style={{ color: colors.textDim, fontSize: 16 }}>Band not found</Text>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={[styles.backLink, { backgroundColor: colors.bgSecondary }]}
+        >
+          <Text style={{ color: colors.primary, fontWeight: '700' }}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
   const isLeader = band.leader_id === user?.id;
-  const initials = band.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
+  const initials = (band.name || 'B')
+    .split(' ')
+    .map((n: string) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+  const activeMembers = (members || []).filter((m: any) => m.status === 'active');
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <LinearGradient colors={['#071420', '#0d2d45']} style={StyleSheet.absoluteFill} />
 
-      {/* ── Header ── */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
-          <ChevronLeft size={24} color="#FFF" />
+      {/* Header */}
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={[styles.headerBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+        >
+          <ChevronLeft size={22} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Band Hub</Text>
-        <TouchableOpacity style={styles.headerBtn}>
-          <Settings size={22} color="rgba(255,255,255,0.4)" />
-        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Band Profile</Text>
+        <View style={styles.headerBtn} />
       </View>
 
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
-        {/* ── Profile Header ── */}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* Profile */}
         <View style={styles.profileSection}>
-          <View style={styles.avatarContainer}>
-            <LinearGradient colors={['#00D4FF', '#8B5CF6']} style={styles.avatarGradient} />
+          <View style={[styles.avatar, { backgroundColor: '#10B981' }]}>
             <Text style={styles.avatarText}>{initials}</Text>
           </View>
-          <Text style={styles.bandName}>{band.name}</Text>
-          <View style={styles.locationContainer}>
-            <MapPin size={14} color="#00D4FF" />
-            <Text style={styles.locationText}>{band.city || 'Philippines'}</Text>
+          <Text style={[styles.bandName, { color: colors.text }]}>{band.name}</Text>
+          <View style={styles.locationRow}>
+            <MapPin size={14} color="#10B981" />
+            <Text style={{ color: colors.textDim, fontSize: 13 }}>{band.city || 'Philippines'}</Text>
           </View>
-          
-          <View style={styles.genreTags}>
-            {band.genres?.map((g: string) => (
-              <Pill key={g} label={g} variant="cyan" />
-            ))}
-          </View>
+
+          {band.genres?.length > 0 && (
+            <View style={styles.genreTags}>
+              {band.genres.map((g: string) => (
+                <View
+                  key={g}
+                  style={[styles.genrePill, { backgroundColor: isDark ? '#064E3B' : '#ECFDF5', borderColor: '#10B981' }]}
+                >
+                  <Text style={styles.genreText}>{g}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {isLeader && (
+            <View style={[styles.leaderBadge, { backgroundColor: isDark ? '#064E3B' : '#ECFDF5' }]}>
+              <Crown size={12} color="#10B981" />
+              <Text style={styles.leaderBadgeText}>YOU LEAD THIS BAND</Text>
+            </View>
+          )}
         </View>
 
-        {/* ── Action Grid ── */}
-        <View style={styles.actionGrid}>
-          <ActionCard icon={Calendar} title="Manage Gigs" count="3" color="#00D4FF" />
-          <ActionCard icon={Music} title="Setlists" count="12" color="#8B5CF6" />
+        {/* Stats */}
+        <View style={styles.statsRow}>
+          {[
+            { icon: Users, label: 'Members', value: activeMembers.length, color: '#10B981' },
+            { icon: Calendar, label: 'Gigs', value: bandGigs.length, color: '#F59E0B' },
+            { icon: Music, label: 'Setlists', value: setlistCount ?? 0, color: '#6366F1' },
+          ].map((s) => (
+            <View
+              key={s.label}
+              style={[styles.statCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+            >
+              <s.icon size={20} color={s.color} />
+              <Text style={[styles.statValue, { color: colors.text }]}>{s.value}</Text>
+              <Text style={{ color: colors.textDim, fontSize: 11, fontWeight: '700' }}>{s.label}</Text>
+            </View>
+          ))}
         </View>
 
-        {/* ── Members Section ── */}
+        {/* Quick actions */}
+        <View style={styles.actionsCol}>
+          <TouchableOpacity
+            style={[styles.actionRow, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+            onPress={() => router.push('/(tabs)/setlists')}
+          >
+            <Calendar size={18} color="#10B981" />
+            <Text style={[styles.actionText, { color: colors.text }]}>Manage Gigs & Setlists</Text>
+            <ChevronRight size={18} color={colors.textDim} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionRow, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+            onPress={() => router.push('/(tabs)/bands')}
+          >
+            <Radio size={18} color="#10B981" />
+            <Text style={[styles.actionText, { color: colors.text }]}>Start a Live Session</Text>
+            <ChevronRight size={18} color={colors.textDim} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Members */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>MEMBERS</Text>
+            <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
+              MEMBERS ({members?.length || 0})
+            </Text>
             {isLeader && (
-              <TouchableOpacity 
-                style={styles.addMemberBtn}
-                onPress={() => router.push('/(tabs)/discover')} // Redirect to discover to find musicians
+              <TouchableOpacity
+                style={[styles.inviteBtn, { backgroundColor: isDark ? '#064E3B' : '#ECFDF5' }]}
+                onPress={() => router.push('/(tabs)/discover')}
               >
-                <UserPlus size={16} color="#00D4FF" />
-                <Text style={styles.addMemberText}>Invite</Text>
+                <UserPlus size={15} color="#10B981" />
+                <Text style={styles.inviteText}>Invite</Text>
               </TouchableOpacity>
             )}
           </View>
 
-          <View style={styles.memberList}>
-            {members?.map((member: any) => (
-              <MemberListItem key={member.id} member={member} />
-            ))}
-            {loadingMembers && <ActivityIndicator size="small" color="rgba(255,255,255,0.2)" />}
+          <View style={{ gap: 10 }}>
+            {members?.map((member: any) => {
+              const isActive = member.status === 'active';
+              const memberIsLeader = member.user_id === band.leader_id || member.role === 'leader';
+              return (
+                <View
+                  key={member.id}
+                  style={[styles.memberItem, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+                >
+                  <View style={[styles.memberAvatar, { backgroundColor: colors.bgSecondary }]}>
+                    {memberIsLeader ? (
+                      <Crown size={18} color="#10B981" />
+                    ) : (
+                      <Users size={18} color={colors.textDim} />
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.memberName, { color: colors.text }]}>
+                      {member.user?.display_name || 'Musician'}
+                      {member.user_id === user?.id ? ' (You)' : ''}
+                    </Text>
+                    <Text style={{ color: colors.textDim, fontSize: 12 }}>
+                      {(member.role || 'member').toString().replace(/^./, (c: string) => c.toUpperCase())}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.statusPill,
+                      { backgroundColor: isActive ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)' },
+                    ]}
+                  >
+                    <Text style={{ color: isActive ? '#10B981' : '#F59E0B', fontSize: 10, fontWeight: '800' }}>
+                      {isActive ? 'JOINED' : 'PENDING'}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+            {loadingMembers && <ActivityIndicator size="small" color="#10B981" />}
           </View>
         </View>
-
-        {/* ── Invitation Card (Demo/Mock for Leader) ── */}
-        {isLeader && (
-            <GlassCard style={styles.invitePromo} intensity={15}>
-                 <View style={styles.promoIcon}>
-                    <Share2 size={24} color="#00D4FF" />
-                 </View>
-                 <View style={styles.promoContent}>
-                    <Text style={styles.promoTitle}>Invite via Email</Text>
-                    <Text style={styles.promoSub}>Send a private link to your musician</Text>
-                 </View>
-                 <TouchableOpacity style={styles.promoAction}>
-                    <Text style={styles.promoActionText}>Share</Text>
-                 </TouchableOpacity>
-            </GlassCard>
-        )}
-
       </ScrollView>
     </View>
   );
 }
 
-function ActionCard({ icon: Icon, title, count, color }: any) {
-  return (
-    <TouchableOpacity style={styles.actionCardWrapper} activeOpacity={0.8}>
-      <GlassCard style={styles.actionCard} intensity={10}>
-        <View style={[styles.actionIconBox, { backgroundColor: `${color}15` }]}>
-          <Icon size={22} color={color} />
-        </View>
-        <Text style={styles.actionCount}>{count}</Text>
-        <Text style={styles.actionTitle}>{title}</Text>
-      </GlassCard>
-    </TouchableOpacity>
-  );
-}
-
-function MemberListItem({ member }: any) {
-  return (
-    <View style={styles.memberItem}>
-      <View style={styles.memberAvatar}>
-         <LinearGradient colors={['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.02)']} style={StyleSheet.absoluteFill} />
-         <Users size={18} color="rgba(255,255,255,0.2)" />
-      </View>
-      <View style={styles.memberInfo}>
-        <Text style={styles.memberName}>{member.user?.display_name}</Text>
-        <Text style={styles.memberRole}>{member.role || 'Member'}</Text>
-      </View>
-      <Pill label={member.status === 'active' ? 'JOINED' : 'PENDING'} variant={member.status === 'active' ? 'cyan' : 'purple'} />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#071420' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#071420' },
-  errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#071420', gap: 20 },
-  errorText: { color: 'rgba(255,255,255,0.4)', fontSize: 16, fontFamily: 'DM Sans' },
-  backLink: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.05)' },
-  backLinkText: { color: '#00D4FF', fontSize: 14, fontFamily: 'DM Sans Bold' },
+  container: { flex: 1 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  backLink: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 },
   header: {
-    height: 100,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 40 : 10,
-    zIndex: 10,
+    paddingTop: Platform.OS === 'ios' ? 52 : 36,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
   },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: 'rgba(255,255,255,0.6)', fontFamily: 'DM Sans Bold' },
-  headerBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  scroll: { flex: 1 },
-  scrollContent: { paddingBottom: 60 },
-  profileSection: { alignItems: 'center', marginTop: 10, marginBottom: 30 },
-  avatarContainer: { width: 100, height: 100, borderRadius: 34, alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden', marginBottom: 20 },
-  avatarGradient: { ...StyleSheet.absoluteFillObject, opacity: 0.2 },
-  avatarText: { fontSize: 32, fontWeight: '700', color: '#00D4FF', fontFamily: 'DM Sans Bold' },
-  bandName: { fontSize: 26, fontWeight: '700', color: '#FFF', fontFamily: 'DM Sans Bold', marginBottom: 8 },
-  locationContainer: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 20 },
-  locationText: { fontSize: 14, color: 'rgba(255,255,255,0.4)', fontFamily: 'DM Sans' },
-  genreTags: { flexDirection: 'row', gap: 8 },
-  actionGrid: { flexDirection: 'row', paddingHorizontal: 20, gap: 12, marginBottom: 32 },
-  actionCardWrapper: { flex: 1 },
-  actionCard: { borderRadius: 24, padding: 16 },
-  actionIconBox: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  actionCount: { fontSize: 20, fontWeight: '700', color: '#FFF', fontFamily: 'DM Sans Bold', marginBottom: 2 },
-  actionTitle: { fontSize: 12, color: 'rgba(255,255,255,0.4)', fontFamily: 'DM Sans Bold' },
-  section: { paddingHorizontal: 20, marginBottom: 32 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  sectionTitle: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.3)', letterSpacing: 1.5, fontFamily: 'DM Sans Bold' },
-  addMemberBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0, 212, 255, 0.08)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
-  addMemberText: { fontSize: 12, color: '#00D4FF', fontWeight: '700', fontFamily: 'DM Sans Bold' },
-  memberList: { gap: 12 },
-  memberItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 20, padding: 12, gap: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
-  memberAvatar: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  memberInfo: { flex: 1 },
-  memberName: { fontSize: 16, fontWeight: '700', color: '#FFF', fontFamily: 'DM Sans Bold' },
-  memberRole: { fontSize: 12, color: 'rgba(255,255,255,0.4)', fontFamily: 'DM Sans' },
-  invitePromo: { marginHorizontal: 20, borderRadius: 24, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 16, borderWidth: 1, borderColor: 'rgba(0, 212, 255, 0.2)' },
-  promoIcon: { width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(0, 212, 255, 0.1)', alignItems: 'center', justifyContent: 'center' },
-  promoContent: { flex: 1 },
-  promoTitle: { fontSize: 16, fontWeight: '700', color: '#FFF', fontFamily: 'DM Sans Bold' },
-  promoSub: { fontSize: 12, color: 'rgba(255,255,255,0.4)', fontFamily: 'DM Sans', marginTop: 2 },
-  promoAction: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, backgroundColor: '#00D4FF' },
-  promoActionText: { fontSize: 12, fontWeight: '700', color: '#071420', fontFamily: 'DM Sans Bold' }
+  headerTitle: { fontSize: 17, fontWeight: '800' },
+  headerBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 0,
+  },
+  scrollContent: { paddingBottom: 60, maxWidth: 640, width: '100%', alignSelf: 'center' },
+  profileSection: { alignItems: 'center', marginTop: 24, marginBottom: 24, paddingHorizontal: 20 },
+  avatar: { width: 92, height: 92, borderRadius: 30, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  avatarText: { fontSize: 30, fontWeight: '800', color: '#FFFFFF' },
+  bandName: { fontSize: 24, fontWeight: '800', marginBottom: 6, textAlign: 'center' },
+  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
+  genreTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
+  genrePill: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12, borderWidth: 1 },
+  genreText: { color: '#10B981', fontSize: 12, fontWeight: '700' },
+  leaderBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+  leaderBadgeText: { color: '#10B981', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  statsRow: { flexDirection: 'row', paddingHorizontal: 20, gap: 10, marginBottom: 20 },
+  statCard: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+  statValue: { fontSize: 22, fontWeight: '800' },
+  actionsCol: { paddingHorizontal: 20, gap: 10, marginBottom: 28 },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  actionText: { flex: 1, fontSize: 14, fontWeight: '700' },
+  section: { paddingHorizontal: 20 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  sectionTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
+  inviteBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  inviteText: { fontSize: 12, color: '#10B981', fontWeight: '800' },
+  memberItem: { flexDirection: 'row', alignItems: 'center', borderRadius: 18, padding: 12, gap: 12, borderWidth: 1 },
+  memberAvatar: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  memberName: { fontSize: 15, fontWeight: '700' },
+  statusPill: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8 },
 });
