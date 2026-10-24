@@ -33,6 +33,7 @@ import {
   FlatList,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAppTheme } from '../context/theme';
 import { Button } from '../components/ui/Button';
 import { GlassCard } from '../components/ui/GlassCard';
@@ -228,6 +229,7 @@ export default function AIAgentScreen() {
   const isCreatingSession = useRef(false);
   const autoCreatedSessionRef = useRef<string | null>(null);
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const { colors, isDark } = useAppTheme();
 
   // 1. Data Hooks
@@ -290,7 +292,7 @@ export default function AIAgentScreen() {
           try {
             const newSession = await createSession.mutateAsync({ 
               gigId: gigId as string,
-              title: gig ? `Chat for ${gig.name}` : 'New Planning Session'
+              title: gig ? `Setlist: ${gig.name}` : 'New Conversation'
             });
             autoCreatedSessionRef.current = newSession.id;
             setSessionId(newSession.id);
@@ -319,7 +321,7 @@ export default function AIAgentScreen() {
     try {
       const newSession = await createSession.mutateAsync({ 
         gigId: gigId as string,
-        title: gig ? `Chat for ${gig.name}` : 'New Planning Session'
+        title: gig ? `Setlist: ${gig.name}` : 'New Conversation'
       });
       setSessionId(newSession.id);
       setLastSyncedSessionId(newSession.id);
@@ -415,6 +417,20 @@ export default function AIAgentScreen() {
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+
+    // Intelligently name the session from the user's first prompt
+    const isFirstMsg = messages.length === 0 && (!historyMessages || historyMessages.length === 0);
+    if (isFirstMsg && sessionId) {
+      const cleanTitle = text.length > 38 ? text.slice(0, 38).trim() + '...' : text;
+      supabase
+        .from('ai_sessions')
+        .update({ title: cleanTitle })
+        .eq('id', sessionId)
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ['ai-sessions'] });
+        })
+        .catch((e) => console.warn('Could not update session title:', e));
+    }
 
     try {
       const response = await aiMutation.mutateAsync({
@@ -656,27 +672,50 @@ export default function AIAgentScreen() {
               <FlatList
                 data={filteredSessions}
                 keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <TouchableOpacity 
-                    style={[
-                      styles.sessionItem, 
-                      { backgroundColor: colors.bgSecondary, borderColor: colors.border },
-                      sessionId === item.id && { borderColor: colors.primary, borderWidth: 1.5 }
-                    ]}
-                    onPress={() => {
-                      setSessionId(item.id);
-                      setIsHistoryVisible(false);
-                    }}
-                  >
-                    <View style={styles.sessionInfo}>
-                      <Text style={[styles.sessionTitle, { color: colors.text }]} numberOfLines={1}>{item.title}</Text>
-                      <Text style={[styles.sessionDate, { color: colors.textDim }]}>
-                        {new Date(item.created_at).toLocaleDateString()}
-                      </Text>
-                    </View>
-                    {sessionId === item.id && <Circle size={8} color={colors.primary} fill={colors.primary} />}
-                  </TouchableOpacity>
-                )}
+                renderItem={({ item }) => {
+                  let displayTitle = item.title;
+                  const isGeneric = !displayTitle || 
+                    displayTitle === 'New Planning Session' || 
+                    displayTitle === 'New Conversation' || 
+                    displayTitle.startsWith('Chat for');
+
+                  if (isGeneric) {
+                    const userMsgs = (item.ai_messages || [])
+                      .filter((m: any) => m.role === 'user')
+                      .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+                    if (userMsgs.length > 0 && userMsgs[0].content) {
+                      const clean = userMsgs[0].content.trim().replace(/^[\W_]+/, '');
+                      displayTitle = clean.length > 38 ? clean.slice(0, 38).trim() + '...' : clean;
+                    } else if (item.gigs?.name) {
+                      displayTitle = `Setlist: ${item.gigs.name}`;
+                    } else {
+                      displayTitle = 'Setlist Conversation';
+                    }
+                  }
+
+                  return (
+                    <TouchableOpacity 
+                      style={[
+                        styles.sessionItem, 
+                        { backgroundColor: colors.bgSecondary, borderColor: colors.border },
+                        sessionId === item.id && { borderColor: colors.primary, borderWidth: 1.5 }
+                      ]}
+                      onPress={() => {
+                        setSessionId(item.id);
+                        setIsHistoryVisible(false);
+                      }}
+                    >
+                      <View style={styles.sessionInfo}>
+                        <Text style={[styles.sessionTitle, { color: colors.text }]} numberOfLines={1}>{displayTitle}</Text>
+                        <Text style={[styles.sessionDate, { color: colors.textDim }]}>
+                          {new Date(item.created_at).toLocaleDateString()}
+                        </Text>
+                      </View>
+                      {sessionId === item.id && <Circle size={8} color={colors.primary} fill={colors.primary} />}
+                    </TouchableOpacity>
+                  );
+                }}
                 ListEmptyComponent={
                   <View style={styles.emptySessionsWrapper}>
                     <Text style={[styles.emptySessions, { color: colors.text }]}>No past conversations found.</Text>

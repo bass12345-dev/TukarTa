@@ -708,7 +708,8 @@ export function useAISessions() {
         .from('ai_sessions')
         .select(`
           *,
-          ai_messages(id)
+          gigs(name),
+          ai_messages(id, content, role, created_at)
         `)
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });

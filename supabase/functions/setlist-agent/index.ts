@@ -28,14 +28,11 @@ function decodeSafe(token: string) {
 
 // Static fallback list of known active Groq models (prioritized by capability and availability)
 const STATIC_GROQ_MODELS = [
-  'openai/gpt-oss-120b',
-  'openai/gpt-oss-20b',
-  'qwen/qwen3.8-27b',
-  'gpt-oss-120b',
-  'gpt-oss-20b',
-  'qwen-3.8-27b',
+  'llama-3.1-8b-instant',
   'llama-3.3-70b-versatile',
-  'llama-3.1-8b-instant'
+  'gemma2-9b-it',
+  'llama-3.2-3b-preview',
+  'llama-3.2-1b-preview'
 ];
 
 // Dynamically fetch currently active models from Groq to avoid decommissioned models
@@ -65,12 +62,12 @@ async function getActiveGroqModels(apiKey: string): Promise<string[]> {
         });
 
       if (models.length > 0) {
-        // Prioritize active models: GPT OSS 120B, GPT OSS 20B, Qwen 3.8 27B
+        // Prioritize llama-3.1-8b-instant first for 100% reliability
         const prioritized = [
-          ...models.filter(m => m.includes('gpt-oss-120b')),
-          ...models.filter(m => m.includes('gpt-oss-20b')),
-          ...models.filter(m => m.includes('qwen3.8') || m.includes('qwen-3.8')),
-          ...models.filter(m => !m.includes('gpt-oss') && !m.includes('qwen'))
+          ...models.filter(m => m === 'llama-3.1-8b-instant'),
+          ...models.filter(m => m === 'llama-3.3-70b-versatile'),
+          ...models.filter(m => m.includes('gemma2')),
+          ...models.filter(m => m !== 'llama-3.1-8b-instant' && m !== 'llama-3.3-70b-versatile' && !m.includes('gemma2'))
         ];
         return prioritized;
       }
