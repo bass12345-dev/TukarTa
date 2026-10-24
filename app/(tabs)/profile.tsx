@@ -3,6 +3,8 @@ import { useAppTheme } from '@/context/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import {
+  BookOpen,
+  ChevronRight,
   Music,
   Settings,
   Star
@@ -129,41 +131,32 @@ export default function ProfileScreen() {
             <Pill label={rate} variant="gold" />
           </View>
 
-          {/* Stats Bar */}
-          <View style={[styles.statsContainer, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}>
-            <StatItem value={String(statsData?.total || 0)} label="Songs" hasBorder />
-            <StatItem value={String(myGigs?.length || 0)} label="Gigs" hasBorder />
-            <StatItem value={String(avgRating)} label="Rating" hasBorder isRating />
-            <StatItem value={String(yearsExp)} label="Yrs Exp" />
-          </View>
-
-          {/* ... (About, Genres, Available For omitted for brevity) */}
-
-          {/* Songs I Know */}
-          <View style={styles.section}>            
-            <View style={styles.songList}>
-              {recentSongs.length > 0 ? (
-                recentSongs.map((item: any) => (
-                  <SongRow 
-                    key={item.song.id}
-                    title={item.song.title} 
-                    subtitle={`${item.song.artist} · ${item.genre || item.song.genre || 'General'}`} 
-                    rating={item.confidence_level} 
-                    status={item.can_perform_live ? "LIVE" : "LEARNING"} 
-                    statusVariant={item.can_perform_live ? "green" : "gold"} 
-                    iconColor={item.can_perform_live ? "#00D4FF" : "#F59E0B"} 
-                  />
-                ))
-              ) : (
-                <Text style={styles.emptyText}>No songs in dictionary yet</Text>
-              )}
-            </View>
-
+          {/* My Songs Dictionary Banner */}
+          <View style={styles.section}>
             <TouchableOpacity 
-              style={styles.viewAllBtn}
+              activeOpacity={0.85}
+              style={[
+                styles.dictionaryCard,
+                {
+                  backgroundColor: isDark ? '#14382A' : '#ECFDF5',
+                  borderColor: '#10B981',
+                }
+              ]}
               onPress={() => router.push('/profile/songs')}
             >
-              <Text style={styles.viewAllText}>View all {statsData?.total || 0} songs →</Text>
+              <View style={[styles.dictionaryIconBox, { backgroundColor: '#10B981' }]}>
+                <BookOpen size={24} color="#FFFFFF" />
+              </View>
+              <View style={styles.dictionaryInfo}>
+                <View style={styles.dictionaryTitleRow}>
+                  <Text style={[styles.dictionaryTitle, { color: colors.text }]}>My Songs Dictionary</Text>
+                  <Pill label={`${statsData?.total || 0} SONGS`} variant="mint" />
+                </View>
+                <Text style={[styles.dictionarySub, { color: colors.textSecondary }]}>
+                  Open all {statsData?.total || 0} songs with interactive lyrics, chords, & stage teleprompter
+                </Text>
+              </View>
+              <ChevronRight size={22} color="#10B981" />
             </TouchableOpacity>
           </View>
 
@@ -249,34 +242,6 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.hr} />
-
-          {/* My Bands Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>MY BANDS</Text>
-            <View style={{ gap: 12 }}>
-              {bandData?.length ? (
-                bandData.map((item: any) => {
-                  const bName = item.band?.name || 'Band';
-                  const bInitials = bName.split(' ').map((n: any) => n?.[0] || '').join('').toUpperCase().slice(0, 2);
-                  const bRole = (item.role || 'Member').toUpperCase();
-                  const memberCount = item.band?.member_count?.[0]?.count || 1;
-                  const genresText = item.band?.genres?.join(', ') || 'Various';
-                  return (
-                    <BandCard 
-                      key={item.id}
-                      title={bName} 
-                      subtitle={`${memberCount} members · ${genresText}`} 
-                      initials={bInitials} 
-                      role={bRole} 
-                      roleVariant={(item.role || '').toLowerCase() === 'leader' ? 'mint' : 'mint-dark'} 
-                    />
-                  );
-                })
-              ) : (
-                <Text style={styles.emptyText}>Not a member of any bands yet</Text>
-              )}
-            </View>
-          </View>
 
         </View>
       </ScrollView>
@@ -751,5 +716,46 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontFamily: 'DM Sans',
     fontStyle: 'italic',
-  }
+  },
+  dictionaryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 18,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    gap: 14,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  dictionaryIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dictionaryInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  dictionaryTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  dictionaryTitle: {
+    fontSize: 16.5,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+    letterSpacing: -0.3,
+  },
+  dictionarySub: {
+    fontSize: 12.5,
+    fontFamily: 'DM Sans',
+    lineHeight: 18,
+  },
 });

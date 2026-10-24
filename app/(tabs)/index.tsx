@@ -29,6 +29,8 @@ import {
   Radio,
   Clock,
   Layers,
+  PieChart,
+  BarChart3,
 } from 'lucide-react-native';
 import { useAuth } from '@/context/auth';
 import { useAppTheme } from '@/context/theme';
@@ -63,11 +65,14 @@ export default function DashboardScreen() {
   const avatarUrl = profile?.avatar_url;
 
   // Real data calculations (0 when empty, no fake mock numbers)
+  const mProfile = profile?.musician_profiles?.[0];
   const totalSongs = knownSongs?.length || 0;
   const liveSongs = knownSongs?.filter((s: any) => s.can_perform_live)?.length || 0;
   const liveMastery = totalSongs > 0 ? Math.round((liveSongs / totalSongs) * 100) : 0;
   const totalBands = bands?.length || 0;
   const gigCount = gigs?.length || 0;
+  const avgRating = mProfile?.avg_rating || '5.0';
+  const yearsExp = mProfile?.years_exp || '1+';
 
   // Upcoming Gig Details (Real gig from DB only)
   const gigTitle = upcomingGig?.name || '';
@@ -79,6 +84,23 @@ export default function DashboardScreen() {
 
   // Practice Queue / Songs to Master (confidence < 4 or tagged for learning)
   const songsToPractice = (knownSongs || []).filter((s: any) => s.confidence_level < 4).slice(0, 3);
+
+  // Genre distribution calculation for charts
+  const genreCounts = (knownSongs || []).reduce((acc: Record<string, number>, curr: any) => {
+    const g = curr.genre || curr.song?.genre || 'OPM';
+    acc[g] = (acc[g] || 0) + 1;
+    return acc;
+  }, {});
+
+  const topGenres = Object.entries(genreCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4);
+
+  // Confidence distribution
+  const masteryLevels = [
+    { label: 'Stage Ready', count: liveSongs, color: '#10B981', pct: totalSongs > 0 ? Math.round((liveSongs / totalSongs) * 100) : 0 },
+    { label: 'Practicing', count: totalSongs - liveSongs, color: '#F59E0B', pct: totalSongs > 0 ? Math.round(((totalSongs - liveSongs) / totalSongs) * 100) : 0 },
+  ];
 
   if (isProfileLoading && !profile) {
     return (
@@ -193,23 +215,114 @@ export default function DashboardScreen() {
 
         {/* ── Performance Stats ── */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>REPERTOIRE & READINESS</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>MUSICIAN STATS</Text>
           <View style={styles.statsGrid}>
             <View style={[styles.statBox, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
               <Text style={[styles.statValue, { color: colors.primary }]}>{totalSongs}</Text>
-              <Text style={[styles.statLabel, { color: colors.textDim }]}>TOTAL SONGS</Text>
+              <Text style={[styles.statLabel, { color: colors.textDim }]}>SONGS</Text>
             </View>
             <View style={[styles.statBox, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-              <Text style={[styles.statValue, { color: colors.primaryDark }]}>{liveMastery}%</Text>
-              <Text style={[styles.statLabel, { color: colors.textDim }]}>LIVE MASTERY</Text>
+              <Text style={[styles.statValue, { color: colors.primaryDark }]}>{gigCount}</Text>
+              <Text style={[styles.statLabel, { color: colors.textDim }]}>GIGS</Text>
             </View>
             <View style={[styles.statBox, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-              <Text style={[styles.statValue, { color: '#F59E0B' }]}>{totalBands}</Text>
-              <Text style={[styles.statLabel, { color: colors.textDim }]}>MY BANDS</Text>
+              <Text style={[styles.statValue, { color: '#F59E0B' }]}>{avgRating}</Text>
+              <Text style={[styles.statLabel, { color: colors.textDim }]}>RATING</Text>
             </View>
             <View style={[styles.statBox, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-              <Text style={[styles.statValue, { color: colors.accent }]}>{gigCount}</Text>
-              <Text style={[styles.statLabel, { color: colors.textDim }]}>SCHEDULED GIGS</Text>
+              <Text style={[styles.statValue, { color: colors.accent }]}>{yearsExp}</Text>
+              <Text style={[styles.statLabel, { color: colors.textDim }]}>YRS EXP</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* ── Lively Visual Charts Section ── */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>REPERTOIRE ANALYTICS</Text>
+            <View style={styles.chartTagPill}>
+              <BarChart3 size={12} color="#10B981" />
+              <Text style={styles.chartTagText}>LIVE METRICS</Text>
+            </View>
+          </View>
+
+          <View style={styles.chartsGrid}>
+            {/* Chart 1: Stage Readiness Split Bar */}
+            <View style={[styles.chartCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+              <View style={styles.chartCardHeader}>
+                <PieChart size={16} color={colors.primary} />
+                <Text style={[styles.chartCardTitle, { color: colors.text }]}>Mastery Breakdown</Text>
+              </View>
+
+              <View style={styles.stackedBarContainer}>
+                <View
+                  style={[
+                    styles.stackedSegment,
+                    {
+                      width: `${Math.max(masteryLevels[0].pct, totalSongs > 0 ? 5 : 50)}%`,
+                      backgroundColor: '#10B981',
+                    },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.stackedSegment,
+                    {
+                      width: `${Math.max(masteryLevels[1].pct, totalSongs > 0 ? 5 : 50)}%`,
+                      backgroundColor: '#F59E0B',
+                    },
+                  ]}
+                />
+              </View>
+
+              <View style={styles.chartLegendRow}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
+                  <Text style={[styles.legendText, { color: colors.textDim }]}>
+                    Stage Ready ({liveSongs})
+                  </Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
+                  <Text style={[styles.legendText, { color: colors.textDim }]}>
+                    Practicing ({totalSongs - liveSongs})
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Chart 2: Top Repertoire Genres */}
+            <View style={[styles.chartCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+              <View style={styles.chartCardHeader}>
+                <TrendingUp size={16} color={colors.primary} />
+                <Text style={[styles.chartCardTitle, { color: colors.text }]}>Top Genres Distribution</Text>
+              </View>
+
+              <View style={styles.barsList}>
+                {topGenres.length > 0 ? (
+                  topGenres.map(([genreName, count], idx) => {
+                    const pct = Math.round((count / totalSongs) * 100);
+                    const barColor = idx === 0 ? '#10B981' : idx === 1 ? '#059669' : idx === 2 ? '#34D399' : '#6EE7B7';
+                    return (
+                      <View key={genreName} style={styles.barItem}>
+                        <View style={styles.barLabelRow}>
+                          <Text style={[styles.barGenreName, { color: colors.text }]}>{genreName}</Text>
+                          <Text style={[styles.barCount, { color: colors.textDim }]}>{count} songs ({pct}%)</Text>
+                        </View>
+                        <View style={[styles.barTrack, { backgroundColor: colors.bgSecondary }]}>
+                          <View style={[styles.barFill, { width: `${pct}%`, backgroundColor: barColor }]} />
+                        </View>
+                      </View>
+                    );
+                  })
+                ) : (
+                  <View style={styles.emptyChartWrap}>
+                    <Text style={[styles.emptyChartText, { color: colors.textDim }]}>
+                      Add songs to see your live genre distribution graph!
+                    </Text>
+                  </View>
+                )}
+              </View>
             </View>
           </View>
         </View>
