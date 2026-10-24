@@ -3,10 +3,9 @@ import { Stack, useRouter } from 'expo-router';
 import {
   ArrowLeft,
   ChevronRight,
-  FileImage,
+  FileCode2,
   Search,
   Sparkles,
-  Music2,
 } from 'lucide-react-native';
 import React from 'react';
 import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -29,8 +28,8 @@ export default function AddSongsScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          onPress={() => router.back()} 
+        <TouchableOpacity
+          onPress={() => router.back()}
           style={[styles.backBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
         >
           <ArrowLeft size={20} color={colors.text} />
@@ -43,53 +42,81 @@ export default function AddSongsScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.optionsContainer}>
-          {/* Upload Option */}
-          <TouchableOpacity activeOpacity={0.85} onPress={() => router.push('/songs/upload')}>
-            <View 
+          {/* Import Web Chords / Tab Option */}
+          <TouchableOpacity activeOpacity={0.85} onPress={() => router.push('/songs/import')}>
+            <View
               style={[
-                styles.optionCard, 
-                { 
-                  backgroundColor: isDark ? '#16382C' : '#ECFDF5', 
-                  borderColor: '#10B981', 
-                  borderWidth: 1.5 
-                }
+                styles.optionCard,
+                {
+                  backgroundColor: isDark ? '#16382C' : '#ECFDF5',
+                  borderColor: '#10B981',
+                  borderWidth: 1.5,
+                },
               ]}
             >
               <View style={[styles.optionIcon, { backgroundColor: '#10B981' }]}>
-                <Sparkles size={24} color="#FFFFFF" />
+                <FileCode2 size={24} color="#FFFFFF" />
               </View>
               <View style={styles.optionInfo}>
                 <View style={styles.labelRow}>
-                  <Text style={[styles.optionTitle, { color: colors.text }]}>Upload screenshots</Text>
-                  <Pill label="FASTEST" variant="mint" />
+                  <Text style={[styles.optionTitle, { color: colors.text }]}>Import Web Chords / Tab</Text>
+                  <Pill label="CHORDS + KEY" variant="mint" />
                 </View>
                 <Text style={[styles.optionSub, { color: colors.textSecondary }]}>
-                  AI extracts all songs and artists automatically
+                  Paste any web guitar tab or upload `.txt`/`.cho` files with instant key transposition
                 </Text>
               </View>
               <ChevronRight size={20} color="#10B981" />
             </View>
           </TouchableOpacity>
 
-          {/* Search Option */}
-          <TouchableOpacity activeOpacity={0.85} onPress={() => router.push('/songs/search')}>
-            <View 
+          {/* Upload Screenshots Option */}
+          <TouchableOpacity activeOpacity={0.85} onPress={() => router.push('/songs/upload')}>
+            <View
               style={[
                 styles.optionCard,
-                { 
-                  backgroundColor: colors.bgCard, 
+                {
+                  backgroundColor: colors.bgCard,
                   borderColor: colors.border,
-                  borderWidth: 1 
-                }
+                  borderWidth: 1,
+                },
+              ]}
+            >
+              <View style={[styles.optionIcon, { backgroundColor: isDark ? '#1F3F34' : '#F0FDF4' }]}>
+                <Sparkles size={24} color="#10B981" />
+              </View>
+              <View style={styles.optionInfo}>
+                <View style={styles.labelRow}>
+                  <Text style={[styles.optionTitle, { color: colors.text }]}>Upload screenshots</Text>
+                  <Pill label="BULK OCR" variant="mint-subtle" />
+                </View>
+                <Text style={[styles.optionSub, { color: colors.textSecondary }]}>
+                  AI extracts all songs and artists from playlist screenshots
+                </Text>
+              </View>
+              <ChevronRight size={20} color={colors.textSecondary} />
+            </View>
+          </TouchableOpacity>
+
+          {/* Search Option */}
+          <TouchableOpacity activeOpacity={0.85} onPress={() => router.push('/songs/search')}>
+            <View
+              style={[
+                styles.optionCard,
+                {
+                  backgroundColor: colors.bgCard,
+                  borderColor: colors.border,
+                  borderWidth: 1,
+                },
               ]}
             >
               <View style={[styles.optionIcon, { backgroundColor: isDark ? '#1F3F34' : '#F0FDF4' }]}>
                 <Search size={24} color="#10B981" />
               </View>
               <View style={styles.optionInfo}>
-                <Text style={[styles.optionTitle, { color: colors.text }]}>Search songs manually</Text>
+                <Text style={[styles.optionTitle, { color: colors.text }]}>Search songs (LRCLIB + iTunes)</Text>
                 <Text style={[styles.optionSub, { color: colors.textSecondary }]}>
-                  Search 1M+ tracks with synced chords & lyrics
+                  Search 1M+ tracks with automatic offline lyrics caching
                 </Text>
               </View>
               <ChevronRight size={20} color={colors.textSecondary} />
@@ -100,11 +127,11 @@ export default function AddSongsScreen() {
         {/* Footer Info / Attribution */}
         <View style={[styles.attributionSection, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
           <Text style={[styles.attributionHeader, { color: colors.textSecondary }]}>
-            POWERED BY FREE MUSIC APIS
+            POWERED BY FREE MUSIC APIS & SAFE HARBOR IMPORT
           </Text>
           <View style={styles.attributionChips}>
             <Pill label="LRCLIB lyrics · search" variant="mint-subtle" dotColor="#10B981" />
-            <Pill label="TheAudioDB genre · artist" variant="mint-subtle" dotColor="#059669" />
+            <Pill label="ChordPro & Tab Parser" variant="mint-subtle" dotColor="#059669" />
             <Pill label="Gemini AI vision" variant="mint-subtle" dotColor="#10B981" />
           </View>
         </View>

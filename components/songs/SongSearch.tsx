@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Platform, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Stack } from 'expo-router';
-import { Search, ArrowLeft, Music, Plus, Check } from 'lucide-react-native';
+import { Stack, useRouter, useSegments } from 'expo-router';
+import { Search, ArrowLeft, Music, Plus, Check, FileCode2 } from 'lucide-react-native';
 import { useSearchSongs, useAddSong } from '../../utils/hooks/useSongs';
 import { useAppTheme } from '../../context/theme';
 
 export function SongSearch({ onBack }: { onBack: () => void }) {
+  const router = useRouter();
+  const segments = useSegments();
+  const isInOnboarding = segments[0] === 'onboarding';
   const { colors, isDark } = useAppTheme();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -152,21 +155,42 @@ export function SongSearch({ onBack }: { onBack: () => void }) {
                   </Text>
                 </View>
 
-                <TouchableOpacity 
-                  style={[
-                    styles.addButton, 
-                    { borderColor: colors.border },
-                    addedSongs.has(song.id) && styles.addedButton
-                  ]}
-                  onPress={() => handleAdd(song)}
-                  disabled={addedSongs.has(song.id) || addSongMutation.isPending}
-                >
-                  {addedSongs.has(song.id) ? (
-                    <Check size={16} color="#FFFFFF" strokeWidth={2.5} />
-                  ) : (
-                    <Plus size={16} color={colors.text} />
-                  )}
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                  <TouchableOpacity
+                    style={[
+                      styles.importChordBtn,
+                      {
+                        borderColor: '#10B981',
+                        backgroundColor: isDark ? '#16382C' : '#ECFDF5',
+                      },
+                    ]}
+                    onPress={() =>
+                      router.push({
+                        pathname: isInOnboarding ? '/onboarding/import' : '/songs/import',
+                        params: { title: song.title, artist: song.artist },
+                      })
+                    }
+                  >
+                    <FileCode2 size={13} color="#10B981" />
+                    <Text style={styles.importChordBtnText}>+ Chords</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={[
+                      styles.addButton, 
+                      { borderColor: colors.border },
+                      addedSongs.has(song.id) && styles.addedButton
+                    ]}
+                    onPress={() => handleAdd(song)}
+                    disabled={addedSongs.has(song.id) || addSongMutation.isPending}
+                  >
+                    {addedSongs.has(song.id) ? (
+                      <Check size={16} color="#FFFFFF" strokeWidth={2.5} />
+                    ) : (
+                      <Plus size={16} color={colors.text} />
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           ))
@@ -318,6 +342,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  importChordBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+  },
+  importChordBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#10B981',
+    fontFamily: 'DM Sans',
   },
   addedButton: {
     borderColor: '#10B981',

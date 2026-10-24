@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { FileImage, Search, SkipForward, ChevronRight, Sparkles } from 'lucide-react-native';
+import { FileImage, Search, SkipForward, ChevronRight, Sparkles, FileCode2 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Pill } from '../ui/Pill';
 import { StepProps } from './types';
@@ -18,6 +18,36 @@ export const SongStep: React.FC<StepProps & { onComplete: () => void }> = ({ onC
       </Text>
       
       <View style={styles.songOptions}>
+        {/* Option 0: Import Web Chords / Tab */}
+        <TouchableOpacity activeOpacity={0.85} onPress={() => router.push('/onboarding/import')}>
+          <View 
+            style={[
+              styles.songOptionCard, 
+              { 
+                backgroundColor: isDark ? '#16382C' : '#ECFDF5', 
+                borderColor: '#10B981',
+                borderWidth: 1.5,
+              }
+            ]}
+          >
+            <View style={[styles.songOptionIcon, { backgroundColor: '#10B981' }]}>
+              <FileCode2 size={22} color="#FFFFFF" />
+            </View>
+            <View style={styles.songOptionInfo}>
+              <View style={styles.miniRow}>
+                <Text style={[styles.songOptionTitle, { color: colors.text }]}>
+                  Import Web Chords / Tab
+                </Text>
+                <Pill label="CHORDS + KEY" variant="mint" />
+              </View>
+              <Text style={[styles.songOptionSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                Paste any guitar tab or upload .txt / .cho files
+              </Text>
+            </View>
+            <ChevronRight size={20} color="#10B981" />
+          </View>
+        </TouchableOpacity>
+
         {/* Option 1: Upload Screenshots */}
         <TouchableOpacity activeOpacity={0.85} onPress={() => router.push('/onboarding/upload')}>
           <View 

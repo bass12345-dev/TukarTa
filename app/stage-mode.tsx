@@ -1,62 +1,52 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  View, 
-  Text, 
-  ScrollView, 
-  TouchableOpacity, 
-  StyleSheet, 
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
   Platform,
-  Dimensions, 
   ActivityIndicator,
-  Modal,
-  TextInput
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
-import { 
-  ChevronLeft, 
-  ChevronRight, 
-  SkipBack, 
-  SkipForward, 
-  Play, 
-  Pause, 
-  RotateCcw, 
-  ListMusic, 
-  ExternalLink, 
-  Edit2, 
-  Globe, 
-  Search,
-  Music2
+import {
+  SkipBack,
+  SkipForward,
+  Play,
+  Pause,
+  RotateCcw,
+  ListMusic,
+  ExternalLink,
+  Music2,
+  FileCode2,
 } from 'lucide-react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useSetlistSongs } from '../utils/hooks/useMusician';
-import { useSongLyrics, useUpdateSongArtist } from '../utils/hooks/useSongs';
+import { useSongLyrics } from '../utils/hooks/useSongs';
+import {
+  parseLineSegments,
+  transposeChord,
+  transposeChordProText,
+} from '../utils/chordParser';
 import { WebView } from 'react-native-webview';
 
-const { width } = Dimensions.get('window');
-
 const SEARCH_PROVIDERS = [
-  { name: 'Genius', url: 'https://genius.com/search?q=', color: '#D97706' },
   { name: 'Ultimate Guitar', url: 'https://www.ultimate-guitar.com/search.php?search_type=title&value=', color: '#059669' },
-  { name: 'AZLyrics', url: 'https://www.azlyrics.com/search.php?q=', color: '#0284C7' }
+  { name: 'Genius Lyrics', url: 'https://genius.com/search?q=', color: '#D97706' },
+  { name: 'Boite à Chansons', url: 'https://www.boiteachansons.net/recherche?q=', color: '#0284C7' },
 ];
 
 export default function StageModeScreen() {
   const router = useRouter();
   const { setlistId, initialSongId } = useLocalSearchParams();
-  
+
   // 1. Full setlist
-  const { data: setlistSongs, isLoading: isLoadingSetlist } = useSetlistSongs(setlistId as string);
-  
+  const { data: setlistSongs } = useSetlistSongs(setlistId as string);
+
   // 2. Navigation index & play state
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
-  
-  // 2.1 Artist Correction
-  const [isEditingArtist, setIsEditingArtist] = useState(false);
-  const [newArtist, setNewArtist] = useState('');
-  const updateArtistMutation = useUpdateSongArtist();
-  
-  // 2.2 Minus 1 Player
+  const [transposeSteps, setTransposeSteps] = useState(0);
   const [isMinusOneVisible, setIsMinusOneVisible] = useState(false);
 
   // Initialize index when setlist loads
@@ -67,50 +57,58 @@ export default function StageModeScreen() {
     }
   }, [setlistSongs, initialSongId]);
 
+  // Reset transpose when switching songs
+  React.useEffect(() => {
+    setTransposeSteps(0);
+  }, [currentIndex]);
+
   // Fallback demo songs if setlist is empty or demo
-  const songsList = (setlistSongs && setlistSongs.length > 0) ? setlistSongs : [
-    {
-      id: 'demo-1',
-      position: 1,
-      song: {
-        id: 'demo-s1',
-        title: 'Wonderwall',
-        artist: 'Oasis',
-        original_key: 'G',
-        bpm: 112,
-        duration: '4:18',
-      }
-    },
-    {
-      id: 'demo-2',
-      position: 2,
-      song: {
-        id: 'demo-s2',
-        title: "Sweet Child O' Mine",
-        artist: "Guns N' Roses",
-        original_key: 'D#',
-        bpm: 128,
-        duration: '5:56',
-      }
-    },
-    {
-      id: 'demo-3',
-      position: 3,
-      song: {
-        id: 'demo-s3',
-        title: 'Gravity',
-        artist: 'John Mayer',
-        original_key: 'G',
-        bpm: 72,
-        duration: '4:05',
-      }
-    }
-  ];
+  const songsList =
+    setlistSongs && setlistSongs.length > 0
+      ? setlistSongs
+      : [
+          {
+            id: 'demo-1',
+            position: 1,
+            song: {
+              id: 'demo-s1',
+              title: 'Wonderwall',
+              artist: 'Oasis',
+              original_key: 'G',
+              bpm: 112,
+              duration: '4:18',
+            },
+          },
+          {
+            id: 'demo-2',
+            position: 2,
+            song: {
+              id: 'demo-s2',
+              title: "Sweet Child O' Mine",
+              artist: "Guns N' Roses",
+              original_key: 'D#',
+              bpm: 128,
+              duration: '5:56',
+            },
+          },
+          {
+            id: 'demo-3',
+            position: 3,
+            song: {
+              id: 'demo-s3',
+              title: 'Gravity',
+              artist: 'John Mayer',
+              original_key: 'G',
+              bpm: 72,
+              duration: '4:05',
+            },
+          },
+        ];
 
   const currentSetlistSong = songsList[currentIndex] || songsList[0];
   const nextSetlistSong = songsList[currentIndex + 1];
 
-  // 3. Lyrics Hook
+  // 3. Lyrics & Chords Hook (Offline Local Cache -> Supabase Cache -> LRCLIB)
   const { data: lyricsData, isLoading: isLoadingLyrics } = useSongLyrics(
     currentSetlistSong?.song?.id,
     currentSetlistSong?.song?.artist,
@@ -118,12 +116,19 @@ export default function StageModeScreen() {
   );
 
   const hasLyrics = !!lyricsData?.plain_lyrics;
+  const baseKey = currentSetlistSong?.song?.original_key || 'G';
+  const activeKey = transposeChord(baseKey, transposeSteps);
+
+  const displayedLyrics = useMemo(() => {
+    if (!lyricsData?.plain_lyrics) return '';
+    return transposeChordProText(lyricsData.plain_lyrics, transposeSteps);
+  }, [lyricsData?.plain_lyrics, transposeSteps]);
 
   // 4. Web Search
   const handleWebSearch = async (baseUrl: string) => {
     if (!currentSetlistSong) return;
     const artist = currentSetlistSong.song?.artist;
-    const cleanArtist = (artist && artist.toLowerCase() !== 'unknown artist') ? artist : '';
+    const cleanArtist = artist && artist.toLowerCase() !== 'unknown artist' ? artist : '';
     const query = `${currentSetlistSong.song?.title} ${cleanArtist}`.trim();
     const fullUrl = `${baseUrl}${encodeURIComponent(query)}`;
     await WebBrowser.openBrowserAsync(fullUrl, {
@@ -134,25 +139,15 @@ export default function StageModeScreen() {
     });
   };
 
-  const handleUpdateArtist = async () => {
-    if (!currentSetlistSong || !newArtist.trim()) return;
-    try {
-      await updateArtistMutation.mutateAsync({
-        songId: currentSetlistSong.song?.id,
-        artist: newArtist.trim(),
-        title: currentSetlistSong.song?.title,
-        setlistId: setlistId as string,
-        position: currentSetlistSong.position
-      });
-      setIsEditingArtist(false);
-    } catch (e) {
-      console.error('Failed to update artist:', e);
-    }
-  };
-
-  const openEditArtist = () => {
-    setNewArtist(currentSetlistSong?.song?.artist || '');
-    setIsEditingArtist(true);
+  const handleOpenImportChords = () => {
+    router.push({
+      pathname: '/songs/import',
+      params: {
+        title: currentSetlistSong?.song?.title || '',
+        artist: currentSetlistSong?.song?.artist || '',
+        key: currentSetlistSong?.song?.original_key || 'G',
+      },
+    });
   };
 
   return (
@@ -163,19 +158,28 @@ export default function StageModeScreen() {
       <View style={styles.topStatusBar}>
         <View style={styles.syncStatusGroup}>
           <View style={styles.pulseDot} />
-          <Text style={styles.syncStatusText}>OFFLINE MODE • BAND SYNC ACTIVE</Text>
+          <Text style={styles.syncStatusText}>
+            OFFLINE STAGE MODE • {lyricsData?.provider === 'user_import' ? 'CHORDPRO CHART' : 'LRCLIB SYNC'}
+          </Text>
         </View>
 
-        <TouchableOpacity 
-          style={styles.exitBtn}
-          onPress={() => router.back()}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Text style={styles.exitBtnText}>EXIT</Text>
-        </TouchableOpacity>
+        <View style={styles.topRightActions}>
+          <TouchableOpacity style={styles.importHeaderBtn} onPress={handleOpenImportChords}>
+            <FileCode2 size={13} color="#10B981" />
+            <Text style={styles.importHeaderBtnText}>IMPORT CHORDS</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.exitBtn}
+            onPress={() => router.back()}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text style={styles.exitBtnText}>EXIT</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* ── Song Info Section ── */}
+      {/* ── Song Info & Live Key Transposer Section ── */}
       <View style={styles.songInfoSection}>
         <View style={styles.songInfoMain}>
           <View style={{ flex: 1 }}>
@@ -186,12 +190,31 @@ export default function StageModeScreen() {
               {currentSetlistSong?.song?.artist || 'Oasis'}
             </Text>
           </View>
+
           <View style={styles.songInfoRight}>
-            <View style={styles.keyBadge}>
-              <Text style={styles.keyBadgeText}>
-                KEY: {currentSetlistSong?.song?.original_key || 'G'}
-              </Text>
+            <View style={styles.transposeControls}>
+              <TouchableOpacity
+                style={styles.transposeStepBtn}
+                onPress={() => setTransposeSteps((s) => s - 1)}
+              >
+                <Text style={styles.transposeStepText}>-</Text>
+              </TouchableOpacity>
+
+              <View style={styles.keyBadge}>
+                <Text style={styles.keyBadgeText}>
+                  KEY: {activeKey}
+                  {transposeSteps !== 0 ? ` (${transposeSteps > 0 ? `+${transposeSteps}` : transposeSteps})` : ''}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.transposeStepBtn}
+                onPress={() => setTransposeSteps((s) => s + 1)}
+              >
+                <Text style={styles.transposeStepText}>+</Text>
+              </TouchableOpacity>
             </View>
+
             <Text style={styles.nextSongLabel} numberOfLines={1}>
               NEXT: {nextSetlistSong?.song?.title || "Sweet Child O' Mine"}
             </Text>
@@ -215,10 +238,10 @@ export default function StageModeScreen() {
         <View style={styles.playerContainer}>
           <WebView
             style={styles.webview}
-            source={{ 
+            source={{
               uri: `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(
                 `${currentSetlistSong.song?.artist} ${currentSetlistSong.song?.title} minus 1`
-              )}` 
+              )}`,
             }}
             javaScriptEnabled={true}
             domStorageEnabled={true}
@@ -227,34 +250,52 @@ export default function StageModeScreen() {
         </View>
       )}
 
-      {/* ── Lyrics Performance Area (Centered High-Contrast) ── */}
-      <ScrollView 
-        style={styles.scroll} 
+      {/* ── Lyrics & Chords Performance Area ── */}
+      <ScrollView
+        style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
         {isLoadingLyrics ? (
           <View style={styles.lyricsLoading}>
             <ActivityIndicator size="large" color="#10B981" />
-            <Text style={styles.loadingText}>Loading stage lyrics...</Text>
+            <Text style={styles.loadingText}>Loading offline chords & lyrics...</Text>
           </View>
         ) : hasLyrics ? (
-          /* Real lyrics formatted cleanly */
           <View style={styles.realLyricsContainer}>
-            {lyricsData.plain_lyrics.split('\n\n').map((paragraph: string, pIdx: number) => (
+            {displayedLyrics.split('\n\n').map((paragraph: string, pIdx: number) => (
               <View key={pIdx} style={styles.verseBlock}>
-                <Text style={styles.verseLabel}>
-                  {pIdx === 0 ? 'VERSE 1' : pIdx === 1 ? 'PRE-CHORUS' : pIdx === 2 ? 'CHORUS' : `SECTION ${pIdx + 1}`}
-                </Text>
                 {paragraph.split('\n').map((line: string, lIdx: number) => {
+                  const parsedLine = parseLineSegments(line);
+                  if (parsedLine.isSectionHeader) {
+                    return (
+                      <Text key={lIdx} style={styles.verseLabel}>
+                        {parsedLine.sectionTitle}
+                      </Text>
+                    );
+                  }
+
+                  const hasInlineChords = parsedLine.segments.some((s) => !!s.chord);
+                  if (hasInlineChords) {
+                    return (
+                      <View key={lIdx} style={styles.chordLineWrap}>
+                        {parsedLine.segments.map((seg, sIdx) => (
+                          <View key={sIdx} style={styles.chordSegmentCol}>
+                            <Text style={styles.stageChordText}>{seg.chord || ' '}</Text>
+                            <Text style={styles.stageLyricWithChordText}>
+                              {seg.lyric || (seg.chord ? '   ' : '')}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    );
+                  }
+
                   const isHighlighted = pIdx === 1 && lIdx === 1;
                   return (
-                    <Text 
-                      key={lIdx} 
-                      style={[
-                        styles.lyricLine, 
-                        isHighlighted && styles.lyricLineHighlighted
-                      ]}
+                    <Text
+                      key={lIdx}
+                      style={[styles.lyricLine, isHighlighted && styles.lyricLineHighlighted]}
                     >
                       {line}
                     </Text>
@@ -262,18 +303,26 @@ export default function StageModeScreen() {
                 })}
               </View>
             ))}
+
+            {/* Quick button to attach or update chords if this only has plain LRCLIB lyrics */}
+            {lyricsData?.provider !== 'user_import' && (
+              <View style={styles.searchFallback}>
+                <TouchableOpacity style={styles.importCtaPill} onPress={handleOpenImportChords}>
+                  <FileCode2 size={14} color="#FFFFFF" />
+                  <Text style={styles.importCtaText}>+ Paste / Attach Guitar Chords for This Song</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         ) : (
-          /* High-Contrast Stage View Demo & Search fallback */
+          /* High-Contrast Stage View Demo & Web Import fallback */
           <View style={styles.lyricsStageView}>
-            {/* Previous Verse (Faded) */}
             <View style={styles.fadedVerse}>
               <Text style={styles.verseLabelSmall}>VERSE 1</Text>
               <Text style={styles.fadedLine}>Today is gonna be the day</Text>
               <Text style={styles.fadedLine}>That they're gonna throw it back to you</Text>
             </View>
 
-            {/* Current Section (High Contrast) */}
             <View style={styles.activeVerse}>
               <Text style={styles.verseLabelSmall}>PRE-CHORUS</Text>
               <Text style={styles.activeLineBold}>
@@ -286,16 +335,20 @@ export default function StageModeScreen() {
               </View>
             </View>
 
-            {/* Upcoming Section (Subtle) */}
             <View style={styles.upcomingVerse}>
               <Text style={styles.verseLabelSmall}>CHORUS</Text>
               <Text style={styles.upcomingLine}>Because maybe...</Text>
               <Text style={styles.upcomingLine}>You're gonna be the one that saves me</Text>
             </View>
 
-            {/* Web Search buttons for chords */}
+            {/* Web Search & Direct Import buttons */}
             <View style={styles.searchFallback}>
-              <Text style={styles.fallbackHeader}>NEED LIVE CHORDS & TABS?</Text>
+              <TouchableOpacity style={styles.importCtaPill} onPress={handleOpenImportChords}>
+                <FileCode2 size={15} color="#FFFFFF" />
+                <Text style={styles.importCtaText}>Import Web Chords / Tab for "{currentSetlistSong?.song?.title}"</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.fallbackHeader}>OR COPY CHORDS FROM THE WEB:</Text>
               <View style={styles.searchButtonsRow}>
                 {SEARCH_PROVIDERS.map((p) => (
                   <TouchableOpacity
@@ -316,8 +369,7 @@ export default function StageModeScreen() {
       {/* ── Footer Controls ── */}
       <View style={styles.footerControls}>
         <View style={styles.transportRow}>
-          {/* Previous Song */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.transportBtnSide, currentIndex === 0 && { opacity: 0.4 }]}
             activeOpacity={0.8}
             disabled={currentIndex === 0}
@@ -326,8 +378,7 @@ export default function StageModeScreen() {
             <SkipBack size={22} color="#166534" fill="#166534" />
           </TouchableOpacity>
 
-          {/* Large Primary Pause / Play Button */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.transportBtnMain}
             activeOpacity={0.88}
             onPress={() => setIsPlaying(!isPlaying)}
@@ -339,8 +390,7 @@ export default function StageModeScreen() {
             )}
           </TouchableOpacity>
 
-          {/* Next Song */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.transportBtnSide, currentIndex >= songsList.length - 1 && { opacity: 0.4 }]}
             activeOpacity={0.8}
             disabled={currentIndex >= songsList.length - 1}
@@ -350,21 +400,21 @@ export default function StageModeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Sub-actions Row */}
         <View style={styles.subActionsRow}>
-          <TouchableOpacity 
-            style={styles.subActionBtn} 
+          <TouchableOpacity
+            style={styles.subActionBtn}
             activeOpacity={0.7}
             onPress={() => {
               setIsPlaying(true);
+              setTransposeSteps(0);
             }}
           >
             <RotateCcw size={14} color="#10B981" />
-            <Text style={styles.subActionText}>RESTART</Text>
+            <Text style={styles.subActionText}>RESET</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.subActionBtn} 
+          <TouchableOpacity
+            style={styles.subActionBtn}
             activeOpacity={0.7}
             onPress={() => setIsMinusOneVisible(!isMinusOneVisible)}
           >
@@ -374,8 +424,8 @@ export default function StageModeScreen() {
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.subActionBtn} 
+          <TouchableOpacity
+            style={styles.subActionBtn}
             activeOpacity={0.7}
             onPress={() => router.push('/(tabs)/index')}
           >
@@ -422,6 +472,28 @@ const styles = StyleSheet.create({
     color: '#166534',
     letterSpacing: 1,
   },
+  topRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  importHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#10B981',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+  },
+  importHeaderBtnText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#166534',
+    fontFamily: 'DM Sans',
+  },
   exitBtn: {
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -460,20 +532,42 @@ const styles = StyleSheet.create({
   },
   songInfoRight: {
     alignItems: 'flex-end',
-    gap: 4,
+    gap: 6,
+  },
+  transposeControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  transposeStepBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#10B981',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  transposeStepText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#166534',
+    fontFamily: 'JetBrains Mono',
   },
   keyBadge: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#D1FAE5',
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
     borderRadius: 6,
   },
   keyBadgeText: {
     fontSize: 11,
     fontWeight: '800',
     color: '#166534',
+    fontFamily: 'JetBrains Mono',
   },
   nextSongLabel: {
     fontSize: 9,
@@ -519,7 +613,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: 32,
+    paddingTop: 28,
     paddingBottom: 40,
     alignItems: 'center',
   },
@@ -535,7 +629,8 @@ const styles = StyleSheet.create({
   },
   realLyricsContainer: {
     width: '100%',
-    gap: 28,
+    maxWidth: 680,
+    gap: 24,
   },
   verseBlock: {
     alignItems: 'center',
@@ -547,6 +642,32 @@ const styles = StyleSheet.create({
     color: '#10B981',
     letterSpacing: 1.5,
     marginBottom: 4,
+  },
+  chordLineWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    marginBottom: 6,
+  },
+  chordSegmentCol: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
+  stageChordText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#10B981',
+    fontFamily: 'JetBrains Mono',
+    lineHeight: 20,
+    paddingRight: 6,
+  },
+  stageLyricWithChordText: {
+    fontSize: 19,
+    fontWeight: '700',
+    color: '#166534',
+    fontFamily: 'DM Sans',
+    lineHeight: 26,
   },
   lyricLine: {
     fontSize: 20,
@@ -625,19 +746,37 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   searchFallback: {
-    marginTop: 24,
+    marginTop: 20,
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
     width: '100%',
+  },
+  importCtaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#10B981',
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    borderRadius: 24,
+  },
+  importCtaText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    fontFamily: 'DM Sans',
   },
   fallbackHeader: {
     fontSize: 10,
     fontWeight: '800',
     color: '#10B981',
     letterSpacing: 1,
+    marginTop: 4,
   },
   searchButtonsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
     gap: 8,
   },
   searchPill: {

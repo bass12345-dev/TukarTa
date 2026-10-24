@@ -541,11 +541,14 @@ export function useGigSetlist(gigId: string | undefined) {
   });
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = (val: any): boolean => typeof val === 'string' && UUID_REGEX.test(val);
+
 export function useSetlistSongs(setlistId: string | undefined) {
   return useQuery({
     queryKey: ['setlist-songs', setlistId],
     queryFn: async () => {
-      if (!setlistId) return [];
+      if (!setlistId || !isUuid(setlistId)) return [];
       const { data, error } = await supabase
         .from('setlist_songs')
         .select(`
@@ -558,7 +561,7 @@ export function useSetlistSongs(setlistId: string | undefined) {
       if (error) throw error;
       return data;
     },
-    enabled: !!setlistId,
+    enabled: !!setlistId && isUuid(setlistId),
     staleTime: 1000 * 60 * 2, // 2 mins
   });
 }
