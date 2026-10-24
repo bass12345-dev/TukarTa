@@ -19,15 +19,22 @@ import {
 } from 'lucide-react-native';
 import { useMyGigs } from '@/utils/hooks/useMusician';
 import { useAppTheme } from '@/context/theme';
+import { CreateGigModal } from '@/components/gigs/CreateGigModal';
 
 export default function SetlistsScreen() {
   const router = useRouter();
   const { colors, isDark } = useAppTheme();
+  const [showCreateGigModal, setShowCreateGigModal] = React.useState(false);
   const { data: gigs, isLoading: isGigsLoading } = useMyGigs();
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
+
+      <CreateGigModal
+        visible={showCreateGigModal}
+        onClose={() => setShowCreateGigModal(false)}
+      />
 
       {/* ── Header ── */}
       <View style={[styles.header, { backgroundColor: colors.bg, borderBottomColor: colors.border }]}>
@@ -40,7 +47,7 @@ export default function SetlistsScreen() {
           <TouchableOpacity 
             style={[styles.addBtn, { backgroundColor: colors.primary }]}
             activeOpacity={0.85}
-            onPress={() => router.push('/songs/add')}
+            onPress={() => setShowCreateGigModal(true)}
           >
             <Plus size={20} color="#FFF" strokeWidth={2.5} />
           </TouchableOpacity>
@@ -70,6 +77,14 @@ export default function SetlistsScreen() {
             <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
               Create a gig or join a band to start organizing sets, chords, and live stage lyrics.
             </Text>
+            <TouchableOpacity
+              style={[styles.createGigBtn, { backgroundColor: colors.primary }]}
+              activeOpacity={0.85}
+              onPress={() => setShowCreateGigModal(true)}
+            >
+              <Plus size={16} color="#FFF" strokeWidth={2.5} />
+              <Text style={styles.createGigBtnText}>Create a Gig</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.gigsList}>
@@ -200,6 +215,21 @@ const styles = StyleSheet.create({
     fontFamily: 'DM Sans',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  createGigBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 14,
+    marginTop: 8,
+  },
+  createGigBtnText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: 'DM Sans',
   },
   stateText: {
     fontSize: 13,
