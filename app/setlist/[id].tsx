@@ -2,10 +2,11 @@ import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { ArrowLeft, MoreVertical, Music, Sparkles, Play, Plus, Video, BookOpen, Radio } from 'lucide-react-native';
+import { ArrowLeft, MoreVertical, Music, Sparkles, Play, Plus, Video, BookOpen, Radio, WifiOff } from 'lucide-react-native';
 import { Orb } from '@/components/ui/Orb';
 import { useGigDetails, useGigSetlists, useSetlistSongs, useToggleLearnStatus, useCreateSetlist } from '@/utils/hooks/useMusician';
 import { SongPickerModal } from '@/components/setlists/SongPickerModal';
+import { OfflinePackageModal } from '@/components/setlists/OfflinePackageModal';
 import { useAppTheme } from '@/context/theme';
 import { useBandSession } from '@/context/bandSession';
 
@@ -15,6 +16,7 @@ export default function SetlistDetailsScreen() {
   const { colors, isDark } = useAppTheme();
   const { startSession } = useBandSession();
   const [showPicker, setShowPicker] = React.useState(false);
+  const [showOfflineModal, setShowOfflineModal] = React.useState(false);
   const [activeSetlistIdx, setActiveSetlistIdx] = React.useState(0);
 
   // 1. Data Hooks
@@ -77,6 +79,20 @@ export default function SetlistDetailsScreen() {
         onClose={() => setShowPicker(false)} 
         setlistId={currentSetlist?.id || ''}
         currentSongCount={songs?.length || 0}
+      />
+
+      <OfflinePackageModal
+        visible={showOfflineModal}
+        onClose={() => setShowOfflineModal(false)}
+        gigId={id as string}
+        setlistId={currentSetlist?.id || ''}
+        gigInfo={{
+          name: gig?.name || 'Untitled Gig',
+          venue: gig?.venue,
+          gig_date: gig?.gig_date,
+          band: gig?.band,
+        }}
+        songs={songs || []}
       />
 
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
@@ -146,7 +162,7 @@ export default function SetlistDetailsScreen() {
           activeOpacity={0.8} 
           onPress={() => router.push({ pathname: '/ai-agent', params: { gigId: id } })}
         >
-          <Sparkles size={18} color="#10B981" style={{ marginRight: 8 }} />
+          <Sparkles size={16} color="#10B981" style={{ marginRight: 6 }} />
           <Text style={[styles.btnText, { color: colors.text }]}>AI Agent</Text>
         </TouchableOpacity>
         
@@ -155,8 +171,17 @@ export default function SetlistDetailsScreen() {
           activeOpacity={0.8} 
           onPress={() => setShowPicker(true)}
         >
-          <Plus size={18} color="#10B981" style={{ marginRight: 8 }} />
+          <Plus size={16} color="#10B981" style={{ marginRight: 6 }} />
           <Text style={[styles.btnText, { color: colors.text }]}>Add Song</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.addManualBtn, { backgroundColor: colors.bgCard, borderColor: '#10B981' }]} 
+          activeOpacity={0.8} 
+          onPress={() => setShowOfflineModal(true)}
+        >
+          <WifiOff size={16} color="#10B981" style={{ marginRight: 6 }} />
+          <Text style={[styles.btnText, { color: colors.text }]}>Offline Prep</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
@@ -170,7 +195,7 @@ export default function SetlistDetailsScreen() {
             router.push('/bands');
           }}
         >
-          <Radio size={18} color="#10B981" style={{ marginRight: 8 }} />
+          <Radio size={16} color="#10B981" style={{ marginRight: 6 }} />
           <Text style={[styles.btnText, { color: colors.text }]}>Live Sync</Text>
         </TouchableOpacity>
 
@@ -373,35 +398,37 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    gap: 8,
     marginBottom: 16,
     maxWidth: 640,
     width: '100%',
     alignSelf: 'center',
   },
   agentBtn: {
-    flex: 1.5,
-    height: 48,
+    flex: 1,
+    height: 46,
     borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
+    paddingHorizontal: 4,
   },
   addManualBtn: {
-    flex: 1.5,
-    height: 48,
+    flex: 1,
+    height: 46,
     borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
+    paddingHorizontal: 4,
   },
   stageBtn: {
-    width: 48,
-    height: 48,
+    width: 46,
+    height: 46,
     backgroundColor: '#10B981',
     borderRadius: 14,
     alignItems: 'center',
@@ -413,7 +440,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   btnText: {
-    fontSize: 12.5,
+    fontSize: 11.5,
     fontWeight: '700',
     fontFamily: 'DM Sans',
   },

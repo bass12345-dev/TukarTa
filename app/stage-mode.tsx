@@ -27,6 +27,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { useSetlistSongs } from '../utils/hooks/useMusician';
 import { useSongLyrics } from '../utils/hooks/useSongs';
 import { useBandSession } from '../context/bandSession';
+import { getOfflineGigPackage } from '../utils/offlineManager';
 import {
   parseLineSegments,
   transposeChord,
@@ -67,6 +68,30 @@ export default function StageModeScreen() {
   const [isPlaying, setIsPlaying] = useState(true);
   const [transposeSteps, setTransposeSteps] = useState(0);
   const [isMinusOneVisible, setIsMinusOneVisible] = useState(false);
+  const [offlineSongs, setOfflineSongs] = useState<any[]>([]);
+
+  // Load offline gig package fallback if offline or db empty
+  useEffect(() => {
+    if (setlistId) {
+      getOfflineGigPackage(setlistId as string).then((pkg) => {
+        if (pkg && pkg.songs && pkg.songs.length > 0) {
+          const mapped = pkg.songs.map((ps) => ({
+            id: ps.id,
+            position: ps.position,
+            song: {
+              id: ps.song_id,
+              title: ps.title,
+              artist: ps.artist,
+              original_key: ps.original_key,
+            },
+            plain_lyrics: ps.plain_lyrics,
+            provider: ps.provider,
+          }));
+          setOfflineSongs(mapped);
+        }
+      });
+    }
+  }, [setlistId]);
 
   // Single direct song mode (e.g., opened directly from Song Dictionary)
   const isDirectSongMode = !setlistId && !!songId;
@@ -84,10 +109,12 @@ export default function StageModeScreen() {
     };
   }, [isDirectSongMode, songId, title, artist, paramKey]);
 
-  // Real setlist songs from DB or single direct song
+  // Real setlist songs from DB, or fallback to offline cached package, or single direct song
   const songsList = isDirectSongMode && directSongObj
     ? [directSongObj]
-    : setlistSongs || [];
+    : (setlistSongs && setlistSongs.length > 0)
+    ? setlistSongs
+    : offlineSongs;
 
   // Determine effective song: if member in active session, follow leader's broadcast
   const isMemberFollowing = !isLeader && !!sessionCode && !!syncCurrentSong;
@@ -121,7 +148,7 @@ export default function StageModeScreen() {
 
   const rawLyrics = (isMemberFollowing && syncCurrentSong.plain_lyrics)
     ? syncCurrentSong.plain_lyrics
-    : lyricsData?.plain_lyrics || '';
+    : currentSetlistSong?.plain_lyrics || lyricsData?.plain_lyrics || '';
 
   const hasLyrics = !!rawLyrics;
   const baseKey = isMemberFollowing

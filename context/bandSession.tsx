@@ -87,6 +87,7 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
   const [countInNumber, setCountInNumber] = useState<number | null>(null);
 
   const channelRef = useRef<any>(null);
+  const localBcRef = useRef<any>(null);
   const deviceIdRef = useRef<string>('');
   const countInTimerRef = useRef<any>(null);
 
@@ -210,6 +211,22 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
     }
 
     const channelName = `band_room_${code.replace(/[^A-Za-z0-9]/g, '')}`;
+
+    // Initialize local offline broadcast channel (works with 0 internet)
+    if (typeof window !== 'undefined' && (window as any).BroadcastChannel) {
+      if (localBcRef.current) localBcRef.current.close();
+      const bc = new (window as any).BroadcastChannel(channelName);
+      bc.onmessage = (ev: any) => {
+        if (ev.data?.event === 'REQUEST_CURRENT_SONG' && currentSong) {
+          bc.postMessage({
+            event: 'SONG_SELECTED',
+            payload: { song: currentSong, nextSong, sentAt: Date.now() },
+          });
+        }
+      };
+      localBcRef.current = bc;
+    }
+
     const channel = supabase.channel(channelName, {
       config: {
         broadcast: { ack: true, self: false },
@@ -283,6 +300,28 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
       setIsLeader(false);
       setMyName(memberInfo.name);
       setMyRole(memberInfo.role);
+
+      // Initialize local offline broadcast channel listener (works with 0 internet)
+      if (typeof window !== 'undefined' && (window as any).BroadcastChannel) {
+        if (localBcRef.current) localBcRef.current.close();
+        const bc = new (window as any).BroadcastChannel(channelName);
+        bc.onmessage = (ev: any) => {
+          if (ev.data?.event === 'SONG_SELECTED' && ev.data?.payload?.song) {
+            setCurrentSong(ev.data.payload.song);
+            setNextSong(ev.data.payload.nextSong || null);
+            setActiveCue(`Switched to ${ev.data.payload.song.title}`);
+            setTimeout(() => setActiveCue(null), 3500);
+          } else if (ev.data?.event === 'PLAYBACK_CHANGE') {
+            if (typeof ev.data.payload?.isPlaying === 'boolean') {
+              setIsPlaying(ev.data.payload.isPlaying);
+            }
+          } else if (ev.data?.event === 'CUE_COUNT_IN') {
+            triggerCountInAnimation();
+          }
+        };
+        localBcRef.current = bc;
+        bc.postMessage({ event: 'REQUEST_CURRENT_SONG', memberId: deviceIdRef.current });
+      }
 
       if (channelRef.current) {
         await supabase.removeChannel(channelRef.current);
@@ -401,16 +440,31 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
     setCurrentSong(song);
     if (next) setNextSong(next);
 
+    const payload = {
+      song,
+      nextSong: next || null,
+      sentAt: Date.now(),
+    };
+
+    // 1. Send via local BroadcastChannel (Zero internet offline sync)
+    if (localBcRef.current && isLeader) {
+      try {
+        localBcRef.current.postMessage({
+          event: 'SONG_SELECTED',
+          payload,
+        });
+      } catch (e) {
+        console.warn('Local BC broadcast error:', e);
+      }
+    }
+
+    // 2. Send via Supabase Realtime (if online)
     if (channelRef.current && isLeader) {
       channelRef.current.send({
         type: 'broadcast',
         event: 'SONG_SELECTED',
-        payload: {
-          song,
-          nextSong: next || null,
-          sentAt: Date.now(),
-        },
-      });
+        payload,
+      }).catch((e: any) => console.warn('Supabase broadcast offline fallback:', e));
     }
   };
 
@@ -419,16 +473,30 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
    */
   const broadcastPlayback = (playing: boolean, cue?: string) => {
     setIsPlaying(playing);
+
+    const payload = {
+      isPlaying: playing,
+      cue: cue || null,
+      sentAt: Date.now(),
+    };
+
+    if (localBcRef.current && isLeader) {
+      try {
+        localBcRef.current.postMessage({
+          event: 'PLAYBACK_CHANGE',
+          payload,
+        });
+      } catch (e) {
+        console.warn('Local BC playback error:', e);
+      }
+    }
+
     if (channelRef.current && isLeader) {
       channelRef.current.send({
         type: 'broadcast',
         event: 'PLAYBACK_CHANGE',
-        payload: {
-          isPlaying: playing,
-          cue: cue || null,
-          sentAt: Date.now(),
-        },
-      });
+        payload,
+      }).catch((e: any) => console.warn('Supabase playback offline fallback:', e));
     }
   };
 
@@ -437,15 +505,29 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
    */
   const broadcastCountIn = (bpm?: number) => {
     triggerCountInAnimation();
+
+    const payload = {
+      bpm: bpm || 120,
+      sentAt: Date.now(),
+    };
+
+    if (localBcRef.current && isLeader) {
+      try {
+        localBcRef.current.postMessage({
+          event: 'CUE_COUNT_IN',
+          payload,
+        });
+      } catch (e) {
+        console.warn('Local BC count-in error:', e);
+      }
+    }
+
     if (channelRef.current && isLeader) {
       channelRef.current.send({
         type: 'broadcast',
         event: 'CUE_COUNT_IN',
-        payload: {
-          bpm: bpm || 120,
-          sentAt: Date.now(),
-        },
-      });
+        payload,
+      }).catch((e: any) => console.warn('Supabase count-in offline fallback:', e));
     }
   };
 
