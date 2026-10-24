@@ -29,6 +29,7 @@ import { useSetlistSongs } from '../utils/hooks/useMusician';
 import { useSongLyrics } from '../utils/hooks/useSongs';
 import { useBandSession } from '../context/bandSession';
 import { getOfflineGigPackage } from '../utils/offlineManager';
+import { supabase } from '../utils/supabase';
 import {
   parseLineSegments,
   transposeChord,
@@ -116,11 +117,45 @@ export default function StageModeScreen() {
   }, [isDirectSongMode, songId, title, artist, paramKey]);
 
   // Real setlist songs from DB, or fallback to offline cached package, or single direct song
-  const songsList = isDirectSongMode && directSongObj
+  const baseSongsList = isDirectSongMode && directSongObj
     ? [directSongObj]
     : (setlistSongs && setlistSongs.length > 0)
     ? setlistSongs
     : offlineSongs;
+
+  // Leader-editable running order (ids). null = use the saved order
+  const [orderOverride, setOrderOverride] = useState<string[] | null>(null);
+
+  const songsList = useMemo(() => {
+    if (!orderOverride) return baseSongsList;
+    const byId = new Map(baseSongsList.map((s: any) => [s.id, s]));
+    const ordered = orderOverride.map((id) => byId.get(id)).filter(Boolean) as any[];
+    // keep any songs added after the override was made
+    const rest = baseSongsList.filter((s: any) => !orderOverride.includes(s.id));
+    return [...ordered, ...rest];
+  }, [baseSongsList, orderOverride]);
+
+  // Move a queued song to a new slot (never above the song playing now)
+  const moveQueueSong = async (from: number, to: number) => {
+    if (to <= currentIndex || to >= songsList.length || from <= currentIndex || from === to) return;
+    const next = [...songsList];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setOrderOverride(next.map((s: any) => s.id));
+
+    // Persist the new order for real setlists (best effort)
+    if (setlistId) {
+      try {
+        await Promise.all(
+          next.map((s: any, i: number) =>
+            supabase.from('setlist_songs').update({ position: i + 1 }).eq('id', s.id)
+          )
+        );
+      } catch (e) {
+        console.warn('Could not save new queue order:', e);
+      }
+    }
+  };
 
   // Determine effective song: if member in active session, follow leader's broadcast
   const isMemberFollowing = !isLeader && !!sessionCode && !!syncCurrentSong;
@@ -193,7 +228,7 @@ export default function StageModeScreen() {
           : undefined
       );
     }
-  }, [currentIndex, activeKey, lyricsData?.plain_lyrics, isLeader]);
+  }, [currentIndex, activeKey, lyricsData?.plain_lyrics, isLeader, nextSetlistSong?.id]);
 
   // 4. Web Search
   const handleWebSearch = async (baseUrl: string) => {
@@ -601,7 +636,7 @@ export default function StageModeScreen() {
               <View>
                 <Text style={styles.queueTitle}>Set Queue</Text>
                 <Text style={styles.queueSub}>
-                  {isMemberFollowing ? 'Leader controls the order' : 'Tap a song to jump to it'}
+                  {isMemberFollowing ? 'Leader controls the order' : 'Tap a song to jump • ▲▼ to change what\'s next'}
                 </Text>
               </View>
               <TouchableOpacity onPress={() => setIsQueueVisible(false)} style={styles.queueClose}>
@@ -657,11 +692,35 @@ export default function StageModeScreen() {
                       <View style={styles.queueBadgeNow}>
                         <Text style={styles.queueBadgeNowText}>NOW</Text>
                       </View>
-                    ) : isNext ? (
-                      <View style={styles.queueBadgeNext}>
-                        <Text style={styles.queueBadgeNextText}>UP NEXT</Text>
-                      </View>
-                    ) : null}
+                    ) : (
+                      <>
+                        {isNext && (
+                          <View style={styles.queueBadgeNext}>
+                            <Text style={styles.queueBadgeNextText}>UP NEXT</Text>
+                          </View>
+                        )}
+                        {!isPast && !isMemberFollowing && (
+                          <View style={styles.queueMoveCol}>
+                            <TouchableOpacity
+                              hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
+                              disabled={idx <= currentIndex + 1}
+                              onPress={() => moveQueueSong(idx, idx - 1)}
+                              style={[styles.queueMoveBtn, idx <= currentIndex + 1 && { opacity: 0.25 }]}
+                            >
+                              <Text style={styles.queueMoveText}>▲</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
+                              disabled={idx >= songsList.length - 1}
+                              onPress={() => moveQueueSong(idx, idx + 1)}
+                              style={[styles.queueMoveBtn, idx >= songsList.length - 1 && { opacity: 0.25 }]}
+                            >
+                              <Text style={styles.queueMoveText}>▼</Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+                      </>
+                    )}
                   </TouchableOpacity>
                 );
               })}
@@ -1228,6 +1287,18 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   queueBadgeNextText: { color: '#B45309', fontSize: 10, fontWeight: '900' },
+  queueMoveCol: { flexDirection: 'row', gap: 6 },
+  queueMoveBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  queueMoveText: { color: '#10B981', fontSize: 12, fontWeight: '900' },
   emptyStageView: {
     paddingVertical: 60,
     paddingHorizontal: 30,
