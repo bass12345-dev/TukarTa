@@ -16,7 +16,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { X, Calendar, MapPin, Clock, Users } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import { Button } from '../ui/Button';
-import { useMyBands, useCreateGig } from '../../utils/hooks/useMusician';
+import { useMyBands, useCreateGig, useCreateBand } from '../../utils/hooks/useMusician';
 import { useAppTheme } from '../../context/theme';
 
 interface CreateGigModalProps {
@@ -32,23 +32,50 @@ export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
   const [showPicker, setShowPicker] = useState(false);
   const [duration, setDuration] = useState('60');
   const [selectedBandId, setSelectedBandId] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   
   const { data: bands, isLoading: loadingBands } = useMyBands();
   const createGig = useCreateGig();
+  const createBand = useCreateBand();
+
+  // Auto-select the only band
+  React.useEffect(() => {
+    if (!selectedBandId && bands && bands.length === 1 && bands[0]?.band?.id) {
+      setSelectedBandId(bands[0].band.id);
+    }
+  }, [bands, selectedBandId]);
 
   const handleCreate = async () => {
-    if (!selectedBandId) {
-      Alert.alert("Action Required", "Please select a band before creating a gig.");
+    setErrorMsg(null);
+
+    if (!name.trim() || !venue.trim()) {
+      setErrorMsg('Please enter a gig name and venue.');
       return;
     }
 
-    if (!name || !venue || !dateObj) return;
-    
+    setIsSaving(true);
     try {
+      let bandId = selectedBandId;
+
+      if (!bandId) {
+        if (bands && bands.length > 1) {
+          setErrorMsg('Please select which band this gig is for.');
+          return;
+        }
+        // No band yet: create a personal solo band so the gig has an owner
+        const solo = await createBand.mutateAsync({
+          name: 'My Band',
+          genres: [],
+          city: '',
+        });
+        bandId = solo.id;
+      }
+
       await createGig.mutateAsync({
-        bandId: selectedBandId,
-        name,
-        venue,
+        bandId: bandId!,
+        name: name.trim(),
+        venue: venue.trim(),
         date: dateObj.toISOString(),
         duration: parseInt(duration) || 60,
       });
@@ -59,8 +86,11 @@ export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
       setDateObj(new Date());
       setDuration('60');
       setSelectedBandId(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create gig:', error);
+      setErrorMsg(error?.message || 'Could not create the gig. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -219,6 +249,11 @@ export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
             </ScrollView>
 
             <View style={styles.footer}>
+              {errorMsg && (
+                <Text style={{ color: '#EF4444', fontSize: 12, width: '100%', marginBottom: 8, textAlign: 'center' }}>
+                  {errorMsg}
+                </Text>
+              )}
               <Button
                 title="Cancel"
                 variant="outline-mint"
@@ -226,11 +261,11 @@ export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
                 style={{ flex: 1 }}
               />
               <Button
-                title={createGig.isPending ? "Creating..." : "Create Gig"}
+                title={isSaving ? "Creating..." : "Create Gig"}
                 variant="mint"
                 onPress={handleCreate}
                 style={{ flex: 2 }}
-                disabled={createGig.isPending}
+                disabled={isSaving}
               />
             </View>
           </View>
@@ -370,6 +405,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
     marginTop: 14,
   },
