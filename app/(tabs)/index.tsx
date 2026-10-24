@@ -240,85 +240,126 @@ export default function DashboardScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>REPERTOIRE ANALYTICS</Text>
-            <View style={styles.chartTagPill}>
-              <BarChart3 size={12} color="#10B981" />
-              <Text style={styles.chartTagText}>LIVE METRICS</Text>
+            <View style={[styles.chartLiveBadge, { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.15)' : '#ECFDF5', borderColor: '#10B981' }]}>
+              <View style={styles.livePulseDot} />
+              <Text style={styles.chartLiveBadgeText}>LIVE METRICS</Text>
             </View>
           </View>
 
-          <View style={styles.chartsGrid}>
-            {/* Chart 1: Stage Readiness Split Bar */}
-            <View style={[styles.chartCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-              <View style={styles.chartCardHeader}>
-                <PieChart size={16} color={colors.primary} />
-                <Text style={[styles.chartCardTitle, { color: colors.text }]}>Mastery Breakdown</Text>
-              </View>
-
-              <View style={styles.stackedBarContainer}>
-                <View
-                  style={[
-                    styles.stackedSegment,
-                    {
-                      width: `${Math.max(masteryLevels[0].pct, totalSongs > 0 ? 5 : 50)}%`,
-                      backgroundColor: '#10B981',
-                    },
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.stackedSegment,
-                    {
-                      width: `${Math.max(masteryLevels[1].pct, totalSongs > 0 ? 5 : 50)}%`,
-                      backgroundColor: '#F59E0B',
-                    },
-                  ]}
-                />
-              </View>
-
-              <View style={styles.chartLegendRow}>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
-                  <Text style={[styles.legendText, { color: colors.textDim }]}>
-                    Stage Ready ({liveSongs})
-                  </Text>
+          <View style={styles.chartsContainer}>
+            {/* Chart 1: Stage Readiness Progress Card */}
+            <View style={[styles.analyticsCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+              <View style={styles.cardHeaderRow}>
+                <View style={styles.cardTitleGroup}>
+                  <View style={[styles.cardIconBox, { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.2)' : '#ECFDF5' }]}>
+                    <CheckCircle2 size={18} color="#10B981" />
+                  </View>
+                  <View>
+                    <Text style={[styles.cardTitle, { color: colors.text }]}>Stage Readiness</Text>
+                    <Text style={[styles.cardSubtitle, { color: colors.textDim }]}>
+                      {liveMastery}% of repertoire ready for stage
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.legendItem}>
+                <View style={[styles.percentagePill, { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.2)' : '#ECFDF5' }]}>
+                  <Text style={styles.percentageText}>{liveMastery}%</Text>
+                </View>
+              </View>
+
+              {/* Stacked Progress Bar */}
+              <View style={[styles.progressBarTrack, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0' }]}>
+                {totalSongs > 0 ? (
+                  <>
+                    <View
+                      style={[
+                        styles.progressBarSegment,
+                        {
+                          width: `${liveMastery}%`,
+                          backgroundColor: '#10B981',
+                        },
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.progressBarSegment,
+                        {
+                          width: `${100 - liveMastery}%`,
+                          backgroundColor: '#F59E0B',
+                        },
+                      ]}
+                    />
+                  </>
+                ) : (
+                  <View style={[styles.progressBarSegment, { width: '0%', backgroundColor: '#10B981' }]} />
+                )}
+              </View>
+
+              {/* Legends */}
+              <View style={styles.legendRow}>
+                <View style={styles.legendPill}>
+                  <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
+                  <Text style={[styles.legendLabel, { color: colors.textSecondary }]}>Stage Ready</Text>
+                  <Text style={[styles.legendValue, { color: colors.text }]}>{liveSongs}</Text>
+                </View>
+                <View style={styles.legendPill}>
                   <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
-                  <Text style={[styles.legendText, { color: colors.textDim }]}>
-                    Practicing ({totalSongs - liveSongs})
-                  </Text>
+                  <Text style={[styles.legendLabel, { color: colors.textSecondary }]}>Practicing</Text>
+                  <Text style={[styles.legendValue, { color: colors.text }]}>{totalSongs - liveSongs}</Text>
                 </View>
               </View>
             </View>
 
             {/* Chart 2: Top Repertoire Genres */}
-            <View style={[styles.chartCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-              <View style={styles.chartCardHeader}>
-                <TrendingUp size={16} color={colors.primary} />
-                <Text style={[styles.chartCardTitle, { color: colors.text }]}>Top Genres Distribution</Text>
+            <View style={[styles.analyticsCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+              <View style={styles.cardHeaderRow}>
+                <View style={styles.cardTitleGroup}>
+                  <View style={[styles.cardIconBox, { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.2)' : '#EEF2FF' }]}>
+                    <TrendingUp size={18} color={isDark ? '#818CF8' : '#6366F1'} />
+                  </View>
+                  <View>
+                    <Text style={[styles.cardTitle, { color: colors.text }]}>Genre Distribution</Text>
+                    <Text style={[styles.cardSubtitle, { color: colors.textDim }]}>
+                      Breakdown across {totalSongs} total song{totalSongs === 1 ? '' : 's'}
+                    </Text>
+                  </View>
+                </View>
               </View>
 
-              <View style={styles.barsList}>
+              <View style={styles.genreList}>
                 {topGenres.length > 0 ? (
                   topGenres.map(([genreName, count], idx) => {
-                    const pct = Math.round((count / totalSongs) * 100);
-                    const barColor = idx === 0 ? '#10B981' : idx === 1 ? '#059669' : idx === 2 ? '#34D399' : '#6EE7B7';
+                    const pct = totalSongs > 0 ? Math.round((count / totalSongs) * 100) : 0;
+                    const barColors = ['#10B981', '#3B82F6', '#8B5CF6', '#F59E0B'];
+                    const chosenColor = barColors[idx % barColors.length];
                     return (
-                      <View key={genreName} style={styles.barItem}>
-                        <View style={styles.barLabelRow}>
-                          <Text style={[styles.barGenreName, { color: colors.text }]}>{genreName}</Text>
-                          <Text style={[styles.barCount, { color: colors.textDim }]}>{count} songs ({pct}%)</Text>
+                      <View key={genreName} style={styles.genreItem}>
+                        <View style={styles.genreLabelRow}>
+                          <View style={styles.genreNameRow}>
+                            <View style={[styles.genreBullet, { backgroundColor: chosenColor }]} />
+                            <Text style={[styles.genreName, { color: colors.text }]}>{genreName}</Text>
+                          </View>
+                          <Text style={[styles.genreMeta, { color: colors.textDim }]}>
+                            {count} song{count === 1 ? '' : 's'} ({pct}%)
+                          </Text>
                         </View>
-                        <View style={[styles.barTrack, { backgroundColor: colors.bgSecondary }]}>
-                          <View style={[styles.barFill, { width: `${pct}%`, backgroundColor: barColor }]} />
+                        <View style={[styles.genreTrack, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0' }]}>
+                          <View
+                            style={[
+                              styles.genreFill,
+                              {
+                                width: `${Math.max(pct, 4)}%`,
+                                backgroundColor: chosenColor,
+                              },
+                            ]}
+                          />
                         </View>
                       </View>
                     );
                   })
                 ) : (
-                  <View style={styles.emptyChartWrap}>
-                    <Text style={[styles.emptyChartText, { color: colors.textDim }]}>
-                      Add songs to see your live genre distribution graph!
+                  <View style={styles.emptyGenreBox}>
+                    <Text style={[styles.emptyGenreText, { color: colors.textDim }]}>
+                      Add songs to your dictionary to see your genre breakdown!
                     </Text>
                   </View>
                 )}
@@ -869,5 +910,166 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontFamily: 'DM Sans',
     lineHeight: 16,
+  },
+  chartLiveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  livePulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
+  chartLiveBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#10B981',
+    fontFamily: 'DM Sans',
+    letterSpacing: 0.5,
+  },
+  chartsContainer: {
+    gap: 12,
+  },
+  analyticsCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 16,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+    gap: 14,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  cardIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    fontFamily: 'DM Sans',
+    letterSpacing: -0.2,
+  },
+  cardSubtitle: {
+    fontSize: 12,
+    fontFamily: 'DM Sans',
+    marginTop: 1,
+  },
+  percentagePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  percentageText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#10B981',
+    fontFamily: 'DM Sans',
+  },
+  progressBarTrack: {
+    height: 10,
+    borderRadius: 999,
+    flexDirection: 'row',
+    overflow: 'hidden',
+  },
+  progressBarSegment: {
+    height: '100%',
+  },
+  legendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  legendPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: 'rgba(100, 116, 139, 0.08)',
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendLabel: {
+    fontSize: 12,
+    fontFamily: 'DM Sans',
+  },
+  legendValue: {
+    fontSize: 12,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+  },
+  genreList: {
+    gap: 12,
+  },
+  genreItem: {
+    gap: 6,
+  },
+  genreLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  genreNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  genreBullet: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  genreName: {
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: 'DM Sans',
+  },
+  genreMeta: {
+    fontSize: 12,
+    fontFamily: 'DM Sans',
+    fontWeight: '600',
+  },
+  genreTrack: {
+    height: 8,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  genreFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
+  emptyGenreBox: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  emptyGenreText: {
+    fontSize: 12,
+    fontFamily: 'DM Sans',
+    fontStyle: 'italic',
   },
 });
