@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0"
 
 const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY')
+const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
 
 const corsHeaders = {
@@ -25,15 +26,142 @@ function decodeSafe(token: string) {
   }
 }
 
-// Groq models prioritized by availability and speed
-const CANDIDATE_MODELS = [
-  'llama-3.1-8b-instant',
+// Static fallback list of known active Groq models (only active models, strictly no decommissioned ones)
+const STATIC_GROQ_MODELS = [
   'llama-3.3-70b-versatile',
-  'llama-3.1-70b-versatile',
-  'llama3-70b-8192',
-  'llama3-8b-8192',
-  'mixtral-8x7b-32768'
+  'llama-3.1-8b-instant',
+  'meta-llama/llama-4-scout-17b-16e-instruct',
+  'openai/gpt-oss-120b',
+  'openai/gpt-oss-20b',
+  'deepseek-r1-distill-llama-70b',
+  'gemma2-9b-it'
 ];
+
+// Dynamically fetch currently active models from Groq to avoid decommissioned models
+async function getActiveGroqModels(apiKey: string): Promise<string[]> {
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/models', {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const models: string[] = (data.data || [])
+        .map((m: any) => m.id)
+        .filter((id: string) => {
+          const lower = id.toLowerCase();
+          return (
+            !lower.includes('whisper') &&
+            !lower.includes('tts') &&
+            !lower.includes('orpheus') &&
+            !lower.includes('embed') &&
+            !lower.includes('guard') &&
+            !lower.includes('mixtral') &&
+            !lower.includes('llama3-') // old llama3-70b/8b decommissioned
+          );
+        });
+
+      if (models.length > 0) {
+        // Prioritize llama-3.3-70b and llama-3.1-8b first if available
+        const prioritized = [
+          ...models.filter(m => m.includes('llama-3.3-70b')),
+          ...models.filter(m => m.includes('llama-3.1-8b')),
+          ...models.filter(m => !m.includes('llama-3.3-70b') && !m.includes('llama-3.1-8b'))
+        ];
+        return prioritized;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to query dynamic Groq models list:', err);
+  }
+  return STATIC_GROQ_MODELS;
+}
+
+// Google Gemini fallback in case Groq is rate-limited, unavailable, or decommissioned
+async function callGeminiFallback(
+  systemPrompt: string,
+  history: any[],
+  message: string,
+  apiKey: string
+): Promise<string> {
+  const geminiModels = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.0-flash'];
+  let lastGeminiError: any = null;
+
+  for (const model of geminiModels) {
+    try {
+      console.log(`Attempting Gemini completion with model: ${model}`);
+      
+      // 1. Try Gemini OpenAI-compatible endpoint
+      const openAiRes = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...history,
+            { role: 'user', content: message }
+          ],
+          temperature: 0.7,
+        })
+      });
+
+      if (openAiRes.ok) {
+        const data = await openAiRes.json();
+        const content = data.choices?.[0]?.message?.content;
+        if (content) {
+          console.log(`Gemini OpenAI-endpoint success using model: ${model}`);
+          return content;
+        }
+      }
+
+      // 2. Try native generateContent endpoint
+      const nativeRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: {
+            parts: [{ text: systemPrompt }]
+          },
+          contents: [
+            ...history.map((m: any) => ({
+              role: m.role === 'assistant' ? 'model' : 'user',
+              parts: [{ text: m.content || '' }]
+            })),
+            {
+              role: 'user',
+              parts: [{ text: message }]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.7,
+          }
+        })
+      });
+
+      if (nativeRes.ok) {
+        const nativeData = await nativeRes.json();
+        const content = nativeData.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (content) {
+          console.log(`Gemini native-endpoint success using model: ${model}`);
+          return content;
+        }
+      } else {
+        const errJson = await nativeRes.json().catch(() => ({}));
+        lastGeminiError = new Error(`Gemini (${model}): ${errJson.error?.message || nativeRes.statusText}`);
+      }
+    } catch (e: any) {
+      lastGeminiError = e;
+    }
+  }
+
+  throw lastGeminiError || new Error('All Gemini candidate models failed');
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -215,51 +343,72 @@ serve(async (req) => {
       if (insertError) throw new Error(`Failed to save user message: ${insertError.message}`);
     }
 
-    // 7. Call Groq with Multi-Model Fallback
-    let result: any = null;
-    let lastError: any = null;
+    // 7. Call AI with Dynamic Groq Discovery & Gemini Fallback
+    let aiMessage: string | null = null;
+    const attemptErrors: string[] = [];
 
-    for (const modelName of CANDIDATE_MODELS) {
-      try {
-        console.log(`Attempting Groq completion with model: ${modelName}`);
-        const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${GROQ_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: modelName,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              ...history,
-              { role: 'user', content: message }
-            ],
-            temperature: 0.7,
-          })
-        });
+    // Attempt Groq models first
+    if (GROQ_API_KEY) {
+      const candidateModels = await getActiveGroqModels(GROQ_API_KEY);
+      console.log(`Active candidate Groq models: ${candidateModels.join(', ')}`);
 
-        if (groqRes.ok) {
-          result = await groqRes.json();
-          console.log(`Groq success using model: ${modelName}`);
-          break;
-        } else {
-          const errorData = await groqRes.json();
-          const errDetail = errorData.error?.message || groqRes.statusText;
-          lastError = new Error(`Groq API Error (${modelName}): ${errDetail}`);
-          console.warn(`Model ${modelName} returned error, checking next candidate: ${errDetail}`);
+      for (const modelName of candidateModels) {
+        try {
+          console.log(`Attempting Groq completion with model: ${modelName}`);
+          const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${GROQ_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: modelName,
+              messages: [
+                { role: 'system', content: systemPrompt },
+                ...history,
+                { role: 'user', content: message }
+              ],
+              temperature: 0.7,
+            })
+          });
+
+          if (groqRes.ok) {
+            const data = await groqRes.json();
+            const text = data.choices?.[0]?.message?.content;
+            if (text) {
+              aiMessage = text;
+              console.log(`Groq success using model: ${modelName}`);
+              break;
+            }
+          } else {
+            const errorData = await groqRes.json().catch(() => ({}));
+            const errDetail = errorData.error?.message || groqRes.statusText;
+            attemptErrors.push(`Groq (${modelName}): ${errDetail}`);
+            console.warn(`Model ${modelName} returned error: ${errDetail}`);
+          }
+        } catch (callErr: any) {
+          attemptErrors.push(`Groq (${modelName}) network: ${callErr.message}`);
+          console.warn(`Model ${modelName} call exception:`, callErr.message);
         }
-      } catch (callErr: any) {
-        lastError = callErr;
-        console.warn(`Model ${modelName} call exception:`, callErr.message);
+      }
+    } else {
+      attemptErrors.push('Groq: GROQ_API_KEY is not defined');
+    }
+
+    // If Groq models failed or Groq was unavailable, fallback to Google Gemini
+    if (!aiMessage && GEMINI_API_KEY) {
+      console.log(`Groq attempts did not succeed (${attemptErrors.join('; ')}). Attempting Google Gemini fallback...`);
+      try {
+        aiMessage = await callGeminiFallback(systemPrompt, history, message, GEMINI_API_KEY);
+      } catch (geminiErr: any) {
+        attemptErrors.push(`Gemini: ${geminiErr.message}`);
+        console.error('Gemini fallback failed:', geminiErr);
       }
     }
 
-    if (!result) {
-      throw lastError || new Error('All candidate Groq models failed to respond.');
+    if (!aiMessage) {
+      throw new Error(`AI generation failed: ${attemptErrors.join(' | ')}`);
     }
-
-    let aiMessage = result.choices[0].message.content
 
     // Programmatic Safety Filter: Scrub UUIDs from natural language text (before ACTIONS block)
     const uuidRegex = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;

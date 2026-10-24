@@ -441,12 +441,7 @@ export default function AIAgentScreen() {
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (error: any) {
       console.error('AI error:', error);
-      const isGroqModelError = error?.message?.includes('llama-3.3-70b-versatile') || error?.message?.includes('Groq API Error');
-      
-      let replyText = "Sorry, I'm having trouble connecting right now. 🎤 Catching my breath!";
-      if (isGroqModelError) {
-        replyText = "⚠️ Groq Model Notice: Your Supabase Edge Function attempted to call `llama-3.3-70b-versatile`, which is restricted or unavailable on this Groq API key.\n\n✅ The edge function codebase has been updated with `llama-3.1-8b-instant` and an automatic multi-model fallback chain!\n\nTo update your live Supabase cloud deployment, run:\n`npx supabase functions deploy setlist-agent --no-verify-jwt`";
-      }
+      const replyText = "Sorry, I'm having trouble connecting right now. 🎤 Catching my breath! Please try sending your message again in a moment.";
 
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),

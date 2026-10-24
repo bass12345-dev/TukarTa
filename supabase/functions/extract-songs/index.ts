@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0"
 
 const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY')
+const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
@@ -41,23 +42,18 @@ serve(async (req) => {
       })
     }
 
-    // 1. Get User ID from JWT (Robust check for ES256 algorithm issues)
+    // 1. Get User ID from JWT
     const authHeader = req.headers.get('Authorization')
     const customAuthHeader = req.headers.get('X-Auth-Token')
     
     const token = (customAuthHeader || authHeader || '').replace('Bearer ', '')
-    // userId is not strictly needed for extraction logic currently but good for logging/RLS in future
     const payload = token ? decodeSafe(token) : null;
     const userId = payload?.sub;
 
-    if (!GROQ_API_KEY) {
-      throw new Error('GROQ_API_KEY is not set')
-    }
-
-    // 1. Initialize Supabase client with Service Role to access storage
+    // 2. Initialize Supabase client with Service Role to access storage
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!)
 
-    // 2. Fetch the image from Storage
+    // 3. Fetch the image from Storage
     const { data: fileData, error: downloadError } = await supabase.storage
       .from('song-screenshots')
       .download(filePath)
@@ -67,7 +63,6 @@ serve(async (req) => {
       throw new Error(`Failed to download file: ${downloadError.message}`)
     }
 
-    // 3. Convert blob to base64 for Groq (More efficient way in Deno)
     const arrayBuffer = await fileData.arrayBuffer()
     const base64Image = btoa(
       Array.from(new Uint8Array(arrayBuffer))
@@ -75,7 +70,6 @@ serve(async (req) => {
         .join('')
     )
 
-    // 4. Call Groq Llama 4 Scout Vision
     const prompt = `
       Extract a list of songs from this image. 
       The image might be:
@@ -98,51 +92,121 @@ serve(async (req) => {
       Only return the JSON, no other text.
     `
 
-    console.log(`Sending image of size ${arrayBuffer.byteLength} bytes to Groq...`)
+    console.log(`Processing image of size ${arrayBuffer.byteLength} bytes...`)
 
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'llama-3.2-90b-vision-preview',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: prompt },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:image/jpeg;base64,${base64Image}`
+    let content: string | null = null;
+    const errors: string[] = [];
+
+    // Attempt Groq Vision models
+    if (GROQ_API_KEY) {
+      const groqVisionModels = [
+        'meta-llama/llama-4-scout-17b-16e-instruct',
+      ];
+
+      for (const model of groqVisionModels) {
+        try {
+          console.log(`Attempting Groq vision with model: ${model}`);
+          const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${GROQ_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: model,
+              messages: [
+                {
+                  role: 'user',
+                  content: [
+                    { type: 'text', text: prompt },
+                    {
+                      type: 'image_url',
+                      image_url: {
+                        url: `data:image/jpeg;base64,${base64Image}`
+                      }
+                    }
+                  ]
                 }
-              }
-            ]
-          }
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0,
-      })
-    })
+              ],
+              response_format: { type: "json_object" },
+              temperature: 0.1,
+            })
+          });
 
-    const result = await response.json()
-    
-    if (!response.ok) {
-      console.error('Groq API Error Response:', JSON.stringify(result))
-      throw new Error(`Groq API error: ${result.error?.message || response.statusText}`)
+          if (response.ok) {
+            const result = await response.json();
+            content = result.choices?.[0]?.message?.content;
+            if (content) {
+              console.log(`Groq vision success using model: ${model}`);
+              break;
+            }
+          } else {
+            const errJson = await response.json().catch(() => ({}));
+            errors.push(`Groq (${model}): ${errJson.error?.message || response.statusText}`);
+          }
+        } catch (e: any) {
+          errors.push(`Groq (${model}): ${e.message}`);
+        }
+      }
     }
 
-    const content = result.choices?.[0]?.message?.content
-    console.log('Raw content from Groq:', content)
+    // Fallback to Gemini Vision if Groq failed or not set
+    if (!content && GEMINI_API_KEY) {
+      const geminiVisionModels = ['gemini-2.5-flash', 'gemini-1.5-flash'];
+      for (const geminiModel of geminiVisionModels) {
+        try {
+          console.log(`Attempting Gemini vision with model: ${geminiModel}`);
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${GEMINI_API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  { text: prompt },
+                  {
+                    inlineData: {
+                      mimeType: "image/jpeg",
+                      data: base64Image
+                    }
+                  }
+                ]
+              }],
+              generationConfig: {
+                response_mime_type: "application/json",
+              }
+            })
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) {
+              content = text;
+              console.log(`Gemini vision success using model: ${geminiModel}`);
+              break;
+            }
+          } else {
+            const errJson = await response.json().catch(() => ({}));
+            errors.push(`Gemini (${geminiModel}): ${errJson.error?.message || response.statusText}`);
+          }
+        } catch (e: any) {
+          errors.push(`Gemini (${geminiModel}): ${e.message}`);
+        }
+      }
+    }
+
+    if (!content) {
+      throw new Error(`Vision extraction failed across all providers: ${errors.join(' | ')}`);
+    }
+
+    console.log('Raw content from vision AI:', content)
     
     let songs = []
     try {
       const parsedData = JSON.parse(content || '{"songs": []}')
       songs = parsedData.songs || []
     } catch (parseErr) {
-      console.error('Failed to parse Groq response as JSON:', content)
+      console.error('Failed to parse AI response as JSON:', content)
       throw new Error('Failed to parse song list from AI response')
     }
 
@@ -150,7 +214,6 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     })
-
 
   } catch (error: any) {
     console.error('Final Catch Error:', error.message || error)
