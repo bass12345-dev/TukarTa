@@ -43,14 +43,12 @@ const SEARCH_PROVIDERS = [
 
 export default function StageModeScreen() {
   const router = useRouter();
-  const { setlistId, initialSongId, songId, title, artist, key: paramKey } = useLocalSearchParams();
-
-  // 1. Full setlist
-  const { data: setlistSongs } = useSetlistSongs(setlistId as string);
+  const { setlistId: setlistIdParam, initialSongId, songId, title, artist, key: paramKey } = useLocalSearchParams();
 
   // Band Session Integration
   const {
     sessionCode,
+    setlistId: sessionSetlistId,
     isLeader,
     connected,
     currentSong: syncCurrentSong,
@@ -62,6 +60,12 @@ export default function StageModeScreen() {
     countInNumber,
     activeCue,
   } = useBandSession();
+
+  // Fall back to the live session's setlist when opened without params (e.g. from Band Session)
+  const setlistId = (setlistIdParam as string) || (isLeader ? sessionSetlistId : null) || undefined;
+
+  // 1. Full setlist
+  const { data: setlistSongs } = useSetlistSongs(setlistId as string);
 
   // 2. Navigation index & play state
   const [currentIndex, setCurrentIndex] = useState(0);

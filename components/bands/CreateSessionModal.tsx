@@ -13,6 +13,7 @@ import { useAppTheme } from '../../context/theme';
 import { useBandSession } from '../../context/bandSession';
 import { useMyGigs } from '../../utils/hooks/useMusician';
 import { useRouter } from 'expo-router';
+import { supabase } from '../../utils/supabase';
 
 interface CreateSessionModalProps {
   visible: boolean;
@@ -39,7 +40,17 @@ export function CreateSessionModal({
     setIsStarting(true);
     try {
       const gigTitle = selectedGig?.name || defaultGigName || 'Live Band Session';
-      const sId = selectedGig?.id || defaultSetlistId;
+      let sId: string | undefined = defaultSetlistId;
+      if (selectedGig?.id) {
+        // A gig can have several sets; pick its first one that has songs, else the first set
+        const { data: sets } = await supabase
+          .from('setlists')
+          .select('id, setlist_songs(id)')
+          .eq('gig_id', selectedGig.id)
+          .order('created_at', { ascending: true });
+        const withSongs = (sets || []).find((s: any) => s.setlist_songs?.length > 0);
+        sId = withSongs?.id || sets?.[0]?.id;
+      }
       await startSession({
         gigName: gigTitle,
         setlistId: sId,
