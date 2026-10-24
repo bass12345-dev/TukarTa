@@ -445,9 +445,15 @@ export default function StageModeScreen() {
     ? syncNextSong?.title || ''
     : nextSetlistSong?.song?.title || '';
 
+  const displayedNextArtist = isMemberFollowing
+    ? syncNextSong?.artist || ''
+    : nextSetlistSong?.song?.artist || '';
+
   const displayedNextKey = isMemberFollowing
     ? syncNextSong?.key || ''
     : nextSetlistSong?.song?.original_key || '';
+
+  const isNextRequest = !isMemberFollowing && !!nextSetlistSong?.isRequest;
 
   return (
     <View style={styles.container}>
@@ -692,6 +698,46 @@ export default function StageModeScreen() {
 
       {/* ── Footer Controls ── */}
       <View style={styles.footerControls}>
+        {/* ── What's Next / Up Next Live Preview Bar ── */}
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => setIsQueueVisible(true)}
+          style={styles.footerUpNextBar}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+            <View style={styles.footerUpNextBadge}>
+              <Text style={styles.footerUpNextBadgeText}>UP NEXT</Text>
+            </View>
+
+            <Text style={styles.footerUpNextTitle} numberOfLines={1}>
+              {displayedNextTitle ? displayedNextTitle : 'End of Setlist (No Upcoming Song)'}
+            </Text>
+
+            {displayedNextArtist ? (
+              <Text style={styles.footerUpNextArtist} numberOfLines={1}>
+                • {displayedNextArtist}
+              </Text>
+            ) : null}
+
+            {displayedNextKey ? (
+              <View style={styles.footerUpNextKeyBadge}>
+                <Text style={styles.footerUpNextKeyText}>KEY {displayedNextKey}</Text>
+              </View>
+            ) : null}
+
+            {isNextRequest && (
+              <View style={styles.requestInlineTag}>
+                <Text style={styles.requestInlineTagText}>REQUEST</Text>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.footerUpNextAction}>
+            <ListMusic size={12} color="#059669" />
+            <Text style={styles.footerUpNextActionText}>QUEUE ▾</Text>
+          </View>
+        </TouchableOpacity>
+
         <View style={styles.transportRow}>
           {isMemberFollowing ? (
             /* Follower view: locked to leader */
@@ -729,14 +775,21 @@ export default function StageModeScreen() {
                 )}
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.transportBtnSide, currentIndex >= songsList.length - 1 && { opacity: 0.4 }]}
-                activeOpacity={0.8}
-                disabled={currentIndex >= songsList.length - 1}
-                onPress={() => setCurrentIndex((prev) => Math.min(songsList.length - 1, prev + 1))}
-              >
-                <SkipForward size={22} color="#166534" fill="#166534" />
-              </TouchableOpacity>
+              <View style={{ alignItems: 'center' }}>
+                <TouchableOpacity
+                  style={[styles.transportBtnSide, currentIndex >= songsList.length - 1 && { opacity: 0.4 }]}
+                  activeOpacity={0.8}
+                  disabled={currentIndex >= songsList.length - 1}
+                  onPress={() => setCurrentIndex((prev) => Math.min(songsList.length - 1, prev + 1))}
+                >
+                  <SkipForward size={22} color="#166534" fill="#166534" />
+                </TouchableOpacity>
+                {displayedNextTitle ? (
+                  <Text style={styles.nextSongBtnSubLabel} numberOfLines={1}>
+                    {displayedNextTitle}
+                  </Text>
+                ) : null}
+              </View>
             </>
           )}
         </View>
@@ -1495,6 +1548,84 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 16,
     elevation: 8,
+  },
+  footerUpNextBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1.5,
+    borderColor: '#A7F3D0',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginBottom: 14,
+    gap: 8,
+    maxWidth: 680,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  footerUpNextBadge: {
+    backgroundColor: '#064E3B',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  footerUpNextBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+  },
+  footerUpNextTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#064E3B',
+    maxWidth: 220,
+  },
+  footerUpNextArtist: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#059669',
+    maxWidth: 160,
+  },
+  footerUpNextKeyBadge: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  footerUpNextKeyText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#166534',
+    fontFamily: 'JetBrains Mono',
+  },
+  footerUpNextAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  footerUpNextActionText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#059669',
+  },
+  nextSongBtnSubLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#059669',
+    maxWidth: 90,
+    textAlign: 'center',
+    marginTop: 2,
   },
   transportRow: {
     flexDirection: 'row',
