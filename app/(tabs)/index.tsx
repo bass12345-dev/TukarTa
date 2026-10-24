@@ -62,20 +62,20 @@ export default function DashboardScreen() {
   const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
   const avatarUrl = profile?.avatar_url;
 
-  // Stats calculations
-  const totalSongs = knownSongs?.length || 18;
-  const liveSongs = knownSongs?.filter((s: any) => s.can_perform_live)?.length || 15;
-  const liveMastery = Math.round((liveSongs / totalSongs) * 100);
-  const totalBands = bands?.length || 3;
-  const gigCount = gigs?.length || 1;
+  // Real data calculations (0 when empty, no fake mock numbers)
+  const totalSongs = knownSongs?.length || 0;
+  const liveSongs = knownSongs?.filter((s: any) => s.can_perform_live)?.length || 0;
+  const liveMastery = totalSongs > 0 ? Math.round((liveSongs / totalSongs) * 100) : 0;
+  const totalBands = bands?.length || 0;
+  const gigCount = gigs?.length || 0;
 
-  // Upcoming Gig Details (Fallback to demo gig if none in db)
-  const gigTitle = upcomingGig?.name || 'Sample Band Live at Hard Rock Cafe';
+  // Upcoming Gig Details (Real gig from DB only)
+  const gigTitle = upcomingGig?.name || '';
   const gigDate = upcomingGig?.gig_date 
     ? new Date(upcomingGig.gig_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    : 'Sep 17, 2024';
-  const gigVenue = upcomingGig?.venue || 'Hard Rock Cafe, Makati';
-  const songCount = upcomingSongs?.length || 12;
+    : '';
+  const gigVenue = upcomingGig?.venue || '';
+  const songCount = upcomingSongs?.length || 0;
 
   // Practice Queue / Songs to Master (confidence < 4 or tagged for learning)
   const songsToPractice = (knownSongs || []).filter((s: any) => s.confidence_level < 4).slice(0, 3);
@@ -137,55 +137,59 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.scrollContent} 
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Upcoming Gig Showcase Card ── */}
-        <View style={styles.section}>
-          <View style={[styles.gigCard, { backgroundColor: isDark ? '#112920' : '#F0FDF4', borderColor: isDark ? '#1F4738' : '#D1FAE5' }]}>
-            <View style={styles.gigCardHeader}>
-              <View style={styles.gigTagRow}>
-                <View style={[styles.liveTag, { backgroundColor: colors.primary }]}>
-                  <Radio size={12} color="#FFF" />
-                  <Text style={styles.liveTagText}>NEXT GIG</Text>
+        {/* ── Upcoming Gig Showcase Card (Only shown if real gig exists) ── */}
+        {upcomingGig ? (
+          <View style={styles.section}>
+            <View style={[styles.gigCard, { backgroundColor: isDark ? '#112920' : '#F0FDF4', borderColor: isDark ? '#1F4738' : '#D1FAE5' }]}>
+              <View style={styles.gigCardHeader}>
+                <View style={styles.gigTagRow}>
+                  <View style={[styles.liveTag, { backgroundColor: colors.primary }]}>
+                    <Radio size={12} color="#FFF" />
+                    <Text style={styles.liveTagText}>NEXT GIG</Text>
+                  </View>
+                  {gigDate ? <Text style={[styles.gigDateText, { color: colors.textDim }]}>{gigDate}</Text> : null}
                 </View>
-                <Text style={[styles.gigDateText, { color: colors.textDim }]}>{gigDate}</Text>
               </View>
-            </View>
 
-            <Text style={[styles.gigTitle, { color: colors.text }]}>{gigTitle}</Text>
-            <Text style={[styles.gigVenue, { color: colors.textDim }]}>📍 {gigVenue}</Text>
+              <Text style={[styles.gigTitle, { color: colors.text }]}>{gigTitle}</Text>
+              {gigVenue ? <Text style={[styles.gigVenue, { color: colors.textDim }]}>📍 {gigVenue}</Text> : null}
 
-            {/* Setlist Progress Meter */}
-            <View style={styles.meterContainer}>
-              <View style={styles.meterLabelRow}>
-                <Text style={[styles.meterLabel, { color: colors.text }]}>Setlist Readiness</Text>
-                <Text style={[styles.meterValue, { color: colors.primary }]}>85% • {songCount} Songs</Text>
+              {/* Setlist Progress Meter */}
+              <View style={styles.meterContainer}>
+                <View style={styles.meterLabelRow}>
+                  <Text style={[styles.meterLabel, { color: colors.text }]}>Setlist Songs</Text>
+                  <Text style={[styles.meterValue, { color: colors.primary }]}>{songCount} Songs</Text>
+                </View>
+                <View style={[styles.meterTrack, { backgroundColor: isDark ? '#1C3A2E' : '#D1FAE5' }]}>
+                  <View style={[styles.meterFill, { width: songCount > 0 ? '100%' : '0%', backgroundColor: colors.primary }]} />
+                </View>
               </View>
-              <View style={[styles.meterTrack, { backgroundColor: isDark ? '#1C3A2E' : '#D1FAE5' }]}>
-                <View style={[styles.meterFill, { width: '85%', backgroundColor: colors.primary }]} />
+
+              {/* Actions */}
+              <View style={styles.gigActionsRow}>
+                <TouchableOpacity 
+                  style={[styles.viewSetlistBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+                  activeOpacity={0.8}
+                  onPress={() => router.push(`/setlist/${upcomingGig.id}`)}
+                >
+                  <Layers size={16} color={colors.text} />
+                  <Text style={[styles.viewSetlistText, { color: colors.text }]}>View Gig Sets</Text>
+                </TouchableOpacity>
+
+                {upcomingSetlist?.id && (
+                  <TouchableOpacity 
+                    style={[styles.startGigBtn, { backgroundColor: colors.primary }]}
+                    activeOpacity={0.85}
+                    onPress={() => router.push(`/stage-mode?setlistId=${upcomingSetlist.id}`)}
+                  >
+                    <Play size={16} color="#FFF" fill="#FFF" />
+                    <Text style={styles.startGigText}>START GIG</Text>
+                  </TouchableOpacity>
+                )}
               </View>
-            </View>
-
-            {/* Actions */}
-            <View style={styles.gigActionsRow}>
-              <TouchableOpacity 
-                style={[styles.viewSetlistBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
-                activeOpacity={0.8}
-                onPress={() => router.push('/setlists')}
-              >
-                <Layers size={16} color={colors.text} />
-                <Text style={[styles.viewSetlistText, { color: colors.text }]}>View Setlist</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={[styles.startGigBtn, { backgroundColor: colors.primary }]}
-                activeOpacity={0.85}
-                onPress={() => router.push(`/stage-mode?setlistId=${upcomingSetlist?.id || 'demo'}`)}
-              >
-                <Play size={16} color="#FFF" fill="#FFF" />
-                <Text style={styles.startGigText}>START GIG</Text>
-              </TouchableOpacity>
             </View>
           </View>
-        </View>
+        ) : null}
 
         {/* ── Performance Stats ── */}
         <View style={styles.section}>
@@ -201,11 +205,11 @@ export default function DashboardScreen() {
             </View>
             <View style={[styles.statBox, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
               <Text style={[styles.statValue, { color: '#F59E0B' }]}>{totalBands}</Text>
-              <Text style={[styles.statLabel, { color: colors.textDim }]}>ACTIVE BANDS</Text>
+              <Text style={[styles.statLabel, { color: colors.textDim }]}>MY BANDS</Text>
             </View>
             <View style={[styles.statBox, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-              <Text style={[styles.statValue, { color: colors.accent }]}>85%</Text>
-              <Text style={[styles.statLabel, { color: colors.textDim }]}>GIG READY</Text>
+              <Text style={[styles.statValue, { color: colors.accent }]}>{gigCount}</Text>
+              <Text style={[styles.statLabel, { color: colors.textDim }]}>SCHEDULED GIGS</Text>
             </View>
           </View>
         </View>

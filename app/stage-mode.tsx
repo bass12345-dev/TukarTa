@@ -38,7 +38,7 @@ const SEARCH_PROVIDERS = [
 
 export default function StageModeScreen() {
   const router = useRouter();
-  const { setlistId, initialSongId } = useLocalSearchParams();
+  const { setlistId, initialSongId, songId, title, artist, key: paramKey } = useLocalSearchParams();
 
   // 1. Full setlist
   const { data: setlistSongs } = useSetlistSongs(setlistId as string);
@@ -48,6 +48,27 @@ export default function StageModeScreen() {
   const [isPlaying, setIsPlaying] = useState(true);
   const [transposeSteps, setTransposeSteps] = useState(0);
   const [isMinusOneVisible, setIsMinusOneVisible] = useState(false);
+
+  // Single direct song mode (e.g., opened directly from Song Dictionary)
+  const isDirectSongMode = !setlistId && !!songId;
+  const directSongObj = useMemo(() => {
+    if (!isDirectSongMode) return null;
+    return {
+      id: songId as string,
+      position: 1,
+      song: {
+        id: songId as string,
+        title: (title as string) || 'Untitled Song',
+        artist: (artist as string) || 'Unknown Artist',
+        original_key: (paramKey as string) || 'C',
+      },
+    };
+  }, [isDirectSongMode, songId, title, artist, paramKey]);
+
+  // Real setlist songs from DB or single direct song
+  const songsList = isDirectSongMode && directSongObj
+    ? [directSongObj]
+    : setlistSongs || [];
 
   // Initialize index when setlist loads
   React.useEffect(() => {
@@ -62,50 +83,7 @@ export default function StageModeScreen() {
     setTransposeSteps(0);
   }, [currentIndex]);
 
-  // Fallback demo songs if setlist is empty or demo
-  const songsList =
-    setlistSongs && setlistSongs.length > 0
-      ? setlistSongs
-      : [
-          {
-            id: 'demo-1',
-            position: 1,
-            song: {
-              id: 'demo-s1',
-              title: 'Wonderwall',
-              artist: 'Oasis',
-              original_key: 'G',
-              bpm: 112,
-              duration: '4:18',
-            },
-          },
-          {
-            id: 'demo-2',
-            position: 2,
-            song: {
-              id: 'demo-s2',
-              title: "Sweet Child O' Mine",
-              artist: "Guns N' Roses",
-              original_key: 'D#',
-              bpm: 128,
-              duration: '5:56',
-            },
-          },
-          {
-            id: 'demo-3',
-            position: 3,
-            song: {
-              id: 'demo-s3',
-              title: 'Gravity',
-              artist: 'John Mayer',
-              original_key: 'G',
-              bpm: 72,
-              duration: '4:05',
-            },
-          },
-        ];
-
-  const currentSetlistSong = songsList[currentIndex] || songsList[0];
+  const currentSetlistSong = songsList[currentIndex];
   const nextSetlistSong = songsList[currentIndex + 1];
 
   // 3. Lyrics & Chords Hook (Offline Local Cache -> Supabase Cache -> LRCLIB)
@@ -314,31 +292,25 @@ export default function StageModeScreen() {
               </View>
             )}
           </View>
+        ) : !currentSetlistSong ? (
+          <View style={styles.emptyStageView}>
+            <Music2 size={48} color="#10B981" />
+            <Text style={styles.emptyStageTitle}>No Songs in this Setlist</Text>
+            <Text style={styles.emptyStageSubtitle}>
+              Add songs from the gig setlist details screen or import chords to perform live.
+            </Text>
+          </View>
         ) : (
           /* High-Contrast Stage View Demo & Web Import fallback */
           <View style={styles.lyricsStageView}>
-            <View style={styles.fadedVerse}>
-              <Text style={styles.verseLabelSmall}>VERSE 1</Text>
-              <Text style={styles.fadedLine}>Today is gonna be the day</Text>
-              <Text style={styles.fadedLine}>That they're gonna throw it back to you</Text>
-            </View>
-
             <View style={styles.activeVerse}>
-              <Text style={styles.verseLabelSmall}>PRE-CHORUS</Text>
+              <Text style={styles.verseLabelSmall}>NO LYRICS OR CHORDS STORED YET</Text>
               <Text style={styles.activeLineBold}>
-                And all the roads we have to walk are winding
+                {currentSetlistSong?.song?.title}
               </Text>
-              <View style={styles.highlightBadge}>
-                <Text style={styles.highlightText}>
-                  And all the lights that lead us there are blinding
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.upcomingVerse}>
-              <Text style={styles.verseLabelSmall}>CHORUS</Text>
-              <Text style={styles.upcomingLine}>Because maybe...</Text>
-              <Text style={styles.upcomingLine}>You're gonna be the one that saves me</Text>
+              <Text style={styles.fadedLine}>
+                {currentSetlistSong?.song?.artist}
+              </Text>
             </View>
 
             {/* Web Search & Direct Import buttons */}

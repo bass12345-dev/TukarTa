@@ -271,9 +271,22 @@ function StatCard({ value, label, color, colors }: any) {
 }
 
 function SongListItem({ item, colors, isDark }: { item: any; colors: any; isDark: boolean }) {
+  const router = useRouter();
   const song = item.song;
   const isLive = item.can_perform_live;
   const { mutate: deleteSong, isPending: isDeleting } = useDeleteMySong();
+
+  const handleOpenSong = () => {
+    router.push({
+      pathname: '/stage-mode',
+      params: {
+        songId: song.id,
+        title: song.title,
+        artist: song.artist,
+        key: song.original_key || 'C',
+      },
+    });
+  };
 
   const handleDelete = () => {
     if (Platform.OS === 'web') {
@@ -325,7 +338,9 @@ function SongListItem({ item, colors, isDark }: { item: any; colors: any; isDark
       rightThreshold={40}
       containerStyle={styles.swipeContainer}
     >
-      <View 
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={handleOpenSong}
         style={[
           styles.songItem, 
           { 
@@ -393,13 +408,16 @@ function SongListItem({ item, colors, isDark }: { item: any; colors: any; isDark
         {Platform.OS === 'web' && (
           <TouchableOpacity 
             style={styles.webDeleteBtn} 
-            onPress={handleDelete}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              handleDelete();
+            }}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Trash2 size={16} color={colors.textDim} />
           </TouchableOpacity>
         )}
-      </View>
+      </TouchableOpacity>
     </Swipeable>
   );
 }
