@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase, getCurrentUser } from '../supabase';
 import { searchSongs, SongResult, getLyrics } from '../musicApi';
 import { Alert } from 'react-native';
+import { isDeviceOnline } from '../../context/connectivity';
 
 const LOCAL_CHART_PREFIX = 'tukarta_chart_';
 
@@ -35,78 +36,141 @@ export async function getLocalChartCache(songId: string) {
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const isUuid = (val: any): boolean => typeof val === 'string' && UUID_REGEX.test(val);
 
-export function useSongLyrics(songId: string, artist: string, title: string) {
-  return useQuery({
+/** How long the network gets before a saved copy on this device is shown instead. */
+const NETWORK_FIRST_MS = 4000;
+/** Hard limit: after this the query ends in an error with a Retry button, never a spinner. */
+const NETWORK_HARD_MS = 10000;
+
+export type LyricsErrorKind = 'offline' | 'timeout' | 'network';
+
+export class LyricsError extends Error {
+  kind: LyricsErrorKind;
+  constructor(kind: LyricsErrorKind, message: string) {
+    super(message);
+    this.name = 'LyricsError';
+    this.kind = kind;
+  }
+}
+
+type DeviceLyrics = { plain_lyrics: string; provider?: string; synced_lyrics?: any };
+type Settled = { ok: true; value: DeviceLyrics | null } | { ok: false; error: unknown };
+
+const delay = (ms: number) => new Promise<'late'>((resolve) => setTimeout(() => resolve('late'), ms));
+
+/** Lyrics saved on this device: the chart cache, or a copy stored by an offline gig download. */
+async function readDeviceLyrics(songId: string): Promise<DeviceLyrics | null> {
+  const chart = await getLocalChartCache(songId);
+  if (chart?.plain_lyrics) return chart;
+  try {
+    const raw = await AsyncStorage.getItem(`offline_lyrics_${songId}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.plain_lyrics) return parsed;
+    }
+  } catch {
+    // unreadable copy: treat as missing
+  }
+  return null;
+}
+
+/** Network lookup: the shared lyrics_cache table first, then LRCLIB and its fallbacks. Resolves null when nothing has lyrics. */
+async function fetchNetworkLyrics(songId: string, artist: string, title: string): Promise<DeviceLyrics | null> {
+  if (isUuid(songId)) {
+    try {
+      const { data: cached } = await supabase
+        .from('lyrics_cache')
+        .select('*')
+        .eq('song_id', songId)
+        .maybeSingle();
+      if (cached && cached.plain_lyrics && new Date(cached.expires_at) > new Date()) {
+        await saveLocalChartCache(songId, {
+          plain_lyrics: cached.plain_lyrics,
+          synced_lyrics: cached.synced_lyrics,
+          provider: cached.provider || 'lrclib',
+        });
+        return cached;
+      }
+    } catch {
+      // table unreachable: fall through to LRCLIB
+    }
+  }
+
+  const lyricsData = await getLyrics(artist, title);
+  if (!lyricsData || (!lyricsData.plainLyrics && !lyricsData.syncedLyrics)) return null;
+
+  const result = {
+    song_id: songId,
+    plain_lyrics: lyricsData.plainLyrics,
+    synced_lyrics: lyricsData.syncedLyrics,
+    provider: 'lrclib',
+    expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+  };
+  await saveLocalChartCache(songId, {
+    plain_lyrics: result.plain_lyrics || '',
+    synced_lyrics: result.synced_lyrics,
+    provider: 'lrclib',
+  });
+  if (isUuid(songId)) {
+    try {
+      await supabase.from('lyrics_cache').upsert(result, { onConflict: 'song_id' });
+    } catch {
+      // cache write is best effort
+    }
+  }
+  return result;
+}
+
+/** Turns a finished network attempt into the result: its lyrics, a saved copy, 'not found', or an error. */
+function settleNetwork(outcome: Settled, deviceCopy: DeviceLyrics | null): DeviceLyrics | null {
+  if (outcome.ok) return outcome.value ?? deviceCopy;
+  if (deviceCopy) return deviceCopy;
+  throw new LyricsError('network', 'Could not reach the lyrics service.');
+}
+
+/**
+ * Chords and lyrics for a song. Chooses the source from the device connectivity state:
+ * - user-imported charts always win;
+ * - offline: the copy saved on this device, or an error saying the song isn't saved;
+ * - online: the network, with the saved copy used if the network is still running after 4 s;
+ * - the whole thing ends within 10 s, as content, null (no lyrics anywhere) or a LyricsError.
+ */
+export function songLyricsQuery(songId: string, artist: string, title: string) {
+  return {
     queryKey: ['lyrics', songId, title, artist],
-    queryFn: async () => {
-      // 1. Check Offline Local Device Cache first (instant 0ms in Stage Mode, prioritized if user-imported)
-      const localCached = await getLocalChartCache(songId);
-      if (localCached && localCached.provider === 'user_import' && localCached.plain_lyrics) {
-        return localCached;
+    retry: false, // errors show a Retry button instead of retrying silently behind a spinner
+    queryFn: async (): Promise<DeviceLyrics | null> => {
+      const deviceCopy = await readDeviceLyrics(songId);
+      if (deviceCopy?.provider === 'user_import') return deviceCopy;
+
+      if (!isDeviceOnline()) {
+        if (deviceCopy) return deviceCopy;
+        throw new LyricsError('offline', "You're offline and this song isn't saved on this device.");
       }
 
-      // 2. Check Supabase Cache (Only for real UUID song records; demo songs bypass remote DB)
-      if (isUuid(songId)) {
-        try {
-          const { data: cached } = await supabase
-            .from('lyrics_cache')
-            .select('*')
-            .eq('song_id', songId)
-            .maybeSingle();
+      const network: Promise<Settled> = fetchNetworkLyrics(songId, artist, title).then(
+        (value) => ({ ok: true as const, value }),
+        (error) => ({ ok: false as const, error })
+      );
 
-          if (cached && cached.plain_lyrics && new Date(cached.expires_at) > new Date()) {
-            await saveLocalChartCache(songId, {
-              plain_lyrics: cached.plain_lyrics,
-              synced_lyrics: cached.synced_lyrics,
-              provider: cached.provider || 'lrclib',
-            });
-            return cached;
-          }
-        } catch {
-          // Fall through to local or LRCLIB
-        }
-      }
+      const first = await Promise.race([network, delay(NETWORK_FIRST_MS)]);
+      if (first !== 'late') return settleNetwork(first, deviceCopy);
 
-      if (localCached && localCached.plain_lyrics) {
-        return localCached;
-      }
+      // Network is slow: show the saved copy now, and let the request finish in the background
+      if (deviceCopy) return deviceCopy;
 
-      // 3. Fetch from LRCLIB (with automatic fuzzy & lyrics.ovh fallback)
-      const lyricsData = await getLyrics(artist, title);
-      if (!lyricsData || (!lyricsData.plainLyrics && !lyricsData.syncedLyrics)) {
-        return null;
-      }
-
-      const result = {
-        song_id: songId,
-        plain_lyrics: lyricsData.plainLyrics,
-        synced_lyrics: lyricsData.syncedLyrics,
-        provider: 'lrclib',
-        expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      };
-
-      // Save locally for offline gig mode
-      await saveLocalChartCache(songId, {
-        plain_lyrics: result.plain_lyrics || '',
-        synced_lyrics: result.synced_lyrics,
-        provider: 'lrclib',
-      });
-
-      // 4. Update Supabase Cache (only if valid UUID)
-      if (isUuid(songId)) {
-        try {
-          await supabase.from('lyrics_cache').upsert(result, { onConflict: 'song_id' });
-        } catch {
-          // Silently continue
-        }
-      }
-
-      return result;
+      const last = await Promise.race([network, delay(NETWORK_HARD_MS - NETWORK_FIRST_MS)]);
+      if (last === 'late') throw new LyricsError('timeout', 'The lyrics service is taking too long.');
+      return settleNetwork(last, deviceCopy);
     },
     enabled: !!songId && !!title,
     staleTime: 1000 * 60 * 60 * 24, // 24 hours: lyrics don't change
     gcTime: 1000 * 60 * 60 * 24,
-  });
+  };
+}
+
+export function useSongLyrics(songId: string, artist: string, title: string, enabled = true) {
+  const query = songLyricsQuery(songId, artist, title);
+  return useQuery({ ...query, enabled: query.enabled && enabled });
 }
 
 export function useSearchSongs(query: string) {

@@ -32,6 +32,7 @@ import {
   SongDownloadState,
 } from '../../utils/offlineManager';
 import { useRouter } from 'expo-router';
+import { displayKey } from '../../utils/musicKey';
 
 interface OfflinePackageModalProps {
   visible: boolean;
@@ -231,7 +232,7 @@ export function OfflinePackageModal({
               const s = item.song || {};
               const title = s.title || item.title || 'Untitled';
               const artist = s.artist || item.artist || 'Unknown';
-              const key = item.transposed_key || s.original_key || 'C';
+              const key = displayKey(item.transposed_key || s.original_key);
 
               const songId = s.id || item.id;
               const saved = savedById.get(songId);
@@ -254,7 +255,7 @@ export function OfflinePackageModal({
                       {title}
                     </Text>
                     <Text style={[styles.songMetaText, { color: colors.textDim }]}>
-                      {artist} • Key of {key}
+                      {key ? `${artist} • Key of ${key}` : artist}
                     </Text>
                   </View>
 

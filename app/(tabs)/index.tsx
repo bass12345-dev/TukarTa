@@ -12,25 +12,15 @@ import {
 import { useRouter } from 'expo-router';
 import {
   Music2,
-  Calendar,
-  Sparkles,
   Zap,
   Users,
-  Search,
   BookOpen,
-  ArrowRight,
   Play,
   Bell,
   CheckCircle2,
-  AlertCircle,
   Star,
-  ChevronRight,
-  TrendingUp,
   Radio,
-  Clock,
   Layers,
-  PieChart,
-  BarChart3,
 } from 'lucide-react-native';
 import { useAuth } from '@/context/auth';
 import { useAppTheme } from '@/context/theme';
@@ -46,7 +36,6 @@ import {
 
 import { RefreshControl } from 'react-native';
 import { AiFloatingBubble } from '../../components/ui/AiFloatingBubble';
-import { AiHeaderButton } from '../../components/ui/AiHeaderButton';
 import { useRefresh } from '../../utils/hooks/useRefresh';
 import { useHeaderTopPadding, useTabBarPadding } from '../../utils/hooks/useTabBarPadding';
 export default function DashboardScreen() {
@@ -128,7 +117,6 @@ export default function DashboardScreen() {
         </View>
 
         <View style={styles.headerRight}>
-          <AiHeaderButton />
           <TouchableOpacity 
             style={[styles.stagePill, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}
             onPress={() => router.push('/setlists')}

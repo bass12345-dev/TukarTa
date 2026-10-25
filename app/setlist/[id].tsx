@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
@@ -6,6 +7,8 @@ import { ArrowLeft, MoreVertical, Music, Sparkles, Play, Plus, Video, BookOpen, 
 import { Modal, Alert } from 'react-native';
 import { Orb } from '@/components/ui/Orb';
 import { useGigDetails, useGigSetlists, useSetlistSongs, useToggleLearnStatus, useCreateSetlist } from '@/utils/hooks/useMusician';
+import { songLyricsQuery } from '@/utils/hooks/useSongs';
+import { isValidKey } from '@/utils/musicKey';
 import { SongPickerModal } from '@/components/setlists/SongPickerModal';
 import { OfflinePackageModal } from '@/components/setlists/OfflinePackageModal';
 import { useAppTheme } from '@/context/theme';
@@ -27,6 +30,16 @@ export default function SetlistDetailsScreen() {
   
   const currentSetlist = setlists?.[activeSetlistIdx];
   const { data: songs, isLoading: loadingSongs } = useSetlistSongs(currentSetlist?.id);
+  const queryClient = useQueryClient();
+
+  // Warm the lyrics for the opening songs so stage mode can show them with no wait
+  useEffect(() => {
+    (songs || []).slice(0, 2).forEach((item: any) => {
+      if (!item?.song?.id || item.plain_lyrics) return;
+      const q = songLyricsQuery(item.song.id, item.song.artist, item.song.title);
+      void queryClient.prefetchQuery({ queryKey: q.queryKey, queryFn: q.queryFn, staleTime: Infinity, gcTime: q.gcTime });
+    });
+  }, [songs]);
   const toggleLearn = useToggleLearnStatus();
   const createSetlist = useCreateSetlist();
 
@@ -271,9 +284,11 @@ export default function SetlistDetailsScreen() {
                   </View>
 
                   <View style={styles.songMeta}>
-                    <View style={[styles.keyBadge, { backgroundColor: isDark ? '#16382C' : '#ECFDF5', borderColor: '#10B981' }]}>
-                      <Text style={styles.keyText}>{item.song.original_key || 'C'}</Text>
-                    </View>
+                    {isValidKey(item.song.original_key) && (
+                      <View style={[styles.keyBadge, { backgroundColor: isDark ? '#16382C' : '#ECFDF5', borderColor: '#10B981' }]}>
+                        <Text style={styles.keyText}>{item.song.original_key.trim()}</Text>
+                      </View>
+                    )}
                     <Text style={[styles.durationText, { color: colors.textSecondary }]}>
                       {Math.floor((item.song.duration_sec || 0) / 60)}:{(item.song.duration_sec || 0) % 60 < 10 ? '0' : ''}{(item.song.duration_sec || 0) % 60}
                     </Text>

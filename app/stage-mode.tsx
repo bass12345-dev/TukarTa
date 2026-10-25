@@ -44,11 +44,15 @@ import {
   Clock,
   Gauge,
   RotateCw,
+  Flag,
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
 import { useSetlistSongs, useMyKnownSongs } from '../utils/hooks/useMusician';
-import { useSongLyrics } from '../utils/hooks/useSongs';
+import { useSongLyrics, songLyricsQuery, LyricsError } from '../utils/hooks/useSongs';
+import { useIntroOffset } from '../utils/hooks/useIntroOffset';
+import { isValidKey } from '../utils/musicKey';
+import { useQueryClient } from '@tanstack/react-query';
 import { useBandSession } from '../context/bandSession';
 import { getOfflineGigPackage } from '../utils/offlineManager';
 import { supabase } from '../utils/supabase';
@@ -549,6 +553,34 @@ export default function StageModeScreen() {
   // Determine effective song: if member in active session, follow leader's broadcast
   const isMemberFollowing = !isLeader && !!sessionCode && !!syncCurrentSong;
 
+  // Prefetch lyrics for the next two songs so Next shows them straight away. Songs we skip past
+  // have their in-flight prefetch cancelled; the song on stage is never cancelled.
+  const queryClient = useQueryClient();
+  const prefetchedKeysRef = useRef<unknown[][]>([]);
+  useEffect(() => {
+    if (isMemberFollowing) return;
+    const upcoming = [songsList[currentIndex + 1], songsList[currentIndex + 2]].filter(
+      (item) => item?.song?.id && !item.plain_lyrics
+    );
+    const wanted = upcoming.map((item) => songLyricsQuery(item.song.id, item.song.artist, item.song.title));
+    const wantedKeys = wanted.map((q) => q.queryKey as unknown[]);
+    const onStage = currentSetlistSong?.song?.id
+      ? (songLyricsQuery(currentSetlistSong.song.id, currentSetlistSong.song.artist, currentSetlistSong.song.title)
+          .queryKey as unknown[])
+      : null;
+    const sameKey = (a: unknown[], b: unknown[]) => JSON.stringify(a) === JSON.stringify(b);
+
+    prefetchedKeysRef.current
+      .filter((key) => !wantedKeys.some((w) => sameKey(w, key)) && !(onStage && sameKey(onStage, key)))
+      .forEach((key) => {
+        void queryClient.cancelQueries({ queryKey: key, exact: true });
+      });
+    wanted.forEach((q) => {
+      void queryClient.prefetchQuery({ queryKey: q.queryKey, queryFn: q.queryFn, staleTime: Infinity, gcTime: q.gcTime });
+    });
+    prefetchedKeysRef.current = wantedKeys;
+  }, [currentIndex, songsList, isMemberFollowing]);
+
   // Initialize index when setlist loads
   React.useEffect(() => {
     if (setlistSongs && initialSongId) {
@@ -570,10 +602,20 @@ export default function StageModeScreen() {
   const songQueryArtist = isMemberFollowing ? syncCurrentSong.artist : currentSetlistSong?.song?.artist;
   const songQueryTitle = isMemberFollowing ? syncCurrentSong.title : currentSetlistSong?.song?.title;
 
-  const { data: lyricsData, isLoading: isLoadingLyrics } = useSongLyrics(
+  // Skip the lookup when the song already carries its chords (offline gig package)
+  const {
+    data: lyricsData,
+    isLoading: isLoadingLyrics,
+    error: lyricsError,
+    refetch: refetchLyrics,
+  } = useSongLyrics(songQueryId, songQueryArtist, songQueryTitle, !currentSetlistSong?.plain_lyrics);
+  const lyricsErrorMessage =
+    lyricsError instanceof LyricsError ? lyricsError.message : 'Something went wrong while loading the lyrics.';
+
+  // Intro length for this song (seconds before the lyrics start). Device copy first, then the song record.
+  const { offset: introOffset, setOffset: setIntroOffset } = useIntroOffset(
     songQueryId,
-    songQueryArtist,
-    songQueryTitle
+    currentSetlistSong?.song?.lyrics_offset_sec
   );
 
   const rawLyrics = (isMemberFollowing && syncCurrentSong.plain_lyrics)
@@ -586,6 +628,9 @@ export default function StageModeScreen() {
     : currentSetlistSong?.song?.original_key || 'G';
 
   const activeKey = transposeChord(baseKey, transposeSteps);
+  // Show the key only when the song has a real one (the 'G' above is only a transposition base)
+  const rawSongKey = isMemberFollowing ? syncCurrentSong?.key : currentSetlistSong?.song?.original_key;
+  const showKeyLabel = isValidKey(rawSongKey);
 
   const displayedLyrics = useMemo(() => {
     if (!rawLyrics) return '';
@@ -788,6 +833,9 @@ export default function StageModeScreen() {
     return () => clearInterval(timer);
   }, [isPlaying, songDuration, isMinusOneVisible, isYtSynced]);
 
+  // Lyrics run from the intro offset to the end of the recording
+  const lyricsDuration = Math.max(1, songDuration - introOffset);
+
   // Smooth auto-scroll: position derived from elapsed time (no drift / feedback loop)
   const elapsedRef = useRef<number>(0);
   elapsedRef.current = elapsedSeconds;
@@ -809,8 +857,9 @@ export default function StageModeScreen() {
     const scrollTimer = setInterval(() => {
       if (isUserScrollingRef.current) return;
       const frac = Math.min(1, (Date.now() - lastTickAtRef.current) / 1000);
-      const t = (elapsedRef.current + frac) * (scrollSpeedMultiplier || 1);
-      const ratio = Math.max(0, Math.min(1, t / songDuration));
+      // Lyric time: song time minus the intro, so the text lines up with the vocals
+      const t = (elapsedRef.current + frac) * (scrollSpeedMultiplier || 1) - introOffset;
+      const ratio = Math.max(0, Math.min(1, t / lyricsDuration));
       const y = ratio * maxScroll;
       if (Math.abs(y - scrollOffsetRef.current) >= 1) {
         lastProgrammaticYRef.current = y;
@@ -819,14 +868,15 @@ export default function StageModeScreen() {
       }
     }, 33);
     return () => clearInterval(scrollTimer);
-  }, [isPlaying, isAutoScroll, contentHeight, containerHeight, songDuration, scrollSpeedMultiplier]);
+  }, [isPlaying, isAutoScroll, contentHeight, containerHeight, lyricsDuration, introOffset, scrollSpeedMultiplier]);
 
   // Real active line index based on elapsed playback progress
   const activePlayableLineIndex = useMemo(() => {
-    if (!isPlaying || elapsedSeconds === 0) return 0;
-    const ratio = elapsedSeconds / songDuration;
+    const lyricElapsed = elapsedSeconds - introOffset;
+    if (!isPlaying || lyricElapsed <= 0) return 0;
+    const ratio = lyricElapsed / lyricsDuration;
     return Math.min(totalPlayableLines - 1, Math.floor(ratio * totalPlayableLines));
-  }, [elapsedSeconds, songDuration, totalPlayableLines, isPlaying]);
+  }, [elapsedSeconds, introOffset, lyricsDuration, totalPlayableLines, isPlaying]);
 
   // Tap tempo calculator
   const handleTapTempo = () => {
@@ -918,7 +968,7 @@ export default function StageModeScreen() {
   const handleJumpToLine = (pIdx: number, lIdx: number) => {
     const targetLineIdx = playableLines.findIndex((pl) => pl.pIdx === pIdx && pl.lIdx === lIdx);
     if (targetLineIdx !== -1) {
-      const targetSec = Math.floor((targetLineIdx / totalPlayableLines) * songDuration);
+      const targetSec = Math.floor(introOffset + (targetLineIdx / totalPlayableLines) * lyricsDuration);
       setElapsedSeconds(targetSec);
       if (contentHeight > containerHeight) {
         const targetY = (targetLineIdx / totalPlayableLines) * (contentHeight - containerHeight);
@@ -1049,9 +1099,11 @@ export default function StageModeScreen() {
             <Text style={styles.compactSongTitle} numberOfLines={1}>
               {displayedTitle}
             </Text>
-            <View style={styles.compactKeyTag}>
-              <Text style={styles.compactKeyText}>KEY: {activeKey}</Text>
-            </View>
+            {showKeyLabel && (
+              <View style={styles.compactKeyTag}>
+                <Text style={styles.compactKeyText}>KEY: {activeKey}</Text>
+              </View>
+            )}
             <ChevronDown size={14} color={ink2} />
           </TouchableOpacity>
         ) : (
@@ -1162,12 +1214,14 @@ export default function StageModeScreen() {
                     <Text style={styles.transposeStepText}>-</Text>
                   </TouchableOpacity>
 
-                  <View style={styles.keyBadge}>
-                    <Text style={styles.keyBadgeText}>
-                      KEY: {activeKey}
-                      {transposeSteps !== 0 ? ` (${transposeSteps > 0 ? `+${transposeSteps}` : transposeSteps})` : ''}
-                    </Text>
-                  </View>
+                  {showKeyLabel && (
+                    <View style={styles.keyBadge}>
+                      <Text style={styles.keyBadgeText}>
+                        KEY: {activeKey}
+                        {transposeSteps !== 0 ? ` (${transposeSteps > 0 ? `+${transposeSteps}` : transposeSteps})` : ''}
+                      </Text>
+                    </View>
+                  )}
 
                   <TouchableOpacity
                     style={styles.transposeStepBtn}
@@ -1250,6 +1304,44 @@ export default function StageModeScreen() {
               </Text>
             </View>
 
+            {/* ── Intro sync: where the lyrics start in the recording (saved per song) ── */}
+            <View style={styles.introRow}>
+              <TouchableOpacity
+                style={styles.introNudgeBtn}
+                onPress={() => setIntroOffset(introOffset - 0.5)}
+                disabled={isMemberFollowing}
+                accessibilityLabel="Start lyrics 0.5 seconds earlier"
+              >
+                <Text style={styles.introNudgeText}>-0.5s</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.introLabel}>Intro {introOffset.toFixed(1)}s</Text>
+
+              <TouchableOpacity
+                style={styles.introNudgeBtn}
+                onPress={() => setIntroOffset(introOffset + 0.5)}
+                disabled={isMemberFollowing}
+                accessibilityLabel="Start lyrics 0.5 seconds later"
+              >
+                <Text style={styles.introNudgeText}>+0.5s</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.introStartBtn, (!isPlaying || isMemberFollowing) && styles.introStartBtnDisabled]}
+                onPress={() => {
+                  const t = Math.max(0, elapsedRef.current);
+                  setIntroOffset(t);
+                  setRequestNotice(`Lyrics start set to ${formatSongTime(t)}`);
+                  setTimeout(() => setRequestNotice(null), 3000);
+                }}
+                disabled={!isPlaying || isMemberFollowing}
+                accessibilityLabel="Lyrics start here"
+              >
+                <Flag size={12} color="#FFFFFF" />
+                <Text style={styles.introStartText}>Lyrics start here</Text>
+              </TouchableOpacity>
+            </View>
+
             {/* Interactive Progress Bar (Tap to Scrub & Sync Lyrics) */}
             <TouchableOpacity
               activeOpacity={0.9}
@@ -1326,7 +1418,7 @@ export default function StageModeScreen() {
           const maxScroll = contentHeight - containerHeight;
           if (maxScroll > 20 && songDuration > 0) {
             const scrollRatio = Math.max(0, Math.min(1, currentY / maxScroll));
-            const syncedSec = Math.round(scrollRatio * songDuration);
+            const syncedSec = Math.round(introOffset + scrollRatio * lyricsDuration);
             if (!isNaN(syncedSec)) setElapsedSeconds(syncedSec);
           }
         }}
@@ -1334,7 +1426,16 @@ export default function StageModeScreen() {
         {isLoadingLyrics ? (
           <View style={styles.lyricsLoading}>
             <ActivityIndicator size="large" color="#10B981" />
-            <Text style={styles.loadingText}>Loading offline chords & lyrics...</Text>
+            <Text style={styles.loadingText}>Loading chords & lyrics...</Text>
+          </View>
+        ) : !hasLyrics && lyricsError ? (
+          <View style={styles.lyricsLoading}>
+            <Text style={styles.lyricsErrorTitle}>Couldn't load chords & lyrics</Text>
+            <Text style={styles.lyricsErrorText}>{lyricsErrorMessage}</Text>
+            <TouchableOpacity style={styles.ytSearchFallbackBtn} onPress={() => refetchLyrics()}>
+              <RotateCw size={13} color="#FFFFFF" />
+              <Text style={styles.ytSearchFallbackText}>Retry</Text>
+            </TouchableOpacity>
           </View>
         ) : hasLyrics ? (
           <View style={styles.realLyricsContainer}>
@@ -1455,6 +1556,11 @@ export default function StageModeScreen() {
 
             {/* Web Search & Direct Import buttons */}
             <View style={styles.searchFallback}>
+              <TouchableOpacity style={[styles.importCtaPill, { marginBottom: 10 }]} onPress={() => refetchLyrics()}>
+                <RotateCw size={15} color="#FFFFFF" />
+                <Text style={styles.importCtaText}>Retry lookup</Text>
+              </TouchableOpacity>
+
               {/* Instant 1-Tap LRCLIB Fetch Button */}
               <TouchableOpacity
                 style={[styles.importCtaPill, { backgroundColor: '#059669', marginBottom: 10 }]}
@@ -3388,6 +3494,64 @@ const baseStyles = StyleSheet.create({
     gap: 8,
     padding: 12,
     backgroundColor: '#022C22',
+  },
+  lyricsErrorTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    fontFamily: 'DM Sans',
+    textAlign: 'center',
+  },
+  lyricsErrorText: {
+    fontSize: 12,
+    color: '#A7F3D0',
+    fontFamily: 'DM Sans',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  introRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+    marginBottom: 6,
+  },
+  introNudgeBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#10B981',
+  },
+  introNudgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#A7F3D0',
+    fontFamily: 'JetBrains Mono',
+  },
+  introLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#A7F3D0',
+    fontFamily: 'JetBrains Mono',
+  },
+  introStartBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: '#10B981',
+  },
+  introStartBtnDisabled: {
+    opacity: 0.4,
+  },
+  introStartText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    fontFamily: 'DM Sans',
   },
   playerSwapCount: {
     fontSize: 9,
