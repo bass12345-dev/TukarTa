@@ -12,6 +12,8 @@ import {
   Modal,
   TextInput,
   useWindowDimensions,
+  Animated,
+  PanResponder,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import {
@@ -45,6 +47,8 @@ import {
   Gauge,
   RotateCw,
   Flag,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
@@ -187,6 +191,95 @@ export default function StageModeScreen() {
   const ytStateRef = useRef<string>('unstarted');
   const [ytPlay, setYtPlay] = useState<boolean>(true);
   const [ytPlayerHeight, setYtPlayerHeight] = useState<number>(0);
+
+  // ── Minus 1 player: drag it anywhere on screen, or expand it to a large view ──
+  const PLAYER_HEADER_H = 30;
+  const clampTo = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+  const [playerExpanded, setPlayerExpanded] = useState(false);
+  const [footerSize, setFooterSize] = useState({ w: 0, h: 0 });
+  // Large view: as wide as the screen allows while the whole 16:9 player still fits
+  const expandedWidth = Math.round(
+    Math.max(
+      200,
+      Math.min(windowWidth - 24, ((windowHeight - insets.top - insets.bottom - 24 - PLAYER_HEADER_H) * 16) / 9)
+    )
+  );
+  const playerWidth = playerExpanded ? expandedWidth : miniPlayerWidth;
+  const playerVideoHeight = Math.round((playerWidth * 9) / 16);
+  const playerTotalHeight = playerVideoHeight + PLAYER_HEADER_H;
+
+  const playerPos = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const playerPosRef = useRef<{ x: number; y: number } | null>(null); // null until first placed
+  const miniSpotRef = useRef<{ x: number; y: number } | null>(null); // where the small player sat before expanding
+  const dragStartRef = useRef({ x: 0, y: 0 });
+  const userMovedRef = useRef(false);
+  const prevExpandedRef = useRef(false);
+  const playerBoundsRef = useRef({ minX: 0, maxX: 0, minY: 0, maxY: 0 });
+  playerBoundsRef.current = {
+    minX: insets.left + 4,
+    maxX: Math.max(insets.left + 4, windowWidth - playerWidth - insets.right - 4),
+    minY: insets.top + 4,
+    maxY: Math.max(insets.top + 4, windowHeight - playerTotalHeight - insets.bottom - 4),
+  };
+
+  // Moves the player, keeping all of it on screen
+  const placePlayer = (x: number, y: number) => {
+    const b = playerBoundsRef.current;
+    const next = { x: clampTo(x, b.minX, b.maxX), y: clampTo(y, b.minY, b.maxY) };
+    playerPosRef.current = next;
+    playerPos.setValue(next);
+  };
+
+  // Default spot: bottom-right, just above the footer controls (beside them in landscape)
+  const placeDefaultMini = () => {
+    if (isLandscape) placePlayer(windowWidth - footerSize.w - playerWidth - 8, windowHeight);
+    else placePlayer(windowWidth, windowHeight - footerSize.h - playerTotalHeight - 8);
+  };
+
+  const togglePlayerExpanded = () => {
+    if (!playerExpanded) miniSpotRef.current = playerPosRef.current;
+    setPlayerExpanded((v) => !v);
+  };
+
+  useEffect(() => {
+    if (!isMinusOneVisible) return;
+    if (playerExpanded !== prevExpandedRef.current) {
+      prevExpandedRef.current = playerExpanded;
+      if (playerExpanded) placePlayer((windowWidth - playerWidth) / 2, (windowHeight - playerTotalHeight) / 2);
+      else if (miniSpotRef.current) placePlayer(miniSpotRef.current.x, miniSpotRef.current.y);
+      else placeDefaultMini();
+      return;
+    }
+    const current = playerPosRef.current;
+    // Until the user drags it, keep the default spot correct as the footer and window size settle
+    if (!userMovedRef.current || !current) placeDefaultMini();
+    else placePlayer(current.x, current.y); // stay on screen after rotation or resize
+  }, [isMinusOneVisible, playerExpanded, windowWidth, windowHeight, playerWidth, footerSize.w, footerSize.h]);
+
+  // Drag handle (the player's title bar). Only refs and the Animated value are used, so one instance is enough.
+  const playerPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        dragStartRef.current = playerPosRef.current ?? { x: 0, y: 0 };
+      },
+      onPanResponderMove: (_, g) => {
+        const b = playerBoundsRef.current;
+        playerPos.setValue({
+          x: clampTo(dragStartRef.current.x + g.dx, b.minX, b.maxX),
+          y: clampTo(dragStartRef.current.y + g.dy, b.minY, b.maxY),
+        });
+      },
+      onPanResponderRelease: (_, g) => {
+        userMovedRef.current = true;
+        placePlayer(dragStartRef.current.x + g.dx, dragStartRef.current.y + g.dy);
+      },
+      onPanResponderTerminate: (_, g) => {
+        userMovedRef.current = true;
+        placePlayer(dragStartRef.current.x + g.dx, dragStartRef.current.y + g.dy);
+      },
+    })
+  ).current;
 
   const sendYoutubeCommand = (func: string, args: any[] = []) => {
     if (!isMinusOneVisible || !minusOneVideoId) return;
@@ -1600,152 +1693,13 @@ export default function StageModeScreen() {
         )}
       </ScrollView>
 
-      {/* ── Minus 1 Mini Player (floats bottom-right over the lyrics, like YouTube's minimized player) ── */}
-      {isMinusOneVisible && currentSetlistSong && (
-        <View style={[styles.playerContainer, { width: miniPlayerWidth }]}>
-          <View style={styles.playerHeaderBar}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1, minWidth: 0 }}>
-              <View style={[styles.playerSyncDot, { backgroundColor: isYtSynced ? '#10B981' : '#6B7280' }]} />
-              <Text style={styles.playerHeaderTitle} numberOfLines={1}>
-                {currentSetlistSong.song?.title}
-              </Text>
-            </View>
-
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              {minusOneCandidates.length > 1 && (
-                <TouchableOpacity
-                  style={styles.playerIconBtn}
-                  onPress={swapMinusOneTrack}
-                  hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-                  accessibilityLabel="Swap backing track"
-                >
-                  <SkipForward size={13} color="#A7F3D0" />
-                  <Text style={styles.playerSwapCount}>
-                    {minusOneCandidateIdx + 1}/{minusOneCandidates.length}
-                  </Text>
-                </TouchableOpacity>
-              )}
-              {minusOneVideoId && (
-                <TouchableOpacity
-                  style={styles.playerIconBtn}
-                  onPress={() => {
-                    WebBrowser.openBrowserAsync(`https://www.youtube.com/watch?v=${minusOneVideoId}`);
-                  }}
-                  hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-                  accessibilityLabel="Open on YouTube"
-                >
-                  <ExternalLink size={13} color="#A7F3D0" />
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity
-                style={styles.playerIconBtn}
-                onPress={() => setIsMinusOneVisible(false)}
-                hitSlop={{ top: 6, bottom: 6, left: 4, right: 6 }}
-                accessibilityLabel="Close backing track"
-              >
-                <X size={14} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={{ height: miniPlayerVideoHeight }}>
-
-          {isLoadingMinusOne || (!minusOneVideoId && !minusOneFailed) ? (
-            <View style={styles.playerLoadingBox}>
-              <ActivityIndicator size="small" color="#10B981" />
-              <Text style={styles.playerLoadingText}>
-                Finding backing track...
-              </Text>
-            </View>
-          ) : minusOneVideoId ? (
-            Platform.OS === 'web' ? (
-              <iframe
-                ref={ytIframeRef}
-                src={`https://www.youtube.com/embed/${minusOneVideoId}?autoplay=1&enablejsapi=1&playsinline=1`}
-                style={{ width: '100%', height: '100%', border: 'none' } as any}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                onLoad={() => {
-                  try {
-                    ytIframeRef.current?.contentWindow?.postMessage(
-                      JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
-                      '*'
-                    );
-                  } catch {}
-                }}
-              />
-            ) : (
-              <View
-                style={styles.webview}
-                onLayout={(e) => setYtPlayerHeight(Math.floor(e.nativeEvent.layout.height))}
-              >
-                {ytPlayerHeight > 0 && (
-                  <YoutubePlayer
-                    key={minusOneVideoId}
-                    ref={ytPlayerRef}
-                    height={ytPlayerHeight}
-                    videoId={minusOneVideoId}
-                    play={ytPlay}
-                    forceAndroidAutoplay
-                    initialPlayerParams={{ controls: true, rel: false, modestbranding: true }}
-                    webViewProps={{ allowsInlineMediaPlayback: true, mediaPlaybackRequiresUserAction: false }}
-                    onError={handleYtError}
-                    onChangeState={(state: string) => {
-                      ytStateRef.current = state;
-                      if (state === 'playing') {
-                        setYtPlay(true);
-                        setIsPlaying(true);
-                      } else if (state === 'paused' || state === 'ended') {
-                        setYtPlay(false);
-                        setIsPlaying(false);
-                      }
-                    }}
-                  />
-                )}
-              </View>
-            )
-          ) : (
-            <View style={styles.playerLoadingBox}>
-              <Text style={styles.playerLoadingText}>No backing track found for this song.</Text>
-              <View style={styles.playerFallbackRow}>
-                <TouchableOpacity
-                  style={styles.ytSearchFallbackBtn}
-                  onPress={() => {
-                    const title = currentSetlistSong.song?.title || '';
-                    const artist = currentSetlistSong.song?.artist || '';
-                    forgetBackingTracks(title, artist).then(() => loadMinusOneTrack(title, artist));
-                  }}
-                >
-                  <RotateCw size={13} color="#FFFFFF" />
-                  <Text style={styles.ytSearchFallbackText}>Retry</Text>
-                </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.ytSearchFallbackBtn}
-                onPress={() => {
-                  const cleanArtist = (currentSetlistSong.song?.artist || '')
-                    .replace(/\b(audience request|unknown artist|custom request|requested song|request|unknown)\b/gi, '')
-                    .trim();
-                  const q = cleanArtist
-                    ? `${currentSetlistSong.song?.title} ${cleanArtist} karaoke minus 1`
-                    : `${currentSetlistSong.song?.title} karaoke minus 1`;
-                  WebBrowser.openBrowserAsync(`https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`);
-                }}
-              >
-                <ExternalLink size={13} color="#FFFFFF" />
-                <Text style={styles.ytSearchFallbackText}>Search YouTube</Text>
-              </TouchableOpacity>
-              </View>
-            </View>
-          )}
-          </View>
-        </View>
-      )}
-
       </View>
 
       {/* ── Footer Controls ── */}
       <View
+        onLayout={(e) =>
+          setFooterSize({ w: Math.round(e.nativeEvent.layout.width), h: Math.round(e.nativeEvent.layout.height) })
+        }
         style={[
           styles.footerControls,
           isLandscape
@@ -2312,6 +2266,165 @@ export default function StageModeScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ── Minus 1 player: floats over the screen. Drag the title bar to move it; expand for a large view. ── */}
+      {isMinusOneVisible && currentSetlistSong && (
+        <Animated.View style={[styles.playerContainer, { width: playerWidth, transform: playerPos.getTranslateTransform() }]}>
+          <View style={styles.playerHeaderBar}>
+            <View
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1, minWidth: 0 }}
+              {...playerPan.panHandlers}
+            >
+              <GripVertical size={12} color="#6EE7B7" />
+              <View style={[styles.playerSyncDot, { backgroundColor: isYtSynced ? '#10B981' : '#6B7280' }]} />
+              <Text style={styles.playerHeaderTitle} numberOfLines={1}>
+                {currentSetlistSong.song?.title}
+              </Text>
+            </View>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              {minusOneCandidates.length > 1 && (
+                <TouchableOpacity
+                  style={styles.playerIconBtn}
+                  onPress={swapMinusOneTrack}
+                  hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                  accessibilityLabel="Swap backing track"
+                >
+                  <SkipForward size={13} color="#A7F3D0" />
+                  <Text style={styles.playerSwapCount}>
+                    {minusOneCandidateIdx + 1}/{minusOneCandidates.length}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {minusOneVideoId && (
+                <TouchableOpacity
+                  style={styles.playerIconBtn}
+                  onPress={() => {
+                    WebBrowser.openBrowserAsync(`https://www.youtube.com/watch?v=${minusOneVideoId}`);
+                  }}
+                  hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                  accessibilityLabel="Open on YouTube"
+                >
+                  <ExternalLink size={13} color="#A7F3D0" />
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={styles.playerIconBtn}
+                onPress={togglePlayerExpanded}
+                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                accessibilityLabel={playerExpanded ? 'Shrink player' : 'Expand player'}
+              >
+                {playerExpanded ? <Minimize2 size={13} color="#A7F3D0" /> : <Maximize2 size={13} color="#A7F3D0" />}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.playerIconBtn}
+                onPress={() => {
+                  setPlayerExpanded(false);
+                  setIsMinusOneVisible(false);
+                }}
+                hitSlop={{ top: 6, bottom: 6, left: 4, right: 6 }}
+                accessibilityLabel="Close backing track"
+              >
+                <X size={14} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={{ height: playerVideoHeight }}>
+
+          {isLoadingMinusOne || (!minusOneVideoId && !minusOneFailed) ? (
+            <View style={styles.playerLoadingBox}>
+              <ActivityIndicator size="small" color="#10B981" />
+              <Text style={styles.playerLoadingText}>
+                Finding backing track...
+              </Text>
+            </View>
+          ) : minusOneVideoId ? (
+            Platform.OS === 'web' ? (
+              <iframe
+                ref={ytIframeRef}
+                src={`https://www.youtube.com/embed/${minusOneVideoId}?autoplay=1&enablejsapi=1&playsinline=1`}
+                style={{ width: '100%', height: '100%', border: 'none' } as any}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                onLoad={() => {
+                  try {
+                    ytIframeRef.current?.contentWindow?.postMessage(
+                      JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
+                      '*'
+                    );
+                  } catch {}
+                }}
+              />
+            ) : (
+              <View
+                style={styles.webview}
+                onLayout={(e) => setYtPlayerHeight(Math.floor(e.nativeEvent.layout.height))}
+              >
+                {ytPlayerHeight > 0 && (
+                  <YoutubePlayer
+                    key={minusOneVideoId}
+                    ref={ytPlayerRef}
+                    height={ytPlayerHeight}
+                    videoId={minusOneVideoId}
+                    play={ytPlay}
+                    forceAndroidAutoplay
+                    initialPlayerParams={{ controls: true, rel: false, modestbranding: true }}
+                    webViewProps={{ allowsInlineMediaPlayback: true, allowsFullscreenVideo: true, mediaPlaybackRequiresUserAction: false }}
+                    onError={handleYtError}
+                    onChangeState={(state: string) => {
+                      ytStateRef.current = state;
+                      if (state === 'playing') {
+                        setYtPlay(true);
+                        setIsPlaying(true);
+                      } else if (state === 'paused' || state === 'ended') {
+                        setYtPlay(false);
+                        setIsPlaying(false);
+                      }
+                    }}
+                  />
+                )}
+              </View>
+            )
+          ) : (
+            <View style={styles.playerLoadingBox}>
+              <Text style={styles.playerLoadingText}>No backing track found for this song.</Text>
+              <View style={styles.playerFallbackRow}>
+                <TouchableOpacity
+                  style={styles.ytSearchFallbackBtn}
+                  onPress={() => {
+                    const title = currentSetlistSong.song?.title || '';
+                    const artist = currentSetlistSong.song?.artist || '';
+                    forgetBackingTracks(title, artist).then(() => loadMinusOneTrack(title, artist));
+                  }}
+                >
+                  <RotateCw size={13} color="#FFFFFF" />
+                  <Text style={styles.ytSearchFallbackText}>Retry</Text>
+                </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.ytSearchFallbackBtn}
+                onPress={() => {
+                  const cleanArtist = (currentSetlistSong.song?.artist || '')
+                    .replace(/\b(audience request|unknown artist|custom request|requested song|request|unknown)\b/gi, '')
+                    .trim();
+                  const q = cleanArtist
+                    ? `${currentSetlistSong.song?.title} ${cleanArtist} karaoke minus 1`
+                    : `${currentSetlistSong.song?.title} karaoke minus 1`;
+                  WebBrowser.openBrowserAsync(`https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`);
+                }}
+              >
+                <ExternalLink size={13} color="#FFFFFF" />
+                <Text style={styles.ytSearchFallbackText}>Search YouTube</Text>
+              </TouchableOpacity>
+              </View>
+            </View>
+          )}
+          </View>
+        </Animated.View>
+      )}
+
     </View>
   );
 }
@@ -2629,8 +2742,8 @@ const baseStyles = StyleSheet.create({
   },
   playerContainer: {
     position: 'absolute',
-    right: 12,
-    bottom: 12,
+    left: 0,
+    top: 0,
     zIndex: 50,
     elevation: 12,
     borderRadius: 12,
