@@ -70,6 +70,8 @@ export default function StageModeScreen() {
     broadcastCountIn,
     countInNumber,
     activeCue,
+    isOfflineHotspot,
+    syncMode,
   } = useBandSession();
 
   // Fall back to the live session's setlist when opened without params (e.g. from Band Session)
@@ -482,15 +484,19 @@ export default function StageModeScreen() {
             style={[
               styles.pulseDot,
               sessionCode
-                ? { backgroundColor: isLeader ? '#EF4444' : '#10B981' }
+                ? { backgroundColor: isOfflineHotspot ? '#F59E0B' : isLeader ? '#EF4444' : '#10B981' }
                 : null,
             ]}
           />
           <Text style={styles.syncStatusText}>
             {sessionCode
               ? isLeader
-                ? `BROADCASTING (${members.length}) • ${sessionCode}`
-                : `IN SYNC WITH LEADER • ${sessionCode}`
+                ? isOfflineHotspot
+                  ? `HOTSPOT P2P (${members.length}) • ${sessionCode}`
+                  : `BROADCASTING (${members.length}) • ${sessionCode}`
+                : isOfflineHotspot
+                  ? `HOTSPOT SYNC WITH LEADER • ${sessionCode}`
+                  : `IN SYNC WITH LEADER • ${sessionCode}`
               : `OFFLINE STAGE MODE • ${lyricsData?.provider === 'user_import' ? 'CHORDPRO' : 'LRCLIB SYNC'}`}
           </Text>
         </View>

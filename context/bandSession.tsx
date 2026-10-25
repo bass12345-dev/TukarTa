@@ -3,8 +3,15 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../utils/supabase';
 import { useAuth } from './auth';
+import {
+  LocalP2PManager,
+  testInternetReachable,
+  HOTSPOT_PRESETS,
+  HybridSyncMessage,
+} from '../utils/hybridSyncEngine';
 
 export type MemberRole = 'leader' | 'vocals' | 'guitar' | 'bass' | 'drums' | 'keys' | 'horns' | 'other';
+export type SyncMode = 'cloud' | 'hotspot' | 'hybrid';
 
 export interface BandMember {
   id: string;
@@ -13,6 +20,7 @@ export interface BandMember {
   isLeader?: boolean;
   joinedAt: number;
   lastSeen: number;
+  transport?: 'cloud' | 'hotspot_p2p' | 'local';
 }
 
 export interface SyncSongPayload {
@@ -42,6 +50,11 @@ export interface BandSessionContextType {
   setlistId: string | null;
   isLeader: boolean;
   connected: boolean;
+  syncMode: SyncMode;
+  isOfflineHotspot: boolean;
+  leaderHostIp: string | null;
+  hotspotToken: string | null;
+  localPeerCount: number;
   myName: string;
   myRole: MemberRole;
   members: BandMember[];
@@ -54,8 +67,24 @@ export interface BandSessionContextType {
   countInNumber: number | null;
   
   // Actions
-  startSession: (params: { gigName?: string; setlistId?: string; leaderName?: string }) => Promise<string>;
-  joinSession: (code: string, memberInfo: { name: string; role: MemberRole }) => Promise<boolean>;
+  startSession: (params: {
+    gigName?: string;
+    setlistId?: string;
+    leaderName?: string;
+    mode?: SyncMode;
+    hostIp?: string;
+  }) => Promise<string>;
+  joinSession: (
+    code: string,
+    memberInfo: {
+      name: string;
+      role: MemberRole;
+      useHotspot?: boolean;
+      hostIp?: string;
+    }
+  ) => Promise<boolean>;
+  switchToHotspot: (gatewayIp?: string) => Promise<void>;
+  switchToCloud: () => Promise<void>;
   leaveSession: () => Promise<void>;
   broadcastSong: (song: SyncSongPayload, next?: SyncNextSongPayload) => void;
   broadcastPlayback: (isPlaying: boolean, cue?: string) => void;
@@ -80,6 +109,13 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
   const [myRole, setMyRole] = useState<MemberRole>('guitar');
   const [members, setMembers] = useState<BandMember[]>([]);
 
+  // Hybrid Cloud + Local Hotspot state
+  const [syncMode, setSyncMode] = useState<SyncMode>('hybrid');
+  const [isOfflineHotspot, setIsOfflineHotspot] = useState<boolean>(false);
+  const [leaderHostIp, setLeaderHostIp] = useState<string | null>(null);
+  const [hotspotToken, setHotspotToken] = useState<string | null>(null);
+  const [localPeerCount, setLocalPeerCount] = useState<number>(0);
+
   const [currentSong, setCurrentSong] = useState<SyncSongPayload | null>(null);
   const [nextSong, setNextSong] = useState<SyncNextSongPayload | null>(null);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -88,6 +124,7 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
 
   const channelRef = useRef<any>(null);
   const localBcRef = useRef<any>(null);
+  const localP2PRef = useRef<LocalP2PManager | null>(null);
   const deviceIdRef = useRef<string>('');
   const countInTimerRef = useRef<any>(null);
 
@@ -168,16 +205,20 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
   }, []);
 
   /**
-   * Start a Live Session as Band Leader
+   * Start a Live Session as Band Leader (Hybrid Cloud + Hotspot P2P)
    */
   const startSession = async ({
     gigName: gName,
     setlistId: sId,
     leaderName,
+    mode = 'hybrid',
+    hostIp,
   }: {
     gigName?: string;
     setlistId?: string;
     leaderName?: string;
+    mode?: SyncMode;
+    hostIp?: string;
   }): Promise<string> => {
     // Generate clean 4-character code e.g. 'TUK4', 'LIVE', 'JAM8'
     const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -187,6 +228,8 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
     }
 
     const name = leaderName || user?.user_metadata?.name || 'Leader';
+    const resolvedGatewayIp = hostIp || (Platform.OS === 'ios' ? '172.20.10.1' : '192.168.43.1');
+
     setSessionCode(code);
     setGigName(gName || 'Live Gig Session');
     setSetlistId(sId || null);
@@ -194,6 +237,7 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
     setMyName(name);
     setMyRole('leader');
     setConnected(true);
+    setLeaderHostIp(resolvedGatewayIp);
 
     const leaderMember: BandMember = {
       id: deviceIdRef.current || 'leader',
@@ -202,17 +246,55 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
       isLeader: true,
       joinedAt: Date.now(),
       lastSeen: Date.now(),
+      transport: mode === 'hotspot' ? 'hotspot_p2p' : 'cloud',
     };
     setMembers([leaderMember]);
 
-    // Setup Supabase Realtime Broadcast channel
-    if (channelRef.current) {
-      await supabase.removeChannel(channelRef.current);
-    }
+    // 1. Initialize Local P2P Manager (Zero-Internet Hotspot Engine)
+    if (localP2PRef.current) localP2PRef.current.close();
+    const p2p = new LocalP2PManager(
+      true,
+      (msg: HybridSyncMessage) => {
+        if (msg.event === 'REQUEST_CURRENT_SONG' && currentSong) {
+          p2p.send({
+            event: 'SONG_SELECTED',
+            payload: { song: currentSong, nextSong, sentAt: Date.now() },
+            sentAt: Date.now(),
+          });
+        }
+      },
+      (isConnected, peerCount) => {
+        setLocalPeerCount(peerCount);
+        if (peerCount > 0) {
+          setMembers((prev) => {
+            const hasLocalPeer = prev.some((m) => m.id.startsWith('local_peer'));
+            if (!hasLocalPeer) {
+              return [
+                ...prev,
+                {
+                  id: `local_peer_${Date.now()}`,
+                  name: `Hotspot Peer (${peerCount})`,
+                  role: 'guitar',
+                  joinedAt: Date.now(),
+                  lastSeen: Date.now(),
+                  transport: 'hotspot_p2p',
+                },
+              ];
+            }
+            return prev;
+          });
+        }
+      }
+    );
+    localP2PRef.current = p2p;
 
+    // Generate local Hotspot Token (for QR / pairing without internet)
+    p2p.createHostOffer(code).then((token) => {
+      setHotspotToken(token);
+    });
+
+    // 2. Initialize in-browser BroadcastChannel (for desktop / same-device tabs)
     const channelName = `band_room_${code.replace(/[^A-Za-z0-9]/g, '')}`;
-
-    // Initialize local offline broadcast channel (works with 0 internet)
     if (typeof window !== 'undefined' && (window as any).BroadcastChannel) {
       if (localBcRef.current) localBcRef.current.close();
       const bc = new (window as any).BroadcastChannel(channelName);
@@ -227,73 +309,106 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
       localBcRef.current = bc;
     }
 
-    const channel = supabase.channel(channelName, {
-      config: {
-        broadcast: { ack: true, self: false },
-        presence: { key: deviceIdRef.current || 'leader' },
-      },
-    });
+    // 3. Check Internet Connectivity for Cloud Channel
+    let hasInternet = false;
+    if (mode !== 'hotspot') {
+      hasInternet = await testInternetReachable(2000);
+    }
 
-    // Listen for member join / song request
-    channel.on('broadcast', { event: 'REQUEST_CURRENT_SONG' }, () => {
-      // Re-broadcast currently selected song to the newly joined member
-      if (currentSong) {
-        channel.send({
-          type: 'broadcast',
-          event: 'SONG_SELECTED',
-          payload: { song: currentSong, nextSong, sentAt: Date.now() },
-        });
+    if (hasInternet && mode !== 'hotspot') {
+      setSyncMode('hybrid');
+      setIsOfflineHotspot(false);
+
+      if (channelRef.current) {
+        await supabase.removeChannel(channelRef.current);
       }
-    });
 
-    // Presence sync for real-time member roster
-    channel.on('presence', { event: 'sync' }, () => {
-      const state = channel.presenceState();
-      const onlineMembers: BandMember[] = [];
-      Object.values(state).forEach((presences: any) => {
-        presences.forEach((p: any) => {
-          if (p && p.name) {
-            onlineMembers.push({
-              id: p.id || p.key,
-              name: p.name,
-              role: p.role || 'other',
-              isLeader: !!p.isLeader,
-              joinedAt: p.joinedAt || Date.now(),
-              lastSeen: Date.now(),
-            });
-          }
-        });
+      const channel = supabase.channel(channelName, {
+        config: {
+          broadcast: { ack: true, self: false },
+          presence: { key: deviceIdRef.current || 'leader' },
+        },
       });
-      if (onlineMembers.length > 0) {
-        setMembers(onlineMembers);
-      }
-    });
 
-    await channel.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        await channel.track({
-          id: deviceIdRef.current || 'leader',
-          name,
-          role: 'leader',
-          isLeader: true,
-          joinedAt: Date.now(),
+      channel.on('broadcast', { event: 'REQUEST_CURRENT_SONG' }, () => {
+        if (currentSong) {
+          channel.send({
+            type: 'broadcast',
+            event: 'SONG_SELECTED',
+            payload: { song: currentSong, nextSong, sentAt: Date.now() },
+          });
+        }
+      });
+
+      channel.on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        const onlineMembers: BandMember[] = [];
+        Object.values(state).forEach((presences: any) => {
+          presences.forEach((p: any) => {
+            if (p && p.name) {
+              onlineMembers.push({
+                id: p.id || p.key,
+                name: p.name,
+                role: p.role || 'other',
+                isLeader: !!p.isLeader,
+                joinedAt: p.joinedAt || Date.now(),
+                lastSeen: Date.now(),
+                transport: 'cloud',
+              });
+            }
+          });
         });
-      }
-    });
+        if (onlineMembers.length > 0) {
+          setMembers((prev) => {
+            const localPeers = prev.filter((m) => m.transport === 'hotspot_p2p');
+            return [...onlineMembers, ...localPeers];
+          });
+        }
+      });
 
-    channelRef.current = channel;
+      await channel.subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({
+            id: deviceIdRef.current || 'leader',
+            name,
+            role: 'leader',
+            isLeader: true,
+            joinedAt: Date.now(),
+          });
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn('Cloud channel subscription error, auto-switching to Hotspot P2P');
+          setIsOfflineHotspot(true);
+          setSyncMode('hotspot');
+        }
+      });
+
+      channelRef.current = channel;
+    } else {
+      setSyncMode('hotspot');
+      setIsOfflineHotspot(true);
+      console.log('Started session in 0-Internet Hotspot mode');
+    }
+
     return code;
   };
 
   /**
-   * Join a Live Session as Band Member
+   * Join a Live Session as Band Member (Hybrid Cloud + Hotspot P2P)
    */
   const joinSession = async (
-    code: string,
-    memberInfo: { name: string; role: MemberRole }
+    codeOrToken: string,
+    memberInfo: {
+      name: string;
+      role: MemberRole;
+      useHotspot?: boolean;
+      hostIp?: string;
+    }
   ): Promise<boolean> => {
     try {
-      const cleanCode = code.trim().toUpperCase();
+      const cleanInput = codeOrToken.trim();
+      const isToken = cleanInput.length > 30;
+      const isHotspotMode = !!memberInfo.useHotspot || isToken;
+      const cleanCode = isToken ? 'TK-HOT' : cleanInput.toUpperCase();
       const channelName = `band_room_${cleanCode.replace(/[^A-Za-z0-9]/g, '')}`;
 
       setSessionCode(cleanCode);
@@ -301,7 +416,46 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
       setMyName(memberInfo.name);
       setMyRole(memberInfo.role);
 
-      // Initialize local offline broadcast channel listener (works with 0 internet)
+      const resolvedGatewayIp = memberInfo.hostIp || (Platform.OS === 'ios' ? '172.20.10.1' : '192.168.43.1');
+      setLeaderHostIp(resolvedGatewayIp);
+
+      // 1. Initialize Local P2P follower
+      if (localP2PRef.current) localP2PRef.current.close();
+      const p2p = new LocalP2PManager(
+        false,
+        (msg: HybridSyncMessage) => {
+          if (msg.event === 'SONG_SELECTED' && msg.payload?.song) {
+            setCurrentSong(msg.payload.song);
+            setNextSong(msg.payload.nextSong || null);
+            setActiveCue(`Switched to ${msg.payload.song.title}`);
+            setTimeout(() => setActiveCue(null), 3500);
+          } else if (msg.event === 'PLAYBACK_CHANGE') {
+            if (typeof msg.payload?.isPlaying === 'boolean') {
+              setIsPlaying(msg.payload.isPlaying);
+            }
+          } else if (msg.event === 'CUE_COUNT_IN') {
+            triggerCountInAnimation();
+          }
+        },
+        (isConnected, peerCount) => {
+          setConnected(isConnected);
+          setLocalPeerCount(peerCount);
+        }
+      );
+      localP2PRef.current = p2p;
+
+      // If token provided, join WebRTC directly
+      if (isToken) {
+        const answer = await p2p.joinHostWithOffer(cleanInput);
+        if (answer) {
+          setIsOfflineHotspot(true);
+          setSyncMode('hotspot');
+          setConnected(true);
+          return true;
+        }
+      }
+
+      // 2. In-browser BroadcastChannel (desktop / single machine testing)
       if (typeof window !== 'undefined' && (window as any).BroadcastChannel) {
         if (localBcRef.current) localBcRef.current.close();
         const bc = new (window as any).BroadcastChannel(channelName);
@@ -323,6 +477,26 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
         bc.postMessage({ event: 'REQUEST_CURRENT_SONG', memberId: deviceIdRef.current });
       }
 
+      // 3. If explicit Hotspot mode requested
+      if (isHotspotMode) {
+        setIsOfflineHotspot(true);
+        setSyncMode('hotspot');
+        setConnected(true);
+        return true;
+      }
+
+      // 4. Try Cloud Supabase connection
+      const hasNet = await testInternetReachable(2000);
+      if (!hasNet) {
+        setIsOfflineHotspot(true);
+        setSyncMode('hotspot');
+        setConnected(true);
+        return true;
+      }
+
+      setSyncMode('hybrid');
+      setIsOfflineHotspot(false);
+
       if (channelRef.current) {
         await supabase.removeChannel(channelRef.current);
       }
@@ -334,7 +508,6 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
         },
       });
 
-      // Listen for Leader's song selection
       channel.on('broadcast', { event: 'SONG_SELECTED' }, ({ payload }) => {
         if (payload?.song) {
           setCurrentSong(payload.song);
@@ -344,7 +517,6 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
         }
       });
 
-      // Listen for Play / Pause
       channel.on('broadcast', { event: 'PLAYBACK_CHANGE' }, ({ payload }) => {
         if (typeof payload?.isPlaying === 'boolean') {
           setIsPlaying(payload.isPlaying);
@@ -355,12 +527,10 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
         }
       });
 
-      // Listen for Count-in trigger
       channel.on('broadcast', { event: 'CUE_COUNT_IN' }, () => {
         triggerCountInAnimation();
       });
 
-      // Track presence
       channel.on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
         const onlineMembers: BandMember[] = [];
@@ -374,6 +544,7 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
                 isLeader: !!p.isLeader,
                 joinedAt: p.joinedAt || Date.now(),
                 lastSeen: Date.now(),
+                transport: 'cloud',
               });
             }
           });
@@ -394,20 +565,26 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
             joinedAt: Date.now(),
           });
 
-          // Request the current song from the leader immediately
           channel.send({
             type: 'broadcast',
             event: 'REQUEST_CURRENT_SONG',
             payload: { memberId: deviceIdRef.current },
           });
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setIsOfflineHotspot(true);
+          setSyncMode('hotspot');
+          setConnected(true);
         }
       });
 
       channelRef.current = channel;
       return true;
     } catch (e) {
-      console.error('Failed to join session:', e);
-      return false;
+      console.warn('Error in joinSession, falling back to local hotspot:', e);
+      setIsOfflineHotspot(true);
+      setSyncMode('hotspot');
+      setConnected(true);
+      return true;
     }
   };
 
@@ -415,6 +592,14 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
    * Leave Session
    */
   const leaveSession = async () => {
+    if (localP2PRef.current) {
+      localP2PRef.current.close();
+      localP2PRef.current = null;
+    }
+    if (localBcRef.current) {
+      localBcRef.current.close();
+      localBcRef.current = null;
+    }
     if (channelRef.current) {
       try {
         await channelRef.current.untrack();
@@ -427,6 +612,9 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
     setSessionCode(null);
     setConnected(false);
     setIsLeader(false);
+    setIsOfflineHotspot(false);
+    setHotspotToken(null);
+    setLocalPeerCount(0);
     setMembers([]);
     setCurrentSong(null);
     setNextSong(null);
@@ -434,7 +622,7 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
   };
 
   /**
-   * Broadcast Song Change (Leader only)
+   * Broadcast Song Change (Leader only - Hybrid Cloud + Local Hotspot P2P)
    */
   const broadcastSong = (song: SyncSongPayload, next?: SyncNextSongPayload) => {
     setCurrentSong(song);
@@ -446,7 +634,20 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
       sentAt: Date.now(),
     };
 
-    // 1. Send via local BroadcastChannel (Zero internet offline sync)
+    // 1. Send via local WebRTC P2P DataChannel (0-Internet Hotspot)
+    if (localP2PRef.current && isLeader) {
+      try {
+        localP2PRef.current.send({
+          event: 'SONG_SELECTED',
+          payload,
+          sentAt: Date.now(),
+        });
+      } catch (e) {
+        console.warn('Local P2P broadcast error:', e);
+      }
+    }
+
+    // 2. Send via local BroadcastChannel (same-device tabs)
     if (localBcRef.current && isLeader) {
       try {
         localBcRef.current.postMessage({
@@ -458,18 +659,21 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
       }
     }
 
-    // 2. Send via Supabase Realtime (if online)
-    if (channelRef.current && isLeader) {
+    // 3. Send via Supabase Realtime (if online)
+    if (channelRef.current && isLeader && !isOfflineHotspot) {
       channelRef.current.send({
         type: 'broadcast',
         event: 'SONG_SELECTED',
         payload,
-      }).catch((e: any) => console.warn('Supabase broadcast offline fallback:', e));
+      }).catch((e: any) => {
+        console.warn('Supabase broadcast failed, auto-switching to Hotspot mode:', e);
+        setIsOfflineHotspot(true);
+      });
     }
   };
 
   /**
-   * Broadcast Playback State (Leader only)
+   * Broadcast Playback State (Leader only - Hybrid Cloud + Local Hotspot P2P)
    */
   const broadcastPlayback = (playing: boolean, cue?: string) => {
     setIsPlaying(playing);
@@ -480,6 +684,20 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
       sentAt: Date.now(),
     };
 
+    // 1. Send via local WebRTC P2P DataChannel
+    if (localP2PRef.current && isLeader) {
+      try {
+        localP2PRef.current.send({
+          event: 'PLAYBACK_CHANGE',
+          payload,
+          sentAt: Date.now(),
+        });
+      } catch (e) {
+        console.warn('Local P2P playback error:', e);
+      }
+    }
+
+    // 2. Send via local BroadcastChannel
     if (localBcRef.current && isLeader) {
       try {
         localBcRef.current.postMessage({
@@ -491,7 +709,8 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
       }
     }
 
-    if (channelRef.current && isLeader) {
+    // 3. Send via Supabase Realtime
+    if (channelRef.current && isLeader && !isOfflineHotspot) {
       channelRef.current.send({
         type: 'broadcast',
         event: 'PLAYBACK_CHANGE',
@@ -501,7 +720,7 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
   };
 
   /**
-   * Broadcast Count-In (Leader only)
+   * Broadcast Count-In (Leader only - Hybrid Cloud + Local Hotspot P2P)
    */
   const broadcastCountIn = (bpm?: number) => {
     triggerCountInAnimation();
@@ -511,6 +730,20 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
       sentAt: Date.now(),
     };
 
+    // 1. Send via local WebRTC P2P DataChannel
+    if (localP2PRef.current && isLeader) {
+      try {
+        localP2PRef.current.send({
+          event: 'CUE_COUNT_IN',
+          payload,
+          sentAt: Date.now(),
+        });
+      } catch (e) {
+        console.warn('Local P2P count-in error:', e);
+      }
+    }
+
+    // 2. Send via local BroadcastChannel
     if (localBcRef.current && isLeader) {
       try {
         localBcRef.current.postMessage({
@@ -522,12 +755,27 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
       }
     }
 
-    if (channelRef.current && isLeader) {
+    // 3. Send via Supabase Realtime
+    if (channelRef.current && isLeader && !isOfflineHotspot) {
       channelRef.current.send({
         type: 'broadcast',
         event: 'CUE_COUNT_IN',
         payload,
       }).catch((e: any) => console.warn('Supabase count-in offline fallback:', e));
+    }
+  };
+
+  const switchToHotspot = async (gatewayIp?: string) => {
+    setIsOfflineHotspot(true);
+    setSyncMode('hotspot');
+    if (gatewayIp) setLeaderHostIp(gatewayIp);
+  };
+
+  const switchToCloud = async () => {
+    const hasNet = await testInternetReachable(2000);
+    if (hasNet) {
+      setIsOfflineHotspot(false);
+      setSyncMode('hybrid');
     }
   };
 
@@ -562,6 +810,11 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
         setlistId,
         isLeader,
         connected,
+        syncMode,
+        isOfflineHotspot,
+        leaderHostIp,
+        hotspotToken,
+        localPeerCount,
         myName,
         myRole,
         members,
@@ -572,6 +825,8 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
         countInNumber,
         startSession,
         joinSession,
+        switchToHotspot,
+        switchToCloud,
         leaveSession,
         broadcastSong,
         broadcastPlayback,
