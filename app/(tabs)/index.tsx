@@ -45,6 +45,7 @@ import {
 } from '@/utils/hooks/useMusician';
 
 import { RefreshControl } from 'react-native';
+import { AiFloatingBubble } from '../../components/ui/AiFloatingBubble';
 import { AiHeaderButton } from '../../components/ui/AiHeaderButton';
 import { useRefresh } from '../../utils/hooks/useRefresh';
 import { useHeaderTopPadding, useTabBarPadding } from '../../utils/hooks/useTabBarPadding';
@@ -388,6 +389,8 @@ export default function DashboardScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <AiFloatingBubble />
     </View>
   );
 }

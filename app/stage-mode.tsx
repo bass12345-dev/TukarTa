@@ -57,7 +57,7 @@ import {
   transposeChord,
   transposeChordProText,
 } from '../utils/chordParser';
-import YoutubePlayer, { YoutubeIframeRef } from 'react-native-youtube-iframe';
+import YoutubePlayer, { type YoutubeIframeRef } from '../components/ui/YoutubePlayer';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../context/theme';
 
@@ -73,6 +73,9 @@ export default function StageModeScreen() {
   const { isDark } = useAppTheme();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isLandscape = windowWidth > windowHeight;
+  // Minus 1 mini player: compact 16:9 card docked bottom-right of the lyrics area
+  const miniPlayerWidth = Math.round(Math.min(280, Math.max(200, windowWidth * (isLandscape ? 0.3 : 0.56))));
+  const miniPlayerVideoHeight = Math.round((miniPlayerWidth * 9) / 16);
   const styles = useMemo(() => themeStyles(baseStyles, isDark), [isDark]);
   // Theme-aware colors for icons / inline styles that can't live in the stylesheet
   const ink = isDark ? '#D1FAE5' : '#166534';
@@ -1254,153 +1257,14 @@ export default function StageModeScreen() {
         </View>
       )}
 
-      {/* ── Embedded Minus 1 Player (Auto-Searched YouTube Video & Auto-Play + Lyrics Sync) ── */}
-      {isMinusOneVisible && currentSetlistSong && (
-        <View style={styles.playerContainer}>
-          <View style={styles.playerHeaderBar}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
-              <Music2 size={13} color="#10B981" />
-              <Text style={styles.playerHeaderTitle} numberOfLines={1}>
-                Minus 1: {currentSetlistSong.song?.title}
-              </Text>
-              {minusOneVideoId && (
-                <View
-                  style={{
-                    backgroundColor: '#065F46',
-                    borderRadius: 4,
-                    paddingHorizontal: 5,
-                    paddingVertical: 1,
-                    borderWidth: 1,
-                    borderColor: '#10B981',
-                  }}
-                >
-                  <Text style={{ color: '#A7F3D0', fontSize: 9, fontWeight: '800' }}>
-                    {isYtSynced ? 'YT SYNCED' : 'AUTO-SYNC'}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              {minusOneCandidates.length > 1 && (
-                <TouchableOpacity
-                  style={styles.playerOpenYtBtn}
-                  onPress={() => {
-                    const next = (minusOneCandidateIdx + 1) % minusOneCandidates.length;
-                    setMinusOneCandidateIdx(next);
-                    setMinusOneVideoId(minusOneCandidates[next]);
-                  }}
-                >
-                  <SkipForward size={11} color="#A7F3D0" />
-                  <Text style={styles.playerOpenYtText}>Try next</Text>
-                </TouchableOpacity>
-              )}
-              {minusOneVideoId && (
-                <TouchableOpacity
-                  style={styles.playerOpenYtBtn}
-                  onPress={() => {
-                    WebBrowser.openBrowserAsync(`https://www.youtube.com/watch?v=${minusOneVideoId}`);
-                  }}
-                >
-                  <ExternalLink size={11} color="#A7F3D0" />
-                  <Text style={styles.playerOpenYtText}>YouTube ↗</Text>
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity
-                style={styles.playerCloseBtn}
-                onPress={() => setIsMinusOneVisible(false)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <X size={14} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {isLoadingMinusOne ? (
-            <View style={styles.playerLoadingBox}>
-              <ActivityIndicator size="small" color="#10B981" />
-              <Text style={styles.playerLoadingText}>
-                Finding best minus 1 backing track for "{currentSetlistSong.song?.title}"...
-              </Text>
-            </View>
-          ) : minusOneVideoId ? (
-            Platform.OS === 'web' ? (
-              <iframe
-                ref={ytIframeRef}
-                src={`https://www.youtube.com/embed/${minusOneVideoId}?autoplay=1&enablejsapi=1&playsinline=1`}
-                style={{ width: '100%', height: '100%', border: 'none' } as any}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                onLoad={() => {
-                  try {
-                    ytIframeRef.current?.contentWindow?.postMessage(
-                      JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
-                      '*'
-                    );
-                  } catch {}
-                }}
-              />
-            ) : (
-              <View
-                style={styles.webview}
-                onLayout={(e) => setYtPlayerHeight(Math.floor(e.nativeEvent.layout.height))}
-              >
-                {ytPlayerHeight > 0 && (
-                  <YoutubePlayer
-                    key={minusOneVideoId}
-                    ref={ytPlayerRef}
-                    height={ytPlayerHeight}
-                    videoId={minusOneVideoId}
-                    play={ytPlay}
-                    forceAndroidAutoplay
-                    initialPlayerParams={{ controls: true, rel: false, modestbranding: true }}
-                    webViewProps={{ allowsInlineMediaPlayback: true, mediaPlaybackRequiresUserAction: false }}
-                    onError={handleYtError}
-                    onChangeState={(state: string) => {
-                      ytStateRef.current = state;
-                      if (state === 'playing') {
-                        setYtPlay(true);
-                        setIsPlaying(true);
-                      } else if (state === 'paused' || state === 'ended') {
-                        setYtPlay(false);
-                        setIsPlaying(false);
-                      }
-                    }}
-                  />
-                )}
-              </View>
-            )
-          ) : (
-            <View style={styles.playerLoadingBox}>
-              <Text style={styles.playerLoadingText}>
-                Could not automatically resolve embed ID. Tap to search directly:
-              </Text>
-              <TouchableOpacity
-                style={styles.ytSearchFallbackBtn}
-                onPress={() => {
-                  const cleanArtist = (currentSetlistSong.song?.artist || '')
-                    .replace(/\b(audience request|unknown artist|custom request|requested song|request|unknown)\b/gi, '')
-                    .trim();
-                  const q = cleanArtist
-                    ? `${currentSetlistSong.song?.title} ${cleanArtist} karaoke minus 1`
-                    : `${currentSetlistSong.song?.title} karaoke minus 1`;
-                  WebBrowser.openBrowserAsync(`https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`);
-                }}
-              >
-                <ExternalLink size={13} color="#FFFFFF" />
-                <Text style={styles.ytSearchFallbackText}>Open Search on YouTube</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      )}
-
       {/* ── Lyrics & Chords Performance Area with Real-Time Two-Way Auto-Scroll Sync ── */}
       <ScrollView
         ref={scrollViewRef}
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          isMinusOneVisible && { paddingBottom: miniPlayerVideoHeight + 72 },
+        ]}
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={50}
         onContentSizeChange={(_, h) => setContentHeight(h)}
@@ -1590,6 +1454,136 @@ export default function StageModeScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* ── Minus 1 Mini Player (floats bottom-right over the lyrics, like YouTube's minimized player) ── */}
+      {isMinusOneVisible && currentSetlistSong && (
+        <View style={[styles.playerContainer, { width: miniPlayerWidth }]}>
+          <View style={styles.playerHeaderBar}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1, minWidth: 0 }}>
+              <View style={[styles.playerSyncDot, { backgroundColor: isYtSynced ? '#10B981' : '#6B7280' }]} />
+              <Text style={styles.playerHeaderTitle} numberOfLines={1}>
+                {currentSetlistSong.song?.title}
+              </Text>
+            </View>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              {minusOneCandidates.length > 1 && (
+                <TouchableOpacity
+                  style={styles.playerIconBtn}
+                  onPress={() => {
+                    const next = (minusOneCandidateIdx + 1) % minusOneCandidates.length;
+                    setMinusOneCandidateIdx(next);
+                    setMinusOneVideoId(minusOneCandidates[next]);
+                  }}
+                  hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                  accessibilityLabel="Try next backing track"
+                >
+                  <SkipForward size={13} color="#A7F3D0" />
+                </TouchableOpacity>
+              )}
+              {minusOneVideoId && (
+                <TouchableOpacity
+                  style={styles.playerIconBtn}
+                  onPress={() => {
+                    WebBrowser.openBrowserAsync(`https://www.youtube.com/watch?v=${minusOneVideoId}`);
+                  }}
+                  hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                  accessibilityLabel="Open on YouTube"
+                >
+                  <ExternalLink size={13} color="#A7F3D0" />
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={styles.playerIconBtn}
+                onPress={() => setIsMinusOneVisible(false)}
+                hitSlop={{ top: 6, bottom: 6, left: 4, right: 6 }}
+                accessibilityLabel="Close backing track"
+              >
+                <X size={14} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={{ height: miniPlayerVideoHeight }}>
+
+          {isLoadingMinusOne ? (
+            <View style={styles.playerLoadingBox}>
+              <ActivityIndicator size="small" color="#10B981" />
+              <Text style={styles.playerLoadingText}>
+                Finding backing track...
+              </Text>
+            </View>
+          ) : minusOneVideoId ? (
+            Platform.OS === 'web' ? (
+              <iframe
+                ref={ytIframeRef}
+                src={`https://www.youtube.com/embed/${minusOneVideoId}?autoplay=1&enablejsapi=1&playsinline=1`}
+                style={{ width: '100%', height: '100%', border: 'none' } as any}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                onLoad={() => {
+                  try {
+                    ytIframeRef.current?.contentWindow?.postMessage(
+                      JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
+                      '*'
+                    );
+                  } catch {}
+                }}
+              />
+            ) : (
+              <View
+                style={styles.webview}
+                onLayout={(e) => setYtPlayerHeight(Math.floor(e.nativeEvent.layout.height))}
+              >
+                {ytPlayerHeight > 0 && (
+                  <YoutubePlayer
+                    key={minusOneVideoId}
+                    ref={ytPlayerRef}
+                    height={ytPlayerHeight}
+                    videoId={minusOneVideoId}
+                    play={ytPlay}
+                    forceAndroidAutoplay
+                    initialPlayerParams={{ controls: true, rel: false, modestbranding: true }}
+                    webViewProps={{ allowsInlineMediaPlayback: true, mediaPlaybackRequiresUserAction: false }}
+                    onError={handleYtError}
+                    onChangeState={(state: string) => {
+                      ytStateRef.current = state;
+                      if (state === 'playing') {
+                        setYtPlay(true);
+                        setIsPlaying(true);
+                      } else if (state === 'paused' || state === 'ended') {
+                        setYtPlay(false);
+                        setIsPlaying(false);
+                      }
+                    }}
+                  />
+                )}
+              </View>
+            )
+          ) : (
+            <View style={styles.playerLoadingBox}>
+              <Text style={styles.playerLoadingText}>No playable track found.</Text>
+              <TouchableOpacity
+                style={styles.ytSearchFallbackBtn}
+                onPress={() => {
+                  const cleanArtist = (currentSetlistSong.song?.artist || '')
+                    .replace(/\b(audience request|unknown artist|custom request|requested song|request|unknown)\b/gi, '')
+                    .trim();
+                  const q = cleanArtist
+                    ? `${currentSetlistSong.song?.title} ${cleanArtist} karaoke minus 1`
+                    : `${currentSetlistSong.song?.title} karaoke minus 1`;
+                  WebBrowser.openBrowserAsync(`https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`);
+                }}
+              >
+                <ExternalLink size={13} color="#FFFFFF" />
+                <Text style={styles.ytSearchFallbackText}>Search YouTube</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          </View>
+        </View>
+      )}
 
       </View>
 
@@ -2471,8 +2465,20 @@ const baseStyles = StyleSheet.create({
     borderRadius: 4,
   },
   playerContainer: {
-    height: 140,
+    position: 'absolute',
+    right: 12,
+    bottom: 12,
+    zIndex: 50,
+    elevation: 12,
+    borderRadius: 12,
+    overflow: 'hidden',
     backgroundColor: '#000',
+    borderWidth: 1,
+    borderColor: '#065F46',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
   },
   webview: {
     flex: 1,
@@ -3296,9 +3302,20 @@ const baseStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 6,
     backgroundColor: '#064E3B',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingLeft: 9,
+    paddingRight: 4,
+    paddingVertical: 3,
+  },
+  playerSyncDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  playerIconBtn: {
+    padding: 5,
+    borderRadius: 6,
   },
   playerHeaderTitle: {
     fontSize: 11,
@@ -3306,21 +3323,6 @@ const baseStyles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: 'DM Sans',
     flexShrink: 1,
-  },
-  playerOpenYtBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#10B981',
-  },
-  playerOpenYtText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#A7F3D0',
   },
   playerLoadingBox: {
     flex: 1,
@@ -3349,10 +3351,6 @@ const baseStyles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: '#FFFFFF',
-  },
-  playerCloseBtn: {
-    padding: 3,
-    borderRadius: 4,
   },
   footerTogglePlayerBtn: {
     flexDirection: 'row',
