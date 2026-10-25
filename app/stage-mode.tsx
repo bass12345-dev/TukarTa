@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -33,9 +33,13 @@ import {
   X,
   ChevronUp,
   ChevronDown,
+  ChevronsDown,
   Type,
   Eye,
   EyeOff,
+  GripVertical,
+  Clock,
+  Gauge,
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
@@ -94,10 +98,32 @@ export default function StageModeScreen() {
   const [isQueueVisible, setIsQueueVisible] = useState(false);
   const [offlineSongs, setOfflineSongs] = useState<any[]>([]);
 
-  // Stage View Customization: Lyrics font size & Collapsible Top Section
+  // Real Playback Timer, BPM, & Auto-Scroll Engine
+  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollOffsetRef = useRef<number>(0);
+  const tapTimesRef = useRef<number[]>([]);
+
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
+  const [currentBpm, setCurrentBpm] = useState<number>(120);
+  const [isAutoScroll, setIsAutoScroll] = useState<boolean>(true);
+  const [scrollSpeedMultiplier, setScrollSpeedMultiplier] = useState<number>(1.0);
+  const [contentHeight, setContentHeight] = useState<number>(0);
+  const [containerHeight, setContainerHeight] = useState<number>(0);
+
+  // Stage View Customization: Lyrics font size & Collapsible Top Section & Collapsible Bottom Player
   const [lyricsFontSize, setLyricsFontSize] = useState<number>(20);
   const [isHeaderHidden, setIsHeaderHidden] = useState<boolean>(false);
+  const [isBottomPlayerHidden, setIsBottomPlayerHidden] = useState<boolean>(false);
   const [isManualFetching, setIsManualFetching] = useState<boolean>(false);
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const formatSongTime = (sec: number): string => {
+    const s = Math.max(0, Math.floor(sec));
+    const mins = Math.floor(s / 60);
+    const secs = s % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
 
   // Load persisted font size
   useEffect(() => {
@@ -480,6 +506,127 @@ export default function StageModeScreen() {
     return transposeChordProText(rawLyrics, transposeSteps);
   }, [rawLyrics, transposeSteps]);
 
+  // Index lyrics into playable lines for real-time highlighting
+  const lyricsLineList = useMemo(() => {
+    if (!displayedLyrics) return [];
+    const lines: { text: string; pIdx: number; lIdx: number; isHeader: boolean; hasChords: boolean }[] = [];
+    const pList = displayedLyrics.split('\n\n');
+    pList.forEach((p, pIdx) => {
+      p.split('\n').forEach((l, lIdx) => {
+        const parsed = parseLineSegments(l);
+        lines.push({
+          text: l,
+          pIdx,
+          lIdx,
+          isHeader: parsed.isSectionHeader,
+          hasChords: parsed.segments.some((s) => !!s.chord),
+        });
+      });
+    });
+    return lines;
+  }, [displayedLyrics]);
+
+  const playableLines = useMemo(() => {
+    return lyricsLineList.filter((l) => !l.isHeader && l.text.trim().length > 0);
+  }, [lyricsLineList]);
+
+  const totalPlayableLines = Math.max(playableLines.length, 1);
+
+  // Sync BPM when current song changes
+  useEffect(() => {
+    if (currentSetlistSong?.song?.bpm) {
+      setCurrentBpm(currentSetlistSong.song.bpm);
+    }
+  }, [currentSetlistSong?.song?.id, currentSetlistSong?.song?.bpm]);
+
+  // Real song duration calculation (from BPM or line count estimate, min 60s, max 360s)
+  const songDuration = useMemo(() => {
+    if (totalPlayableLines > 2) {
+      // average ~4 beats per line
+      const estSeconds = Math.round((totalPlayableLines * 4 * 60) / (currentBpm || 120));
+      return Math.max(75, Math.min(360, estSeconds));
+    }
+    return 210;
+  }, [totalPlayableLines, currentBpm]);
+
+  // Reset playback timer & auto-scroll on song change or manual reset
+  useEffect(() => {
+    setElapsedSeconds(0);
+    scrollOffsetRef.current = 0;
+    scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+  }, [currentIndex, syncCurrentSong?.songId]);
+
+  // Real-time playback timer ticker
+  useEffect(() => {
+    if (!isPlaying) return;
+    const timer = setInterval(() => {
+      setElapsedSeconds((sec) => {
+        if (sec >= songDuration) {
+          setIsPlaying(false);
+          return songDuration;
+        }
+        return sec + 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isPlaying, songDuration]);
+
+  // Smooth auto-scroll loop aligned with real song duration
+  useEffect(() => {
+    if (!isPlaying || !isAutoScroll || contentHeight <= containerHeight) return;
+    const maxScroll = Math.max(0, contentHeight - containerHeight + 60);
+    const stepMs = 50;
+    const totalSteps = (songDuration * 1000) / stepMs;
+    const pxPerStep = (maxScroll / totalSteps) * scrollSpeedMultiplier;
+
+    const scrollTimer = setInterval(() => {
+      scrollOffsetRef.current = Math.min(maxScroll, scrollOffsetRef.current + pxPerStep);
+      scrollViewRef.current?.scrollTo({ y: scrollOffsetRef.current, animated: false });
+    }, stepMs);
+
+    return () => clearInterval(scrollTimer);
+  }, [isPlaying, isAutoScroll, contentHeight, containerHeight, songDuration, scrollSpeedMultiplier]);
+
+  // Real active line index based on elapsed playback progress
+  const activePlayableLineIndex = useMemo(() => {
+    if (!isPlaying || elapsedSeconds === 0) return 0;
+    const ratio = elapsedSeconds / songDuration;
+    return Math.min(totalPlayableLines - 1, Math.floor(ratio * totalPlayableLines));
+  }, [elapsedSeconds, songDuration, totalPlayableLines, isPlaying]);
+
+  // Tap tempo calculator
+  const handleTapTempo = () => {
+    const now = Date.now();
+    const recent = tapTimesRef.current.filter((t) => now - t < 3000);
+    recent.push(now);
+    tapTimesRef.current = recent;
+    if (recent.length >= 2) {
+      const intervals = [];
+      for (let i = 1; i < recent.length; i++) {
+        intervals.push(recent[i] - recent[i - 1]);
+      }
+      const avgMs = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+      const bpm = Math.round(60000 / avgMs);
+      if (bpm >= 45 && bpm <= 260) {
+        setCurrentBpm(bpm);
+      }
+    }
+  };
+
+  // Jump to specific line when tapped
+  const handleJumpToLine = (pIdx: number, lIdx: number) => {
+    const targetLineIdx = playableLines.findIndex((pl) => pl.pIdx === pIdx && pl.lIdx === lIdx);
+    if (targetLineIdx !== -1) {
+      const targetSec = Math.floor((targetLineIdx / totalPlayableLines) * songDuration);
+      setElapsedSeconds(targetSec);
+      if (contentHeight > containerHeight) {
+        const targetY = (targetLineIdx / totalPlayableLines) * (contentHeight - containerHeight);
+        scrollOffsetRef.current = targetY;
+        scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
+      }
+    }
+  };
+
   // Leader: Broadcast song change & key updates
   React.useEffect(() => {
     if (isLeader && currentSetlistSong) {
@@ -694,27 +841,57 @@ export default function StageModeScreen() {
             </View>
 
             <View style={styles.songInfoRight}>
-              <View style={styles.transposeControls}>
-                <TouchableOpacity
-                  style={styles.transposeStepBtn}
-                  onPress={() => setTransposeSteps((s) => s - 1)}
-                >
-                  <Text style={styles.transposeStepText}>-</Text>
-                </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                {/* ── Key Transposer ── */}
+                <View style={styles.transposeControls}>
+                  <TouchableOpacity
+                    style={styles.transposeStepBtn}
+                    onPress={() => setTransposeSteps((s) => s - 1)}
+                  >
+                    <Text style={styles.transposeStepText}>-</Text>
+                  </TouchableOpacity>
 
-                <View style={styles.keyBadge}>
-                  <Text style={styles.keyBadgeText}>
-                    KEY: {activeKey}
-                    {transposeSteps !== 0 ? ` (${transposeSteps > 0 ? `+${transposeSteps}` : transposeSteps})` : ''}
-                  </Text>
+                  <View style={styles.keyBadge}>
+                    <Text style={styles.keyBadgeText}>
+                      KEY: {activeKey}
+                      {transposeSteps !== 0 ? ` (${transposeSteps > 0 ? `+${transposeSteps}` : transposeSteps})` : ''}
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.transposeStepBtn}
+                    onPress={() => setTransposeSteps((s) => s + 1)}
+                  >
+                    <Text style={styles.transposeStepText}>+</Text>
+                  </TouchableOpacity>
                 </View>
 
-                <TouchableOpacity
-                  style={styles.transposeStepBtn}
-                  onPress={() => setTransposeSteps((s) => s + 1)}
-                >
-                  <Text style={styles.transposeStepText}>+</Text>
-                </TouchableOpacity>
+                {/* ── Real BPM & Tap Tempo Controls ── */}
+                <View style={styles.bpmGroup}>
+                  <TouchableOpacity
+                    style={styles.transposeStepBtn}
+                    onPress={() => setCurrentBpm((b) => Math.max(45, b - 5))}
+                  >
+                    <Text style={styles.transposeStepText}>-</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.bpmBadge}
+                    onPress={handleTapTempo}
+                    activeOpacity={0.75}
+                  >
+                    <Gauge size={11} color="#059669" />
+                    <Text style={styles.bpmBadgeText}>{currentBpm} BPM</Text>
+                    <Text style={styles.tapSubText}>TAP</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.transposeStepBtn}
+                    onPress={() => setCurrentBpm((b) => Math.min(240, b + 5))}
+                  >
+                    <Text style={styles.transposeStepText}>+</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
               {displayedNextTitle ? (
@@ -727,41 +904,114 @@ export default function StageModeScreen() {
             </View>
           </View>
 
-          {/* Progress scrub bar */}
+          {/* ── Real Progress Scrub Bar with Dynamic Timers & Auto-Scroll ── */}
           <View style={styles.progressSection}>
             <View style={styles.timeRow}>
-              <Text style={styles.timeText}>01:42</Text>
-              <Text style={styles.timeText}>-02:36</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <Clock size={11} color="#059669" />
+                <Text style={styles.timeText}>{formatSongTime(elapsedSeconds)}</Text>
+              </View>
+
+              {/* Auto-Scroll Toggle & Speed Stepper */}
+              <View style={styles.autoScrollPillRow}>
+                <TouchableOpacity
+                  style={[styles.autoScrollToggleBtn, isAutoScroll && styles.autoScrollToggleBtnActive]}
+                  onPress={() => setIsAutoScroll((v) => !v)}
+                >
+                  <ChevronsDown size={11} color={isAutoScroll ? '#FFFFFF' : '#059669'} />
+                  <Text style={[styles.autoScrollToggleText, isAutoScroll && { color: '#FFFFFF' }]}>
+                    {isAutoScroll ? 'SCROLL ON' : 'SCROLL OFF'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.speedPill}
+                  onPress={() => {
+                    setScrollSpeedMultiplier((s) => (s === 1.0 ? 1.25 : s === 1.25 ? 1.5 : s === 1.5 ? 0.75 : 1.0));
+                  }}
+                >
+                  <Text style={styles.speedPillText}>{scrollSpeedMultiplier}x</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.timeText}>
+                -{formatSongTime(Math.max(0, songDuration - elapsedSeconds))}
+              </Text>
             </View>
-            <View style={styles.progressBase}>
-              <View style={[styles.progressFill, { width: '42%' }]} />
-            </View>
+
+            {/* Interactive Progress Bar (Tap to Scrub) */}
+            <TouchableOpacity
+              activeOpacity={0.9}
+              style={styles.progressBase}
+              onPress={(e) => {
+                const clickX = e.nativeEvent.locationX;
+                const ratio = Math.max(0, Math.min(1, clickX / 300));
+                setElapsedSeconds(Math.round(ratio * songDuration));
+              }}
+            >
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${Math.min(100, Math.max(1, (elapsedSeconds / songDuration) * 100))}%` },
+                ]}
+              />
+            </TouchableOpacity>
           </View>
         </View>
       )}
 
-      {/* ── Embedded Minus 1 Player (Collapsible) ── */}
-      {!isHeaderHidden && isMinusOneVisible && currentSetlistSong && (
+      {/* ── Embedded Minus 1 Player (Collapsible & Cross-Platform: Web iframe + Native WebView) ── */}
+      {isMinusOneVisible && currentSetlistSong && (
         <View style={styles.playerContainer}>
-          <WebView
-            style={styles.webview}
-            source={{
-              uri: `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(
-                `${currentSetlistSong.song?.artist} ${currentSetlistSong.song?.title} minus 1`
-              )}`,
-            }}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-            allowsFullscreenVideo={true}
-          />
+          <View style={styles.playerHeaderBar}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+              <Music2 size={13} color="#10B981" />
+              <Text style={styles.playerHeaderTitle} numberOfLines={1}>
+                Minus 1: {currentSetlistSong.song?.title} {currentSetlistSong.song?.artist ? `• ${currentSetlistSong.song?.artist}` : ''}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.playerCloseBtn}
+              onPress={() => setIsMinusOneVisible(false)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <X size={14} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+
+          {Platform.OS === 'web' ? (
+            <iframe
+              src={`https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(
+                `${currentSetlistSong.song?.artist || ''} ${currentSetlistSong.song?.title || ''} minus 1`
+              )}`}
+              style={{ width: '100%', height: '100%', border: 'none' } as any}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          ) : (
+            <WebView
+              style={styles.webview}
+              source={{
+                uri: `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(
+                  `${currentSetlistSong.song?.artist || ''} ${currentSetlistSong.song?.title || ''} minus 1`
+                )}`,
+              }}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              allowsFullscreenVideo={true}
+            />
+          )}
         </View>
       )}
 
-      {/* ── Lyrics & Chords Performance Area ── */}
+      {/* ── Lyrics & Chords Performance Area with Real-Time Auto-Scroll ── */}
       <ScrollView
+        ref={scrollViewRef}
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        onContentSizeChange={(_, h) => setContentHeight(h)}
+        onLayout={(e) => setContainerHeight(e.nativeEvent.layout.height)}
       >
         {isLoadingLyrics ? (
           <View style={styles.lyricsLoading}>
@@ -782,10 +1032,23 @@ export default function StageModeScreen() {
                     );
                   }
 
+                  const isHighlighted =
+                    isPlaying &&
+                    playableLines[activePlayableLineIndex]?.pIdx === pIdx &&
+                    playableLines[activePlayableLineIndex]?.lIdx === lIdx;
+
                   const hasInlineChords = parsedLine.segments.some((s) => !!s.chord);
                   if (hasInlineChords) {
                     return (
-                      <View key={lIdx} style={styles.chordLineWrap}>
+                      <TouchableOpacity
+                        key={lIdx}
+                        activeOpacity={0.85}
+                        onPress={() => handleJumpToLine(pIdx, lIdx)}
+                        style={[
+                          styles.chordLineWrap,
+                          isHighlighted && styles.lyricLineHighlighted,
+                        ]}
+                      >
                         {parsedLine.segments.map((seg, sIdx) => (
                           <View key={sIdx} style={styles.chordSegmentCol}>
                             <Text
@@ -802,6 +1065,7 @@ export default function StageModeScreen() {
                             <Text
                               style={[
                                 styles.stageLyricWithChordText,
+                                isHighlighted && { color: '#064E3B', fontWeight: '900' },
                                 {
                                   fontSize: lyricsFontSize,
                                   lineHeight: Math.round(lyricsFontSize * 1.45),
@@ -812,25 +1076,29 @@ export default function StageModeScreen() {
                             </Text>
                           </View>
                         ))}
-                      </View>
+                      </TouchableOpacity>
                     );
                   }
 
-                  const isHighlighted = pIdx === 1 && lIdx === 1;
                   return (
-                    <Text
+                    <TouchableOpacity
                       key={lIdx}
-                      style={[
-                        styles.lyricLine,
-                        isHighlighted && styles.lyricLineHighlighted,
-                        {
-                          fontSize: lyricsFontSize,
-                          lineHeight: Math.round(lyricsFontSize * 1.5),
-                        },
-                      ]}
+                      activeOpacity={0.85}
+                      onPress={() => handleJumpToLine(pIdx, lIdx)}
                     >
-                      {line}
-                    </Text>
+                      <Text
+                        style={[
+                          styles.lyricLine,
+                          isHighlighted && styles.lyricLineHighlighted,
+                          {
+                            fontSize: lyricsFontSize,
+                            lineHeight: Math.round(lyricsFontSize * 1.5),
+                          },
+                        ]}
+                      >
+                        {line}
+                      </Text>
+                    </TouchableOpacity>
                   );
                 })}
               </View>
@@ -911,12 +1179,12 @@ export default function StageModeScreen() {
       {/* ── Footer Controls ── */}
       <View style={styles.footerControls}>
         {/* ── What's Next / Up Next Live Preview Bar ── */}
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={() => setIsQueueVisible(true)}
-          style={styles.footerUpNextBar}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+        <View style={styles.footerUpNextBar}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => setIsQueueVisible(true)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}
+          >
             <View style={styles.footerUpNextBadge}>
               <Text style={styles.footerUpNextBadgeText}>UP NEXT</Text>
             </View>
@@ -942,127 +1210,147 @@ export default function StageModeScreen() {
                 <Text style={styles.requestInlineTagText}>REQUEST</Text>
               </View>
             )}
-          </View>
+          </TouchableOpacity>
 
-          <View style={styles.footerUpNextAction}>
-            <ListMusic size={12} color="#059669" />
-            <Text style={styles.footerUpNextActionText}>QUEUE ▾</Text>
-          </View>
-        </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            {/* Toggle button to hide/show the below player component UI */}
+            <TouchableOpacity
+              style={styles.footerTogglePlayerBtn}
+              onPress={() => setIsBottomPlayerHidden((v) => !v)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              {isBottomPlayerHidden ? (
+                <>
+                  <ChevronUp size={13} color="#065F46" />
+                  <Text style={styles.footerTogglePlayerText}>PLAYER</Text>
+                </>
+              ) : (
+                <>
+                  <ChevronDown size={13} color="#065F46" />
+                  <Text style={styles.footerTogglePlayerText}>HIDE</Text>
+                </>
+              )}
+            </TouchableOpacity>
 
-        <View style={styles.transportRow}>
-          {isMemberFollowing ? (
-            /* Follower view: locked to leader */
-            <View style={styles.syncedMemberBox}>
-              <Lock size={16} color="#10B981" />
-              <Text style={styles.syncedMemberText}>
-                TELEPROMPTER CONTROLLED BY LEADER
-              </Text>
+            <TouchableOpacity
+              style={styles.footerUpNextAction}
+              onPress={() => setIsQueueVisible(true)}
+            >
+              <ListMusic size={12} color="#059669" />
+              <Text style={styles.footerUpNextActionText}>QUEUE ▾</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ── Transport Controls & Subactions (Collapsible) ── */}
+        {!isBottomPlayerHidden && (
+          <>
+            <View style={styles.transportRow}>
+              {isMemberFollowing ? (
+                /* Follower view: locked to leader */
+                <View style={styles.syncedMemberBox}>
+                  <Lock size={16} color="#10B981" />
+                  <Text style={styles.syncedMemberText}>
+                    TELEPROMPTER CONTROLLED BY LEADER
+                  </Text>
+                </View>
+              ) : (
+                /* Leader / Solo view */
+                <>
+                  <TouchableOpacity
+                    style={[styles.transportBtnSide, currentIndex === 0 && { opacity: 0.4 }]}
+                    activeOpacity={0.8}
+                    disabled={currentIndex === 0}
+                    onPress={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
+                  >
+                    <SkipBack size={22} color="#166534" fill="#166534" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.transportBtnMain}
+                    activeOpacity={0.88}
+                    onPress={() => {
+                      const nextState = !isPlaying;
+                      setIsPlaying(nextState);
+                      if (isLeader) broadcastPlayback(nextState);
+                    }}
+                  >
+                    {isPlaying ? (
+                      <Pause size={36} color="#FFFFFF" fill="#FFFFFF" />
+                    ) : (
+                      <Play size={36} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 4 }} />
+                    )}
+                  </TouchableOpacity>
+
+                  <View style={{ alignItems: 'center' }}>
+                    <TouchableOpacity
+                      style={[styles.transportBtnSide, currentIndex >= songsList.length - 1 && { opacity: 0.4 }]}
+                      activeOpacity={0.8}
+                      disabled={currentIndex >= songsList.length - 1}
+                      onPress={() => setCurrentIndex((prev) => Math.min(songsList.length - 1, prev + 1))}
+                    >
+                      <SkipForward size={22} color="#166534" fill="#166534" />
+                    </TouchableOpacity>
+                    {displayedNextTitle ? (
+                      <Text style={styles.nextSongBtnSubLabel} numberOfLines={1}>
+                        {displayedNextTitle}
+                      </Text>
+                    ) : null}
+                  </View>
+                </>
+              )}
             </View>
-          ) : (
-            /* Leader / Solo view */
-            <>
-              <TouchableOpacity
-                style={[styles.transportBtnSide, currentIndex === 0 && { opacity: 0.4 }]}
-                activeOpacity={0.8}
-                disabled={currentIndex === 0}
-                onPress={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
-              >
-                <SkipBack size={22} color="#166534" fill="#166534" />
-              </TouchableOpacity>
 
+            <View style={styles.subActionsRow}>
               <TouchableOpacity
-                style={styles.transportBtnMain}
-                activeOpacity={0.88}
+                style={styles.subActionBtn}
+                activeOpacity={0.7}
                 onPress={() => {
-                  const nextState = !isPlaying;
-                  setIsPlaying(nextState);
-                  if (isLeader) broadcastPlayback(nextState);
+                  setIsPlaying(true);
+                  setTransposeSteps(0);
                 }}
               >
-                {isPlaying ? (
-                  <Pause size={36} color="#FFFFFF" fill="#FFFFFF" />
-                ) : (
-                  <Play size={36} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 4 }} />
-                )}
+                <RotateCcw size={14} color="#10B981" />
+                <Text style={styles.subActionText}>RESET</Text>
               </TouchableOpacity>
 
-              <View style={{ alignItems: 'center' }}>
+              {isLeader && (
                 <TouchableOpacity
-                  style={[styles.transportBtnSide, currentIndex >= songsList.length - 1 && { opacity: 0.4 }]}
-                  activeOpacity={0.8}
-                  disabled={currentIndex >= songsList.length - 1}
-                  onPress={() => setCurrentIndex((prev) => Math.min(songsList.length - 1, prev + 1))}
+                  style={[styles.subActionBtn, { borderColor: '#10B981' }]}
+                  activeOpacity={0.7}
+                  onPress={() => broadcastCountIn(120)}
                 >
-                  <SkipForward size={22} color="#166534" fill="#166534" />
-                </TouchableOpacity>
-                {displayedNextTitle ? (
-                  <Text style={styles.nextSongBtnSubLabel} numberOfLines={1}>
-                    {displayedNextTitle}
+                  <Sparkles size={14} color="#10B981" />
+                  <Text style={[styles.subActionText, { color: '#10B981', fontWeight: '800' }]}>
+                    COUNT IN
                   </Text>
-                ) : null}
-              </View>
-            </>
-          )}
-        </View>
+                </TouchableOpacity>
+              )}
 
-        <View style={styles.subActionsRow}>
-          <TouchableOpacity
-            style={styles.subActionBtn}
-            activeOpacity={0.7}
-            onPress={() => {
-              setIsPlaying(true);
-              setTransposeSteps(0);
-            }}
-          >
-            <RotateCcw size={14} color="#10B981" />
-            <Text style={styles.subActionText}>RESET</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.subActionBtn}
+                activeOpacity={0.7}
+                onPress={() => setIsMinusOneVisible(!isMinusOneVisible)}
+              >
+                <Music2 size={14} color="#10B981" />
+                <Text style={styles.subActionText}>
+                  {isMinusOneVisible ? 'HIDE TRACK' : 'MINUS 1'}
+                </Text>
+              </TouchableOpacity>
 
-          {isLeader && (
-            <TouchableOpacity
-              style={[styles.subActionBtn, { borderColor: '#10B981' }]}
-              activeOpacity={0.7}
-              onPress={() => broadcastCountIn(120)}
-            >
-              <Sparkles size={14} color="#10B981" />
-              <Text style={[styles.subActionText, { color: '#10B981', fontWeight: '800' }]}>
-                COUNT IN
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          <TouchableOpacity
-            style={styles.subActionBtn}
-            activeOpacity={0.7}
-            onPress={() => setIsMinusOneVisible(!isMinusOneVisible)}
-          >
-            <Music2 size={14} color="#10B981" />
-            <Text style={styles.subActionText}>
-              {isMinusOneVisible ? 'HIDE TRACK' : 'MINUS 1'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.subActionBtn}
-            activeOpacity={0.7}
-            onPress={() => setIsQueueVisible(true)}
-          >
-            <ListMusic size={14} color="#10B981" />
-            <Text style={styles.subActionText}>
-              QUEUE{songsList.length > 0 ? ` (${Math.max(songsList.length - currentIndex - 1, 0)})` : ''}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.subActionBtn}
-            activeOpacity={0.7}
-            onPress={() => router.push('/(tabs)/bands')}
-          >
-            <Radio size={14} color="#10B981" />
-            <Text style={styles.subActionText}>BAND ROOM</Text>
-          </TouchableOpacity>
-        </View>
+              <TouchableOpacity
+                style={styles.subActionBtn}
+                activeOpacity={0.7}
+                onPress={() => setIsQueueVisible(true)}
+              >
+                <ListMusic size={14} color="#10B981" />
+                <Text style={styles.subActionText}>
+                  QUEUE{songsList.length > 0 ? ` (${Math.max(songsList.length - currentIndex - 1, 0)})` : ''}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
       </View>
 
       {/* ── Queue / What's Next ── */}
@@ -1266,17 +1554,57 @@ export default function StageModeScreen() {
                   const isPast = idx < currentIndex;
                   const isNext = idx === currentIndex + 1;
                   const isReq = !!item.isRequest;
+                  const isDraggable = !isPast && !isCurrent && !isMemberFollowing;
 
                   return (
                     <View
                       key={item.id || idx}
+                      {...(Platform.OS === 'web' && isDraggable
+                        ? {
+                            draggable: true,
+                            onDragStart: (e: any) => {
+                              e.dataTransfer.setData('text/plain', String(idx));
+                              setDraggingIndex(idx);
+                            },
+                            onDragOver: (e: any) => {
+                              e.preventDefault();
+                              if (dragOverIndex !== idx) setDragOverIndex(idx);
+                            },
+                            onDragLeave: () => {
+                              if (dragOverIndex === idx) setDragOverIndex(null);
+                            },
+                            onDrop: (e: any) => {
+                              e.preventDefault();
+                              const fromStr = e.dataTransfer.getData('text/plain');
+                              const fromIdx = fromStr !== '' ? parseInt(fromStr, 10) : draggingIndex;
+                              if (fromIdx !== null && !isNaN(fromIdx) && fromIdx !== idx) {
+                                moveQueueSong(fromIdx, idx);
+                              }
+                              setDraggingIndex(null);
+                              setDragOverIndex(null);
+                            },
+                            onDragEnd: () => {
+                              setDraggingIndex(null);
+                              setDragOverIndex(null);
+                            },
+                          }
+                        : {})}
                       style={[
                         styles.queueRow,
                         isCurrent && styles.queueRowCurrent,
                         isNext && !isCurrent && styles.queueRowNext,
                         isPast && styles.queueRowPast,
+                        draggingIndex === idx && styles.queueRowDragging,
+                        dragOverIndex === idx && styles.queueRowDragOver,
                       ]}
                     >
+                      {/* Drag Handle Icon for Live Reordering */}
+                      {isDraggable && (
+                        <View style={styles.dragHandleCol}>
+                          <GripVertical size={16} color="#94A3B8" />
+                        </View>
+                      )}
+
                       <Text style={[styles.queueIndex, isCurrent && { color: '#FFFFFF' }]}>
                         {isPast ? '✓' : String(idx + 1).padStart(2, '0')}
                       </Text>
@@ -2380,5 +2708,128 @@ const styles = StyleSheet.create({
     color: '#64748B',
     textAlign: 'center',
     lineHeight: 18,
+  },
+  bpmGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  bpmBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  bpmBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#064E3B',
+    fontFamily: 'JetBrains Mono',
+  },
+  tapSubText: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: '#10B981',
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  autoScrollPillRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  autoScrollToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  autoScrollToggleBtnActive: {
+    backgroundColor: '#10B981',
+    borderColor: '#059669',
+  },
+  autoScrollToggleText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#065F46',
+    letterSpacing: 0.5,
+  },
+  speedPill: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  speedPillText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#065F46',
+    fontFamily: 'JetBrains Mono',
+  },
+  playerHeaderBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#064E3B',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  playerHeaderTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    fontFamily: 'DM Sans',
+    flexShrink: 1,
+  },
+  playerCloseBtn: {
+    padding: 3,
+    borderRadius: 4,
+  },
+  footerTogglePlayerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  footerTogglePlayerText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#065F46',
+  },
+  dragHandleCol: {
+    paddingHorizontal: 4,
+    paddingVertical: 8,
+    cursor: 'grab' as any,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  queueRowDragging: {
+    opacity: 0.4,
+    borderStyle: 'dashed',
+    borderColor: '#10B981',
+  },
+  queueRowDragOver: {
+    borderTopWidth: 3,
+    borderTopColor: '#10B981',
+    backgroundColor: '#ECFDF5',
   },
 });
