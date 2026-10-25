@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -27,6 +27,9 @@ import {
   getOfflineGigPackage,
   deleteOfflineGigPackage,
   OfflineGigPackage,
+  OfflineSongItem,
+  OfflineDownloadProgress,
+  SongDownloadState,
 } from '../../utils/offlineManager';
 import { useRouter } from 'expo-router';
 
@@ -51,9 +54,9 @@ export function OfflinePackageModal({
   const { colors, isDark } = useAppTheme();
 
   const [isLoading, setIsLoading] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState(0);
-  const [downloadingTitle, setDownloadingTitle] = useState('');
+  const [progress, setProgress] = useState<OfflineDownloadProgress | null>(null);
   const [pkg, setPkg] = useState<OfflineGigPackage | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Load existing offline package on open
   useEffect(() => {
@@ -67,7 +70,7 @@ export function OfflinePackageModal({
     setPkg(existing);
   };
 
-  const handleDownloadAll = async () => {
+  const handleDownload = async () => {
     if (!songs || songs.length === 0) {
       const msg = 'Please add songs to your setlist before preparing for offline gig.';
       if (Platform.OS === 'web') window.alert(msg);
@@ -75,20 +78,18 @@ export function OfflinePackageModal({
       return;
     }
 
+    const controller = new AbortController();
+    abortRef.current = controller;
     setIsLoading(true);
-    setDownloadProgress(0);
+    setProgress(null);
 
     try {
-      const result = await prepareOfflineGigPackage(
-        gigId,
-        setlistId,
-        gigInfo,
-        songs,
-        (progress, currentTitle) => {
-          setDownloadProgress(progress);
-          setDownloadingTitle(currentTitle);
-        }
-      );
+      // Saved songs are kept even when cancelled, so pressing Resume continues where this stopped
+      const result = await prepareOfflineGigPackage(gigId, setlistId, gigInfo, songs, {
+        concurrency: 4,
+        signal: controller.signal,
+        onProgress: setProgress,
+      });
       setPkg(result);
     } catch (e: any) {
       console.error('Error preparing offline package:', e);
@@ -96,10 +97,13 @@ export function OfflinePackageModal({
       if (Platform.OS === 'web') window.alert(msg);
       else Alert.alert('Download Incomplete', msg);
     } finally {
+      abortRef.current = null;
       setIsLoading(false);
-      setDownloadingTitle('');
+      setProgress(null);
     }
   };
+
+  const handleCancel = () => abortRef.current?.abort();
 
   const handleDeletePackage = async () => {
     await deleteOfflineGigPackage(setlistId);
@@ -110,6 +114,13 @@ export function OfflinePackageModal({
   const readySongs = pkg ? pkg.songs.filter((s) => s.status === 'ready').length : 0;
   const readinessPct = totalSongs > 0 ? Math.round((readySongs / totalSongs) * 100) : 0;
   const isFullyReady = totalSongs > 0 && readySongs === totalSongs;
+  const savedById = useMemo(() => new Map((pkg?.songs ?? []).map((s) => [s.song_id, s])), [pkg]);
+  const overallPct = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
+  const downloadLabel = isFullyReady
+    ? 'Update Offline Pack'
+    : pkg && readySongs > 0
+    ? `Resume (${totalSongs - readySongs} left)`
+    : 'Download All for Offline';
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -195,11 +206,18 @@ export function OfflinePackageModal({
 
           {/* Download in progress banner */}
           {isLoading && (
-            <View style={[styles.downloadingRow, { backgroundColor: colors.bgSecondary }]}>
-              <ActivityIndicator size="small" color="#10B981" />
-              <Text style={[styles.downloadingText, { color: colors.text }]}>
-                Caching: <Text style={{ fontWeight: '800' }}>{downloadingTitle}</Text> ({downloadProgress}%)
-              </Text>
+            <View style={[styles.downloadingRow, { backgroundColor: colors.bgSecondary, flexDirection: 'column', alignItems: 'stretch' }]}>
+              <View style={styles.progressHeaderRow}>
+                <ActivityIndicator size="small" color="#10B981" />
+                <Text style={[styles.downloadingText, { color: colors.text }]}>
+                  {progress?.done ?? 0} of {progress?.total ?? totalSongs} done
+                  {progress && progress.cached > 0 ? ` · ${progress.cached} from device` : ''}
+                </Text>
+                <Text style={[styles.overallPctText, { color: colors.text }]}>{overallPct}%</Text>
+              </View>
+              <View style={[styles.progressTrack, { backgroundColor: colors.bgCard }]}>
+                <View style={[styles.progressFill, { width: `${overallPct}%`, backgroundColor: '#10B981' }]} />
+              </View>
             </View>
           )}
 
@@ -215,8 +233,10 @@ export function OfflinePackageModal({
               const artist = s.artist || item.artist || 'Unknown';
               const key = item.transposed_key || s.original_key || 'C';
 
-              const offlineItem = pkg?.songs.find((ps) => ps.song_id === (s.id || item.id));
-              const isReady = offlineItem?.status === 'ready';
+              const songId = s.id || item.id;
+              const saved = savedById.get(songId);
+              const liveState = isLoading ? progress?.songs[songId] : undefined;
+              const rowState: SongDownloadState = liveState ?? stateFromSaved(saved);
 
               return (
                 <View
@@ -239,17 +259,7 @@ export function OfflinePackageModal({
                   </View>
 
                   <View style={styles.statusCol}>
-                    {isReady ? (
-                      <View style={styles.readyTag}>
-                        <CheckCircle2 size={13} color="#10B981" />
-                        <Text style={styles.readyTagText}>SAVED</Text>
-                      </View>
-                    ) : (
-                      <View style={styles.missingTag}>
-                        <AlertCircle size={13} color="#F59E0B" />
-                        <Text style={styles.missingTagText}>MISSING</Text>
-                      </View>
-                    )}
+                    <SongStatusTag state={rowState} />
                   </View>
                 </View>
               );
@@ -268,23 +278,20 @@ export function OfflinePackageModal({
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity
-              style={[
-                styles.downloadBtn,
-                { backgroundColor: isFullyReady ? '#059669' : '#10B981' },
-              ]}
-              onPress={handleDownloadAll}
-              disabled={isLoading}
-            >
-              <Download size={18} color="#FFFFFF" />
-              <Text style={styles.downloadBtnText}>
-                {isLoading
-                  ? 'Saving Offline...'
-                  : isFullyReady
-                  ? 'Re-Download & Verify All'
-                  : 'Download All for Offline'}
-              </Text>
-            </TouchableOpacity>
+            {isLoading ? (
+              <TouchableOpacity style={[styles.downloadBtn, { backgroundColor: '#B91C1C' }]} onPress={handleCancel}>
+                <X size={18} color="#FFFFFF" />
+                <Text style={styles.downloadBtnText}>Cancel</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.downloadBtn, { backgroundColor: isFullyReady ? '#059669' : '#10B981' }]}
+                onPress={handleDownload}
+              >
+                <Download size={18} color="#FFFFFF" />
+                <Text style={styles.downloadBtnText}>{downloadLabel}</Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={styles.stageBtn}
@@ -303,6 +310,39 @@ export function OfflinePackageModal({
         </View>
       </View>
     </Modal>
+  );
+}
+
+/** Saved package status to the state shown on a row when no download is running. */
+function stateFromSaved(saved?: OfflineSongItem): SongDownloadState {
+  if (!saved) return 'queued';
+  if (saved.status === 'ready') return 'ready';
+  if (saved.status === 'missing_lyrics') return 'missing_lyrics';
+  if (saved.status === 'failed') return 'failed';
+  return 'queued';
+}
+
+const STATUS_TAGS: Record<SongDownloadState, { label: string; color: string; bg: string }> = {
+  queued: { label: 'QUEUED', color: '#9CA3AF', bg: 'rgba(156, 163, 175, 0.15)' },
+  cached: { label: 'ON DEVICE', color: '#10B981', bg: 'rgba(16, 185, 129, 0.15)' },
+  downloading: { label: 'DOWNLOADING', color: '#60A5FA', bg: 'rgba(96, 165, 250, 0.15)' },
+  ready: { label: 'SAVED', color: '#10B981', bg: 'rgba(16, 185, 129, 0.15)' },
+  missing_lyrics: { label: 'MISSING', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.15)' },
+  failed: { label: 'FAILED', color: '#EF4444', bg: 'rgba(239, 68, 68, 0.15)' },
+};
+
+function SongStatusTag({ state }: { state: SongDownloadState }) {
+  const tag = STATUS_TAGS[state];
+  const Icon = state === 'missing_lyrics' || state === 'failed' ? AlertCircle : CheckCircle2;
+  return (
+    <View style={[styles.statusTag, { backgroundColor: tag.bg }]}>
+      {state === 'downloading' ? (
+        <ActivityIndicator size={10} color={tag.color} />
+      ) : state === 'queued' ? null : (
+        <Icon size={13} color={tag.color} />
+      )}
+      <Text style={[styles.statusTagText, { color: tag.color }]}>{tag.label}</Text>
+    </View>
   );
 }
 
@@ -460,34 +500,27 @@ const styles = StyleSheet.create({
   statusCol: {
     alignItems: 'flex-end',
   },
-  readyTag: {
+  statusTag: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
   },
-  readyTagText: {
-    color: '#10B981',
+  statusTagText: {
     fontSize: 10,
     fontWeight: '800',
     fontFamily: 'DM Sans',
   },
-  missingTag: {
+  progressHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
+    gap: 10,
   },
-  missingTagText: {
-    color: '#F59E0B',
-    fontSize: 10,
-    fontWeight: '800',
+  overallPctText: {
+    fontSize: 12,
+    fontWeight: '900',
     fontFamily: 'DM Sans',
   },
   actionsRow: {
