@@ -43,6 +43,7 @@ import {
   GripVertical,
   Clock,
   Gauge,
+  RotateCw,
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
@@ -192,17 +193,6 @@ export default function StageModeScreen() {
         ytPlayerRef.current?.seekTo(Number(args[0]) || 0, true);
       }
     } catch {}
-  };
-
-  const handleYtError = () => {
-    // Not embeddable / removed: move on to the next candidate automatically
-    if (minusOneCandidates.length > 1 && minusOneCandidateIdx < minusOneCandidates.length - 1) {
-      const next = minusOneCandidateIdx + 1;
-      setMinusOneCandidateIdx(next);
-      setMinusOneVideoId(minusOneCandidates[next]);
-    } else {
-      setMinusOneVideoId(null);
-    }
   };
 
   const formatSongTime = (sec: any): string => {
@@ -850,30 +840,85 @@ export default function StageModeScreen() {
     }
   };
 
-  // Toggle Minus 1 Backing Track: auto-search YouTube for the most played karaoke version
-  const handleToggleMinusOne = async () => {
-    if (isMinusOneVisible) {
-      setIsMinusOneVisible(false);
-      return;
-    }
-    setIsMinusOneVisible(true);
-    if (!minusOneVideoId) {
+  // ── Minus 1 track loading ──
+  // Every load takes a request id. A result is applied only while it is still the latest request, so a
+  // slow search for a previous song can never land on the current one. Cached ids skip the network.
+  const minusOneReqRef = useRef<number>(0);
+  const minusOneCacheRef = useRef<Map<string, string[]>>(new Map());
+  const minusOneBroadRef = useRef<boolean>(false);
+  const [minusOneFailed, setMinusOneFailed] = useState<boolean>(false);
+
+  const loadMinusOneTrack = async (title: string, artist: string, broaden = false) => {
+    const reqId = ++minusOneReqRef.current;
+    const cacheKey = `${title}|${artist}|${broaden ? 'broad' : 'karaoke'}`;
+    setMinusOneVideoId(null);
+    setMinusOneFailed(false);
+
+    let ids = minusOneCacheRef.current.get(cacheKey);
+    if (!ids) {
       setIsLoadingMinusOne(true);
       try {
-        const titleToSearch = currentSetlistSong?.song?.title || '';
-        const artistToSearch = currentSetlistSong?.song?.artist || '';
-        const ids = await fetchKaraokeVideoIds(titleToSearch, artistToSearch);
-        if (ids.length > 0) {
-          setMinusOneCandidates(ids);
-          setMinusOneCandidateIdx(0);
-          setMinusOneVideoId(ids[0]);
-        }
+        ids = await fetchKaraokeVideoIds(title, artist, { broaden });
       } catch (e) {
         console.warn('Minus 1 fetch error:', e);
-      } finally {
-        setIsLoadingMinusOne(false);
+        ids = [];
       }
+      if (reqId !== minusOneReqRef.current) return; // superseded by another song or a close
+      if (ids.length > 0) minusOneCacheRef.current.set(cacheKey, ids);
     }
+    setIsLoadingMinusOne(false);
+
+    if (ids.length > 0) {
+      minusOneBroadRef.current = broaden;
+      setMinusOneCandidates(ids);
+      setMinusOneCandidateIdx(0);
+      setMinusOneVideoId(ids[0]);
+      return;
+    }
+    // Nothing from the karaoke search: try once more with a broader search before giving up
+    if (!broaden) {
+      loadMinusOneTrack(title, artist, true);
+      return;
+    }
+    setMinusOneFailed(true);
+  };
+
+  const forgetMinusOne = (title: string, artist: string) => {
+    minusOneCacheRef.current.delete(`${title}|${artist}|karaoke`);
+    minusOneCacheRef.current.delete(`${title}|${artist}|broad`);
+  };
+
+  // Not embeddable / removed / blocked: try the next candidate, then re-resolve the song
+  const handleYtError = () => {
+    if (minusOneCandidates.length > 1 && minusOneCandidateIdx < minusOneCandidates.length - 1) {
+      const next = minusOneCandidateIdx + 1;
+      setMinusOneCandidateIdx(next);
+      setMinusOneVideoId(minusOneCandidates[next]);
+      return;
+    }
+    const title = currentSetlistSong?.song?.title || '';
+    const artist = currentSetlistSong?.song?.artist || '';
+    forgetMinusOne(title, artist); // dead ids must not come back from the cache
+    if (!minusOneBroadRef.current) {
+      loadMinusOneTrack(title, artist, true);
+      return;
+    }
+    setMinusOneVideoId(null);
+    setMinusOneFailed(true);
+  };
+
+  // Keep the track in step with the song: loads when Minus 1 opens and again on every Next / Prev / song tap
+  useEffect(() => {
+    if (!isMinusOneVisible || !currentSetlistSong) return;
+    loadMinusOneTrack(currentSetlistSong.song?.title || '', currentSetlistSong.song?.artist || '');
+    return () => {
+      // Invalidate in-flight requests when the song changes or the player closes
+      minusOneReqRef.current += 1;
+    };
+  }, [isMinusOneVisible, currentIndex, syncCurrentSong?.songId]);
+
+  const handleToggleMinusOne = () => {
+    setIsMinusOneVisible((visible) => !visible);
   };
 
   // Jump to specific line when tapped
@@ -1508,11 +1553,11 @@ export default function StageModeScreen() {
 
           <View style={{ height: miniPlayerVideoHeight }}>
 
-          {isLoadingMinusOne ? (
+          {isLoadingMinusOne || (!minusOneVideoId && !minusOneFailed) ? (
             <View style={styles.playerLoadingBox}>
               <ActivityIndicator size="small" color="#10B981" />
               <Text style={styles.playerLoadingText}>
-                Finding backing track...
+                {minusOneBroadRef.current ? 'No karaoke track, trying an instrumental...' : 'Finding backing track...'}
               </Text>
             </View>
           ) : minusOneVideoId ? (
@@ -1564,7 +1609,20 @@ export default function StageModeScreen() {
             )
           ) : (
             <View style={styles.playerLoadingBox}>
-              <Text style={styles.playerLoadingText}>No playable track found.</Text>
+              <Text style={styles.playerLoadingText}>No backing track found for this song.</Text>
+              <View style={styles.playerFallbackRow}>
+                <TouchableOpacity
+                  style={styles.ytSearchFallbackBtn}
+                  onPress={() => {
+                    const title = currentSetlistSong.song?.title || '';
+                    const artist = currentSetlistSong.song?.artist || '';
+                    forgetMinusOne(title, artist);
+                    loadMinusOneTrack(title, artist, false);
+                  }}
+                >
+                  <RotateCw size={13} color="#FFFFFF" />
+                  <Text style={styles.ytSearchFallbackText}>Retry</Text>
+                </TouchableOpacity>
               <TouchableOpacity
                 style={styles.ytSearchFallbackBtn}
                 onPress={() => {
@@ -1580,6 +1638,7 @@ export default function StageModeScreen() {
                 <ExternalLink size={13} color="#FFFFFF" />
                 <Text style={styles.ytSearchFallbackText}>Search YouTube</Text>
               </TouchableOpacity>
+              </View>
             </View>
           )}
           </View>
@@ -3338,6 +3397,10 @@ const baseStyles = StyleSheet.create({
     gap: 8,
     padding: 12,
     backgroundColor: '#022C22',
+  },
+  playerFallbackRow: {
+    flexDirection: 'row',
+    gap: 8,
   },
   playerLoadingText: {
     fontSize: 12,

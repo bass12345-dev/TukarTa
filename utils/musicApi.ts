@@ -299,8 +299,13 @@ export async function fetchSongRealBpm(
  * Searches YouTube for the most reliable Minus 1 / Karaoke backing track for a song,
  * sanitizes placeholder artists, and returns the direct videoIds to embed and auto-play.
  * Uses the Supabase `youtube-minus-one` Edge Function first so Web and Mobile never hit CORS limits.
+ * `broaden` skips the karaoke-only search and looks for an instrumental version instead (second attempt).
  */
-export async function fetchKaraokeVideoIds(title: string, artist?: string): Promise<string[]> {
+export async function fetchKaraokeVideoIds(
+  title: string,
+  artist?: string,
+  options: { broaden?: boolean } = {}
+): Promise<string[]> {
   const cleanArtist = (artist || '')
     .replace(/\b(audience request|unknown artist|custom request|requested song|request|unknown)\b/gi, '')
     .trim();
@@ -308,19 +313,22 @@ export async function fetchKaraokeVideoIds(title: string, artist?: string): Prom
   if (!cleanTitle) return [];
 
   // 1. Primary: Supabase Edge Function (server-side YouTube scrape + oEmbed embeddability check, zero CORS)
-  try {
-    const { data, error } = await supabase.functions.invoke('youtube-minus-one', {
-      body: { title: cleanTitle, artist: cleanArtist },
-    });
-    if (!error && Array.isArray(data?.ids) && data.ids.length > 0) {
-      return data.ids;
+  if (!options.broaden) {
+    try {
+      const { data, error } = await supabase.functions.invoke('youtube-minus-one', {
+        body: { title: cleanTitle, artist: cleanArtist },
+      });
+      if (!error && Array.isArray(data?.ids) && data.ids.length > 0) {
+        return data.ids;
+      }
+    } catch (err) {
+      console.warn('Edge function youtube-minus-one fallback to direct:', err);
     }
-  } catch (err) {
-    console.warn('Edge function youtube-minus-one fallback to direct:', err);
   }
 
   // 2. Fallback: Direct YouTube search (works on Native Android/iOS without CORS)
-  const query = cleanArtist ? `${cleanTitle} ${cleanArtist} karaoke minus 1` : `${cleanTitle} karaoke minus 1`;
+  const suffix = options.broaden ? 'instrumental' : 'karaoke minus 1';
+  const query = cleanArtist ? `${cleanTitle} ${cleanArtist} ${suffix}` : `${cleanTitle} ${suffix}`;
 
   try {
     const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
