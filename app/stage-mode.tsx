@@ -31,14 +31,20 @@ import {
   CornerDownRight,
   Check,
   X,
+  ChevronUp,
+  ChevronDown,
+  Type,
+  Eye,
+  EyeOff,
 } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
 import { useSetlistSongs, useMyKnownSongs } from '../utils/hooks/useMusician';
 import { useSongLyrics } from '../utils/hooks/useSongs';
 import { useBandSession } from '../context/bandSession';
 import { getOfflineGigPackage } from '../utils/offlineManager';
 import { supabase } from '../utils/supabase';
-import { searchSongs } from '../utils/musicApi';
+import { searchSongs, getLyrics } from '../utils/musicApi';
 import {
   parseLineSegments,
   transposeChord,
@@ -87,6 +93,33 @@ export default function StageModeScreen() {
   const [isMinusOneVisible, setIsMinusOneVisible] = useState(false);
   const [isQueueVisible, setIsQueueVisible] = useState(false);
   const [offlineSongs, setOfflineSongs] = useState<any[]>([]);
+
+  // Stage View Customization: Lyrics font size & Collapsible Top Section
+  const [lyricsFontSize, setLyricsFontSize] = useState<number>(20);
+  const [isHeaderHidden, setIsHeaderHidden] = useState<boolean>(false);
+  const [isManualFetching, setIsManualFetching] = useState<boolean>(false);
+
+  // Load persisted font size
+  useEffect(() => {
+    AsyncStorage.getItem('@stage_lyrics_font_size')
+      .then((val) => {
+        if (val) {
+          const parsed = parseInt(val, 10);
+          if (!isNaN(parsed) && parsed >= 12 && parsed <= 38) {
+            setLyricsFontSize(parsed);
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleFontSizeChange = (delta: number) => {
+    setLyricsFontSize((prev) => {
+      const next = Math.min(36, Math.max(14, prev + delta));
+      AsyncStorage.setItem('@stage_lyrics_font_size', String(next)).catch(() => {});
+      return next;
+    });
+  };
 
   // Load offline gig package fallback if offline or db empty
   useEffect(() => {
@@ -254,20 +287,26 @@ export default function StageModeScreen() {
 
   // Add an audience request immediately into the live queue
   const handleAddAudienceRequest = async (
-    songItem: { id?: string; title: string; artist?: string; original_key?: string; bpm?: number; plain_lyrics?: string },
+    songItem: { id?: string; title: string; artist?: string; original_key?: string; bpm?: number; plain_lyrics?: string; plainLyrics?: string },
     mode: 'play_next' | 'play_now'
   ) => {
     const cleanTitle = (songItem.title || 'Untitled Request').trim();
-    const cleanArtist = (songItem.artist || 'Audience Request').trim();
+    const rawArtist = (songItem.artist || '').trim();
+    const isPlaceholderArtist =
+      !rawArtist ||
+      /^(audience request|unknown artist|custom request|requested song|request|unknown)$/i.test(rawArtist);
+    const cleanArtist = isPlaceholderArtist ? 'Audience Request' : rawArtist;
     const cleanKey = songItem.original_key || 'C';
+    const initialLyrics = songItem.plain_lyrics || (songItem as any).plainLyrics || undefined;
+    const generatedSongId = songItem.id || `custom_${Date.now()}`;
 
     const newQueueItem = {
       id: `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       position: mode === 'play_now' ? currentIndex + 1 : currentIndex + 2,
       isRequest: true,
-      plain_lyrics: songItem.plain_lyrics,
+      plain_lyrics: initialLyrics,
       song: {
-        id: songItem.id || `custom_${Date.now()}`,
+        id: generatedSongId,
         title: cleanTitle,
         artist: cleanArtist,
         original_key: cleanKey,
@@ -293,6 +332,32 @@ export default function StageModeScreen() {
     setTimeout(() => {
       setRequestNotice(null);
     }, 4000);
+
+    // If lyrics weren't bundled with the song item, fetch immediately from LRCLIB in background
+    if (!initialLyrics) {
+      getLyrics(isPlaceholderArtist ? '' : cleanArtist, cleanTitle)
+        .then((fetched) => {
+          if (fetched?.plainLyrics) {
+            setCustomQueue((prevQueue) => {
+              const list = prevQueue || songsList;
+              return list.map((item) => {
+                if (item.song?.id === generatedSongId || (item.song?.title === cleanTitle && !item.plain_lyrics)) {
+                  return {
+                    ...item,
+                    plain_lyrics: fetched.plainLyrics,
+                    song: {
+                      ...item.song,
+                      artist: isPlaceholderArtist && fetched.artist ? fetched.artist : item.song.artist,
+                    },
+                  };
+                }
+                return item;
+              });
+            });
+          }
+        })
+        .catch(() => {});
+    }
 
     // Save to database if setlistId is active
     if (setlistId && isUuid(setlistId)) {
@@ -325,6 +390,47 @@ export default function StageModeScreen() {
       } catch (e) {
         console.warn('Setlist song async persist note:', e);
       }
+    }
+  };
+
+  // 1-Tap Instant LRCLIB fetch for the song currently on stage
+  const handleFetchCurrentLyrics = async () => {
+    const rawSongTitle = currentSetlistSong?.song?.title;
+    if (!rawSongTitle) return;
+    setIsManualFetching(true);
+    try {
+      const fetched = await getLyrics(
+        currentSetlistSong?.song?.artist || '',
+        rawSongTitle
+      );
+      if (fetched?.plainLyrics) {
+        setCustomQueue((prev) => {
+          const list = prev || songsList;
+          return list.map((item, idx) =>
+            idx === currentIndex
+              ? {
+                  ...item,
+                  plain_lyrics: fetched.plainLyrics,
+                  song: {
+                    ...item.song,
+                    artist:
+                      currentSetlistSong?.song?.artist === 'Audience Request' && fetched.artist
+                        ? fetched.artist
+                        : item.song.artist,
+                  },
+                }
+              : item
+          );
+        });
+        setRequestNotice(`Lyrics fetched for "${rawSongTitle}"`);
+        setTimeout(() => setRequestNotice(null), 3500);
+      } else {
+        alert('Could not find lyrics on LRCLIB. Please import chords manually.');
+      }
+    } catch (e) {
+      console.warn('Manual LRCLIB fetch error:', e);
+    } finally {
+      setIsManualFetching(false);
     }
   };
 
@@ -479,33 +585,90 @@ export default function StageModeScreen() {
 
       {/* ── Top Status Bar ── */}
       <View style={styles.topStatusBar}>
-        <View style={styles.syncStatusGroup}>
-          <View
-            style={[
-              styles.pulseDot,
-              sessionCode
-                ? { backgroundColor: isOfflineHotspot ? '#F59E0B' : isLeader ? '#EF4444' : '#10B981' }
-                : null,
-            ]}
-          />
-          <Text style={styles.syncStatusText}>
-            {sessionCode
-              ? isLeader
-                ? isOfflineHotspot
-                  ? `HOTSPOT P2P (${members.length}) • ${sessionCode}`
-                  : `BROADCASTING (${members.length}) • ${sessionCode}`
-                : isOfflineHotspot
-                  ? `HOTSPOT SYNC WITH LEADER • ${sessionCode}`
-                  : `IN SYNC WITH LEADER • ${sessionCode}`
-              : `OFFLINE STAGE MODE • ${lyricsData?.provider === 'user_import' ? 'CHORDPRO' : 'LRCLIB SYNC'}`}
-          </Text>
-        </View>
+        {isHeaderHidden ? (
+          <TouchableOpacity
+            style={styles.compactSongPill}
+            onPress={() => setIsHeaderHidden(false)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.compactSongTitle} numberOfLines={1}>
+              {displayedTitle}
+            </Text>
+            <View style={styles.compactKeyTag}>
+              <Text style={styles.compactKeyText}>KEY: {activeKey}</Text>
+            </View>
+            <ChevronDown size={14} color="#065F46" />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.syncStatusGroup}>
+            <View
+              style={[
+                styles.pulseDot,
+                sessionCode
+                  ? { backgroundColor: isOfflineHotspot ? '#F59E0B' : isLeader ? '#EF4444' : '#10B981' }
+                  : null,
+              ]}
+            />
+            <Text style={styles.syncStatusText}>
+              {sessionCode
+                ? isLeader
+                  ? isOfflineHotspot
+                    ? `HOTSPOT P2P (${members.length}) • ${sessionCode}`
+                    : `BROADCASTING (${members.length}) • ${sessionCode}`
+                  : isOfflineHotspot
+                    ? `HOTSPOT SYNC WITH LEADER • ${sessionCode}`
+                    : `IN SYNC WITH LEADER • ${sessionCode}`
+                : `OFFLINE STAGE MODE • ${lyricsData?.provider === 'user_import' ? 'CHORDPRO' : 'LRCLIB SYNC'}`}
+            </Text>
+          </View>
+        )}
 
         <View style={styles.topRightActions}>
-          <TouchableOpacity style={styles.importHeaderBtn} onPress={handleOpenImportChords}>
-            <FileCode2 size={13} color="#10B981" />
-            <Text style={styles.importHeaderBtnText}>IMPORT CHORDS</Text>
+          {/* ── Customizable Lyrics Font Size (A- / A+) ── */}
+          <View style={styles.fontSizeControls}>
+            <TouchableOpacity
+              style={styles.fontSizeBtn}
+              onPress={() => handleFontSizeChange(-2)}
+              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            >
+              <Text style={styles.fontSizeBtnText}>A-</Text>
+            </TouchableOpacity>
+            <View style={styles.fontSizeBadge}>
+              <Text style={styles.fontSizeBadgeText}>{lyricsFontSize}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.fontSizeBtn}
+              onPress={() => handleFontSizeChange(2)}
+              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            >
+              <Text style={styles.fontSizeBtnText}>A+</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* ── Hide/Show Top Section Toggle ── */}
+          <TouchableOpacity
+            style={[styles.hideTopBtn, isHeaderHidden && styles.hideTopBtnActive]}
+            onPress={() => setIsHeaderHidden((v) => !v)}
+          >
+            {isHeaderHidden ? (
+              <>
+                <ChevronDown size={13} color="#065F46" />
+                <Text style={styles.hideTopBtnText}>SHOW TOP</Text>
+              </>
+            ) : (
+              <>
+                <ChevronUp size={13} color="#065F46" />
+                <Text style={styles.hideTopBtnText}>HIDE TOP</Text>
+              </>
+            )}
           </TouchableOpacity>
+
+          {!isHeaderHidden && (
+            <TouchableOpacity style={styles.importHeaderBtn} onPress={handleOpenImportChords}>
+              <FileCode2 size={13} color="#10B981" />
+              <Text style={styles.importHeaderBtnText}>IMPORT</Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={styles.exitBtn}
@@ -517,66 +680,68 @@ export default function StageModeScreen() {
         </View>
       </View>
 
-      {/* ── Song Info & Live Key Transposer Section ── */}
-      <View style={styles.songInfoSection}>
-        <View style={styles.songInfoMain}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.songTitle} numberOfLines={1}>
-              {displayedTitle}
-            </Text>
-            <Text style={styles.songArtist}>
-              {displayedArtist}
-            </Text>
-          </View>
-
-          <View style={styles.songInfoRight}>
-            <View style={styles.transposeControls}>
-              <TouchableOpacity
-                style={styles.transposeStepBtn}
-                onPress={() => setTransposeSteps((s) => s - 1)}
-              >
-                <Text style={styles.transposeStepText}>-</Text>
-              </TouchableOpacity>
-
-              <View style={styles.keyBadge}>
-                <Text style={styles.keyBadgeText}>
-                  KEY: {activeKey}
-                  {transposeSteps !== 0 ? ` (${transposeSteps > 0 ? `+${transposeSteps}` : transposeSteps})` : ''}
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                style={styles.transposeStepBtn}
-                onPress={() => setTransposeSteps((s) => s + 1)}
-              >
-                <Text style={styles.transposeStepText}>+</Text>
-              </TouchableOpacity>
+      {/* ── Song Info & Live Key Transposer Section (Collapsible) ── */}
+      {!isHeaderHidden && (
+        <View style={styles.songInfoSection}>
+          <View style={styles.songInfoMain}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.songTitle} numberOfLines={1}>
+                {displayedTitle}
+              </Text>
+              <Text style={styles.songArtist}>
+                {displayedArtist}
+              </Text>
             </View>
 
-            {displayedNextTitle ? (
-              <View style={styles.nextSongBadgeRow}>
-                <Text style={styles.nextSongLabel} numberOfLines={1}>
-                  NEXT: {displayedNextTitle} {displayedNextKey ? `(${displayedNextKey})` : ''}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        </View>
+            <View style={styles.songInfoRight}>
+              <View style={styles.transposeControls}>
+                <TouchableOpacity
+                  style={styles.transposeStepBtn}
+                  onPress={() => setTransposeSteps((s) => s - 1)}
+                >
+                  <Text style={styles.transposeStepText}>-</Text>
+                </TouchableOpacity>
 
-        {/* Progress scrub bar */}
-        <View style={styles.progressSection}>
-          <View style={styles.timeRow}>
-            <Text style={styles.timeText}>01:42</Text>
-            <Text style={styles.timeText}>-02:36</Text>
+                <View style={styles.keyBadge}>
+                  <Text style={styles.keyBadgeText}>
+                    KEY: {activeKey}
+                    {transposeSteps !== 0 ? ` (${transposeSteps > 0 ? `+${transposeSteps}` : transposeSteps})` : ''}
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.transposeStepBtn}
+                  onPress={() => setTransposeSteps((s) => s + 1)}
+                >
+                  <Text style={styles.transposeStepText}>+</Text>
+                </TouchableOpacity>
+              </View>
+
+              {displayedNextTitle ? (
+                <View style={styles.nextSongBadgeRow}>
+                  <Text style={styles.nextSongLabel} numberOfLines={1}>
+                    NEXT: {displayedNextTitle} {displayedNextKey ? `(${displayedNextKey})` : ''}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
           </View>
-          <View style={styles.progressBase}>
-            <View style={[styles.progressFill, { width: '42%' }]} />
+
+          {/* Progress scrub bar */}
+          <View style={styles.progressSection}>
+            <View style={styles.timeRow}>
+              <Text style={styles.timeText}>01:42</Text>
+              <Text style={styles.timeText}>-02:36</Text>
+            </View>
+            <View style={styles.progressBase}>
+              <View style={[styles.progressFill, { width: '42%' }]} />
+            </View>
           </View>
         </View>
-      </View>
+      )}
 
       {/* ── Embedded Minus 1 Player (Collapsible) ── */}
-      {isMinusOneVisible && currentSetlistSong && (
+      {!isHeaderHidden && isMinusOneVisible && currentSetlistSong && (
         <View style={styles.playerContainer}>
           <WebView
             style={styles.webview}
@@ -623,8 +788,26 @@ export default function StageModeScreen() {
                       <View key={lIdx} style={styles.chordLineWrap}>
                         {parsedLine.segments.map((seg, sIdx) => (
                           <View key={sIdx} style={styles.chordSegmentCol}>
-                            <Text style={styles.stageChordText}>{seg.chord || ' '}</Text>
-                            <Text style={styles.stageLyricWithChordText}>
+                            <Text
+                              style={[
+                                styles.stageChordText,
+                                {
+                                  fontSize: Math.round(lyricsFontSize * 0.78),
+                                  lineHeight: Math.round(lyricsFontSize * 1.05),
+                                },
+                              ]}
+                            >
+                              {seg.chord || ' '}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.stageLyricWithChordText,
+                                {
+                                  fontSize: lyricsFontSize,
+                                  lineHeight: Math.round(lyricsFontSize * 1.45),
+                                },
+                              ]}
+                            >
                               {seg.lyric || (seg.chord ? '   ' : '')}
                             </Text>
                           </View>
@@ -637,7 +820,14 @@ export default function StageModeScreen() {
                   return (
                     <Text
                       key={lIdx}
-                      style={[styles.lyricLine, isHighlighted && styles.lyricLineHighlighted]}
+                      style={[
+                        styles.lyricLine,
+                        isHighlighted && styles.lyricLineHighlighted,
+                        {
+                          fontSize: lyricsFontSize,
+                          lineHeight: Math.round(lyricsFontSize * 1.5),
+                        },
+                      ]}
                     >
                       {line}
                     </Text>
@@ -679,6 +869,22 @@ export default function StageModeScreen() {
 
             {/* Web Search & Direct Import buttons */}
             <View style={styles.searchFallback}>
+              {/* Instant 1-Tap LRCLIB Fetch Button */}
+              <TouchableOpacity
+                style={[styles.importCtaPill, { backgroundColor: '#059669', marginBottom: 10 }]}
+                disabled={isManualFetching}
+                onPress={handleFetchCurrentLyrics}
+              >
+                {isManualFetching ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Sparkles size={15} color="#FFFFFF" />
+                )}
+                <Text style={styles.importCtaText}>
+                  {isManualFetching ? 'Searching LRCLIB...' : `Instant Fetch Lyrics from LRCLIB`}
+                </Text>
+              </TouchableOpacity>
+
               <TouchableOpacity style={styles.importCtaPill} onPress={handleOpenImportChords}>
                 <FileCode2 size={15} color="#FFFFFF" />
                 <Text style={styles.importCtaText}>Import Web Chords / Tab for "{currentSetlistSong?.song?.title}"</Text>
@@ -1194,12 +1400,98 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingTop: Platform.OS === 'ios' ? 52 : 36,
-    paddingBottom: 12,
+    paddingBottom: 10,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#D1FAE5',
+  },
+  compactSongPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    maxWidth: '45%',
+  },
+  compactSongTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#064E3B',
+    fontFamily: 'DM Sans',
+    flexShrink: 1,
+  },
+  compactKeyTag: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  compactKeyText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    fontFamily: 'JetBrains Mono',
+  },
+  fontSizeControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+    borderRadius: 14,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    gap: 4,
+  },
+  fontSizeBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  fontSizeBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#065F46',
+    fontFamily: 'DM Sans',
+  },
+  fontSizeBadge: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 8,
+  },
+  fontSizeBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    fontFamily: 'JetBrains Mono',
+  },
+  hideTopBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 14,
+  },
+  hideTopBtnActive: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#10B981',
+  },
+  hideTopBtnText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#065F46',
+    fontFamily: 'DM Sans',
   },
   syncStatusGroup: {
     flexDirection: 'row',

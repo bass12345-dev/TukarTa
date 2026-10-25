@@ -34,9 +34,9 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  */
 async function fetchWithRetry(
   url: string,
-  retries = 2,
-  baseDelay = 600,
-  timeoutMs = 7000
+  retries = 3,
+  baseDelay = 700,
+  timeoutMs = 7500
 ): Promise<Response> {
   let lastErr: any;
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -46,6 +46,7 @@ async function fetchWithRetry(
       const res = await fetch(url, {
         headers: {
           Accept: 'application/json',
+          'User-Agent': 'TukarTa/1.0 (https://tukarta.app)',
         },
         signal: controller?.signal,
       });
@@ -57,7 +58,7 @@ async function fetchWithRetry(
       if (timer) clearTimeout(timer);
       lastErr = e;
     }
-    if (attempt < retries) await sleep(baseDelay * Math.pow(2, attempt));
+    if (attempt < retries) await sleep(baseDelay * Math.pow(1.5, attempt));
   }
   throw lastErr;
 }
@@ -146,23 +147,35 @@ export async function getArtistMetadata(artist: string) {
 
 /**
  * Fetches lyrics from LRCLIB:
- * 1) Exact match via /api/get?artist_name=...&track_name=...
- * 2) Fuzzy search fallback via /api/search?q=... if exact match 404s
- * 3) Fallback to lyrics.ovh if LRCLIB is overloaded
+ * 1) Strips placeholder artist names ("Audience Request", "Unknown", etc.)
+ * 2) Exact match via /api/get?artist_name=...&track_name=... (if artist is real)
+ * 3) Fuzzy search fallback via /api/search?q=... (handles title-only requests or variations)
+ * 4) Fallback to lyrics.ovh if LRCLIB has no lyrics or is overloaded
  */
 export async function getLyrics(artist: string, title: string) {
-  const cleanArtist = (artist || '').replace(/unknown artist/i, '').trim();
+  // Strip placeholder / dummy artist strings so title-only requests search cleanly
+  const cleanArtist = (artist || '')
+    .replace(/\b(audience request|unknown artist|custom request|requested song|request|unknown)\b/gi, '')
+    .trim();
   const cleanTitle = (title || '').trim();
 
-  // 1. Exact LRCLIB match
-  if (cleanArtist && cleanTitle) {
+  if (!cleanTitle) return null;
+
+  // 1. Exact LRCLIB match when a real artist name is provided
+  if (cleanArtist) {
     try {
       const url = `${LRCLIB_URL}/get?artist_name=${encodeURIComponent(cleanArtist)}&track_name=${encodeURIComponent(cleanTitle)}`;
       const response = await fetchWithRetry(url, 2, 500);
       if (response.ok) {
         const data = await response.json();
         if (data?.plainLyrics || data?.syncedLyrics) {
-          return data;
+          return {
+            plainLyrics: data.plainLyrics || null,
+            syncedLyrics: data.syncedLyrics || null,
+            artist: data.artistName || cleanArtist,
+            trackName: data.trackName || cleanTitle,
+            provider: 'lrclib',
+          };
         }
       }
     } catch (error) {
@@ -170,20 +183,27 @@ export async function getLyrics(artist: string, title: string) {
     }
   }
 
-  // 2. Fuzzy LRCLIB search fallback (handles slight title/artist variations like "(Remastered)" or "feat.")
+  // 2. LRCLIB search fallback: handles title-only audience requests & fuzzy variations
+  let discoveredArtist = cleanArtist;
   try {
-    const query = `${cleanTitle} ${cleanArtist}`.trim();
+    const query = cleanArtist ? `${cleanTitle} ${cleanArtist}`.trim() : cleanTitle;
     const searchUrl = `${LRCLIB_URL}/search?q=${encodeURIComponent(query)}`;
-    const searchRes = await fetchWithRetry(searchUrl, 2, 500);
+    const searchRes = await fetchWithRetry(searchUrl, 3, 700);
     if (searchRes.ok) {
       const items = await searchRes.json();
       if (Array.isArray(items) && items.length > 0) {
-        const withLyrics = items.find((i: any) => i.plainLyrics || i.syncedLyrics) || items[0];
+        const withLyrics = items.find((i: any) => i.plainLyrics || i.syncedLyrics);
         if (withLyrics && (withLyrics.plainLyrics || withLyrics.syncedLyrics)) {
           return {
             plainLyrics: withLyrics.plainLyrics || null,
             syncedLyrics: withLyrics.syncedLyrics || null,
+            artist: withLyrics.artistName || cleanArtist,
+            trackName: withLyrics.trackName || cleanTitle,
+            provider: 'lrclib',
           };
+        }
+        if (!discoveredArtist && items[0]?.artistName) {
+          discoveredArtist = items[0].artistName;
         }
       }
     }
@@ -191,10 +211,11 @@ export async function getLyrics(artist: string, title: string) {
     console.warn('LRCLIB /search lyrics fallback failed:', error);
   }
 
-  // 3. Secondary free lyrics fallback (lyrics.ovh) when LRCLIB is down
-  if (cleanArtist && cleanTitle) {
+  // 3. Secondary free lyrics fallback (lyrics.ovh) when LRCLIB has no lyrics
+  const artistForOvh = cleanArtist || discoveredArtist;
+  if (artistForOvh && cleanTitle) {
     try {
-      const ovhUrl = `https://api.lyrics.ovh/v1/${encodeURIComponent(cleanArtist)}/${encodeURIComponent(cleanTitle)}`;
+      const ovhUrl = `https://api.lyrics.ovh/v1/${encodeURIComponent(artistForOvh)}/${encodeURIComponent(cleanTitle)}`;
       const ovhRes = await fetchWithRetry(ovhUrl, 1, 400, 5000);
       if (ovhRes.ok) {
         const ovhData = await ovhRes.json();
@@ -202,6 +223,9 @@ export async function getLyrics(artist: string, title: string) {
           return {
             plainLyrics: ovhData.lyrics.trim(),
             syncedLyrics: null,
+            artist: artistForOvh,
+            trackName: cleanTitle,
+            provider: 'lyrics.ovh',
           };
         }
       }

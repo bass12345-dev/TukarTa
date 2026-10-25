@@ -37,7 +37,7 @@ export const isUuid = (val: any): boolean => typeof val === 'string' && UUID_REG
 
 export function useSongLyrics(songId: string, artist: string, title: string) {
   return useQuery({
-    queryKey: ['lyrics', songId],
+    queryKey: ['lyrics', songId, title, artist],
     queryFn: async () => {
       // 1. Check Offline Local Device Cache first (instant 0ms in Stage Mode, prioritized if user-imported)
       const localCached = await getLocalChartCache(songId);
