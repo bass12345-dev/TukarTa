@@ -102,6 +102,7 @@ export default function StageModeScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const scrollOffsetRef = useRef<number>(0);
   const tapTimesRef = useRef<number[]>([]);
+  const isUserScrollingRef = useRef<boolean>(false);
 
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
   const [currentBpm, setCurrentBpm] = useState<number>(120);
@@ -586,19 +587,24 @@ export default function StageModeScreen() {
     return () => clearInterval(timer);
   }, [isPlaying, songDuration]);
 
-  // Smooth auto-scroll loop aligned with real song duration
+  // Smooth auto-scroll: position derived from elapsed time (no accumulating drift / feedback)
+  const elapsedRef = useRef<number>(0);
+  elapsedRef.current = elapsedSeconds;
   useEffect(() => {
     if (!isPlaying || !isAutoScroll || contentHeight <= containerHeight) return;
-    const maxScroll = Math.max(0, contentHeight - containerHeight + 60);
-    const stepMs = 50;
-    const totalSteps = (songDuration * 1000) / stepMs;
-    const pxPerStep = (maxScroll / totalSteps) * scrollSpeedMultiplier;
-
+    const maxScroll = Math.max(0, contentHeight - containerHeight);
+    const startedAt = Date.now();
+    const startElapsed = elapsedRef.current;
     const scrollTimer = setInterval(() => {
-      scrollOffsetRef.current = Math.min(maxScroll, scrollOffsetRef.current + pxPerStep);
-      scrollViewRef.current?.scrollTo({ y: scrollOffsetRef.current, animated: false });
-    }, stepMs);
-
+      if (isUserScrollingRef.current) return;
+      const t = startElapsed + ((Date.now() - startedAt) / 1000) * scrollSpeedMultiplier;
+      const ratio = Math.max(0, Math.min(1, t / songDuration));
+      const y = ratio * maxScroll;
+      if (Math.abs(y - scrollOffsetRef.current) >= 1) {
+        scrollOffsetRef.current = y;
+        scrollViewRef.current?.scrollTo({ y, animated: false });
+      }
+    }, 33);
     return () => clearInterval(scrollTimer);
   }, [isPlaying, isAutoScroll, contentHeight, containerHeight, songDuration, scrollSpeedMultiplier]);
 
@@ -1127,10 +1133,23 @@ export default function StageModeScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        scrollEventThrottle={60}
+        scrollEventThrottle={50}
         onContentSizeChange={(_, h) => setContentHeight(h)}
         onLayout={(e) => setContainerHeight(e.nativeEvent.layout.height)}
+        onScrollBeginDrag={() => {
+          isUserScrollingRef.current = true;
+        }}
+        onScrollEndDrag={() => {
+          setTimeout(() => {
+            isUserScrollingRef.current = false;
+          }, 400);
+        }}
+        onMomentumScrollEnd={() => {
+          isUserScrollingRef.current = false;
+        }}
         onScroll={(e) => {
+          // Only user-driven scrolling syncs the timer; programmatic auto-scroll must not feed back
+          if (!isUserScrollingRef.current) return;
           const currentY = e.nativeEvent.contentOffset.y;
           if (typeof currentY === 'number' && !isNaN(currentY)) {
             scrollOffsetRef.current = currentY;
@@ -1138,9 +1157,7 @@ export default function StageModeScreen() {
             if (maxScroll > 20 && songDuration > 0) {
               const scrollRatio = Math.max(0, Math.min(1, currentY / maxScroll));
               const syncedSec = Math.round(scrollRatio * songDuration);
-              if (!isNaN(syncedSec)) {
-                setElapsedSeconds(syncedSec);
-              }
+              if (!isNaN(syncedSec)) setElapsedSeconds(syncedSec);
             }
           }
         }}

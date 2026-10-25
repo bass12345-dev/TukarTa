@@ -267,7 +267,22 @@ export async function fetchKaraokeVideoIds(title: string, artist?: string): Prom
       while ((m = reg.exec(html)) !== null) {
         if (!ids.includes(m[1])) ids.push(m[1]);
       }
-      return ids.slice(0, 6);
+      // Keep only videos that allow embedding (oEmbed returns 401/403 for blocked ones)
+      const candidates = ids.slice(0, 8);
+      const checks = await Promise.all(
+        candidates.map(async (id) => {
+          try {
+            const r = await fetch(
+              `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${id}&format=json`
+            );
+            return r.ok ? id : null;
+          } catch {
+            return id; // network/CORS hiccup: keep as candidate
+          }
+        })
+      );
+      const embeddable = checks.filter((x): x is string => !!x);
+      return (embeddable.length > 0 ? embeddable : candidates).slice(0, 6);
     }
   } catch (e) {
     console.warn('YouTube karaoke search failed:', e);
