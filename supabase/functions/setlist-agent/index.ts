@@ -133,7 +133,7 @@ async function authenticate(req: Request) {
 
 interface Validated {
   payload: Record<string, any>
-  preview: { title: string; subtitle: string; lines: string[] }
+  preview: { title: string; subtitle: string; lines: string[]; detail?: Record<string, any> }
   risk: 'low' | 'medium' | 'high'
 }
 
@@ -160,6 +160,36 @@ async function loadSetlist(ctx: Ctx, gigId: string) {
     rows = data || []
   }
   return { gig, setlistId: setlist?.id as string | undefined, rows }
+}
+
+interface BandLibraryEntry { song: any; knownBy: Set<string>; conf: number[]; live: number; tags: Set<string> }
+
+/** Every active member's song library for a band, indexed by song. Member names are untrusted display data. */
+async function bandLibraries(ctx: Ctx, bandId: string) {
+  const band = await requireBandMembership(ctx, bandId)
+  const memberIds = await activeBandMemberIds(ctx, bandId)
+  const [{ data: people }, { data: rows, error }] = await Promise.all([
+    ctx.db.from('users').select('id, display_name').in('id', memberIds),
+    ctx.db.from('musician_song_knowledge')
+      .select('musician_id, confidence_level, can_perform_live, genre, song:songs(id, title, artist, genre, original_key, bpm, duration_sec)')
+      .in('musician_id', memberIds).limit(5000),
+  ])
+  if (error) throw new ToolError(error.message)
+  const names = new Map<string, string>(memberIds.map((id) => {
+    const name = String((people || []).find((p: any) => p.id === id)?.display_name || 'A member').slice(0, 40)
+    return [id, id === ctx.user.id ? `${name} (you)` : name]
+  }))
+  const bySong = new Map<string, BandLibraryEntry>()
+  for (const r of rows || []) {
+    if (!r.song) continue
+    const e = bySong.get(r.song.id) || { song: r.song, knownBy: new Set<string>(), conf: [], live: 0, tags: new Set<string>() }
+    e.knownBy.add(r.musician_id); e.conf.push(r.confidence_level)
+    if (r.can_perform_live) e.live++
+    if (r.genre) e.tags.add(String(r.genre).toLowerCase())
+    bySong.set(r.song.id, e)
+  }
+  const missingFor = (songId: string) => memberIds.filter((m) => !bySong.get(songId)?.knownBy.has(m))
+  return { band, memberIds, names, bySong, missingFor }
 }
 
 async function songsById(ctx: Ctx, ids: string[]) {
@@ -303,6 +333,74 @@ const VALIDATORS: Record<string, (ctx: Ctx, a: any) => Promise<Validated>> = {
     }
   },
 
+  async band_setlist(ctx, a) {
+    const bandId = uuid(a.band_id, 'band_id')
+    const gigId = uuid(a.gig_id, 'gig_id')
+    if (!Array.isArray(a.song_ids) || a.song_ids.length < 1 || a.song_ids.length > 40) throw new ToolError('song_ids must contain 1-40 entries')
+    const songIds = [...new Set(a.song_ids.map((id: any) => uuid(id, 'song_id')))] as string[]
+    const lib = await bandLibraries(ctx, bandId)
+    const { gig, setlistId, rows } = await loadSetlist(ctx, gigId)
+    if (gig.band_id !== bandId) throw new ToolError('that gig belongs to a different band')
+    const songMap = await songsById(ctx, songIds)
+    const already = new Set(rows.map((r) => r.song_id))
+    const fresh = songIds.filter((id) => !already.has(id))
+    if (!fresh.length) throw new ToolError('all of those songs are already in the gig setlist')
+    const name = text(a.name, 'name', 60, false) || 'Main Setlist'
+
+    // Library additions: an explicit list (a stored or user-edited proposal) is only ever narrowed, never widened;
+    // otherwise every gap in the proposed songs is filled.
+    const adds = new Map<string, Set<string>>()
+    if (Array.isArray(a.library_adds)) {
+      for (const entry of a.library_adds) {
+        const member = uuid(entry?.musician_id, 'musician_id')
+        if (!lib.memberIds.includes(member)) throw new ToolError(`a selected musician is no longer in ${lib.band.name} — review the setlist again`)
+        if (!Array.isArray(entry?.song_ids)) throw new ToolError('library_adds entries need song_ids')
+        for (const raw of entry.song_ids) {
+          const songId = uuid(raw, 'song_id')
+          if (!fresh.includes(songId)) continue
+          if (!lib.missingFor(songId).includes(member)) continue // they learned it in the meantime
+          if (!adds.has(member)) adds.set(member, new Set())
+          adds.get(member)!.add(songId)
+        }
+      }
+    } else if (a.add_missing_to_libraries !== false) {
+      for (const songId of fresh) {
+        for (const member of lib.missingFor(songId)) {
+          if (!adds.has(member)) adds.set(member, new Set())
+          adds.get(member)!.add(songId)
+        }
+      }
+    }
+    const libraryAdds = [...adds].filter(([, s]) => s.size)
+      .map(([member, s]) => ({ musician_id: member, song_ids: fresh.filter((id) => s.has(id)) }))
+    const touchesOthers = libraryAdds.some((x) => x.musician_id !== ctx.user.id)
+
+    const minutes = Math.round(fresh.reduce((n, id) => n + (songMap.get(id).duration_sec || 240) + 20, 0) / 60)
+    const songLine = (id: string, i: number) => {
+      const missing = lib.missingFor(id).map((m) => lib.names.get(m))
+      return `${i + 1}. ${songMap.get(id).title} — ${songMap.get(id).artist}${missing.length ? `  · missing for: ${missing.join(', ')}` : ''}`
+    }
+    const addLines = libraryAdds.map((x) =>
+      `+ ${lib.names.get(x.musician_id)}'s library: ${x.song_ids.map((id) => songMap.get(id).title).join(', ')}`)
+    return {
+      risk: touchesOthers ? 'high' : 'low',
+      payload: { band_id: bandId, gig_id: gigId, name, song_ids: fresh, library_adds: libraryAdds },
+      preview: {
+        title: `Setlist for ${lib.band.name}`,
+        subtitle: `${gig.name} • ${fresh.length} song${fresh.length > 1 ? 's' : ''} • ~${minutes} min${rows.length ? ` • adds to ${rows.length} existing` : ''}`,
+        lines: [
+          ...fresh.map(songLine),
+          ...(addLines.length ? ['Will be added to member libraries:', ...addLines] : []),
+        ],
+        // Structured copy for the in-app editor (display only; the server re-validates every edit).
+        detail: {
+          songs: fresh.map((id) => ({ song_id: id, title: songMap.get(id).title, artist: songMap.get(id).artist, missing_for: lib.missingFor(id) })),
+          members: Object.fromEntries(lib.names),
+        },
+      },
+    }
+  },
+
   async invite_musician(ctx, a) {
     const bandId = uuid(a.band_id, 'band_id')
     const musicianId = uuid(a.musician_id, 'musician_id')
@@ -352,7 +450,7 @@ async function rewritePositions(ctx: Ctx, setlistId: string, rows: any[], finalO
   }
 }
 
-const EXECUTORS: Record<string, (ctx: Ctx, p: any) => Promise<Record<string, any>>> = {
+const EXECUTORS: Record<string, (ctx: Ctx, p: any, meta: { proposalId: string }) => Promise<Record<string, any>>> = {
   async create_gig(ctx, p) {
     const { data, error } = await ctx.db.from('gigs').insert({
       band_id: p.band_id, name: p.name, venue: p.venue, gig_date: p.date,
@@ -433,6 +531,35 @@ const EXECUTORS: Record<string, (ctx: Ctx, p: any) => Promise<Record<string, any
       added++
     }
     return { added }
+  },
+
+  async band_setlist(ctx, p, meta) {
+    // The library writer reads the approved payload from the proposal row, so store the final (possibly edited) version first.
+    const { error: pErr } = await ctx.admin.from('ai_proposals').update({ payload: p }).eq('id', meta.proposalId).eq('status', 'executing')
+    if (pErr) throw new Error(pErr.message)
+
+    // 1. Setlist, under the user's own RLS.
+    const { gig, setlistId, rows } = await loadSetlist(ctx, p.gig_id)
+    let sid = setlistId
+    if (!sid) {
+      const { data, error } = await ctx.db.from('setlists')
+        .insert({ gig_id: p.gig_id, band_id: gig.band_id, created_by: ctx.user.id, name: p.name })
+        .select('id').single()
+      if (error) throw new Error(error.message)
+      sid = data.id
+    }
+    const existing = new Set(rows.map((r) => r.song_id))
+    const added = (p.song_ids as string[]).filter((id) => !existing.has(id))
+    await rewritePositions(ctx, sid!, rows, [...rows.map((r) => r.song_id), ...added], new Set(added))
+
+    // 2. Other members' libraries: only via the service-role RPC, which re-checks the approved proposal itself.
+    let librarySongsAdded = 0
+    if (p.library_adds?.length) {
+      const { data, error } = await ctx.admin.rpc('ai_apply_band_library_adds', { p_proposal_id: meta.proposalId })
+      if (error) throw new Error(`Setlist saved, but member libraries were not updated: ${error.message}`)
+      librarySongsAdded = data?.inserted ?? 0
+    }
+    return { setlist_id: sid, added: added.length, library_songs_added: librarySongsAdded }
   },
 
   async invite_musician(ctx, p) {
@@ -698,6 +825,83 @@ const TOOLS: ToolDef[] = [
       }
     },
   },
+  {
+    name: 'plan_band_setlist',
+    description: "Plan a setlist for a band from every member's song library. Ranks songs ALL members know first (by genre, mood and fit), then songs only some members know, each with the members it is missing for. Read-only: show the plan to the user, then call propose_band_setlist.",
+    parameters: {
+      type: 'object',
+      properties: {
+        band_id: { type: 'string' },
+        gig_id: { type: 'string', description: 'Defaults to the gig this chat is about; used for the default duration' },
+        genre: { type: 'string' },
+        mood: { type: 'string', enum: ['high_energy', 'balanced', 'mellow'] },
+        duration_min: { type: 'integer', description: 'Target length in minutes; defaults to the gig duration or 60' },
+        include_partial: { type: 'boolean', description: 'Allow songs not every member knows (default true; they are only used after shared songs run out)' },
+      },
+      required: ['band_id'],
+    },
+    async run(ctx, a) {
+      const lib = await bandLibraries(ctx, uuid(a.band_id, 'band_id'))
+      const gigId = a.gig_id ? uuid(a.gig_id, 'gig_id') : ctx.gigId
+      let gigMinutes = 60
+      let existing = new Set<string>()
+      if (gigId) {
+        const { gig, rows } = await loadSetlist(ctx, gigId)
+        if (gig.band_id === lib.band.id) { gigMinutes = gig.duration_min || 60; existing = new Set(rows.map((r) => r.song_id)) }
+      }
+      const n = lib.memberIds.length
+      const genre = text(a.genre, 'genre', 40, false).toLowerCase()
+      const mood = ['high_energy', 'balanced', 'mellow'].includes(a.mood) ? a.mood : 'balanced'
+      const targetSec = int(a.duration_min, 'duration_min', 10, 480, gigMinutes) * 60
+
+      const matchesGenre = (e: BandLibraryEntry) => !!genre && [e.song.genre, ...e.tags].some((g) => String(g || '').toLowerCase().includes(genre))
+      const score = (e: BandLibraryEntry) => {
+        let s = (e.conf.reduce((x, y) => x + y, 0) / e.conf.length) * 0.5 + (e.live / n) * 1.5
+        if (matchesGenre(e)) s += 4
+        const bpm = e.song.bpm
+        if (bpm && mood === 'high_energy') s += bpm >= 115 ? 2 : bpm < 95 ? -2 : 0
+        if (bpm && mood === 'mellow') s += bpm <= 95 ? 2 : bpm > 115 ? -2 : 0
+        return s
+      }
+
+      let entries = [...lib.bySong.values()].filter((e) => !existing.has(e.song.id))
+      const genreHits = genre ? entries.filter(matchesGenre) : []
+      const genreMatched = genreHits.length >= 4
+      if (genreMatched) entries = genreHits
+      const minKnown = Math.max(1, Math.ceil(n / 2))
+      const rank = (x: BandLibraryEntry, y: BandLibraryEntry) => (y.knownBy.size - x.knownBy.size) || (score(y) - score(x))
+      const common = entries.filter((e) => e.knownBy.size === n).sort(rank)
+      const partial = a.include_partial === false ? [] : entries.filter((e) => e.knownBy.size < n && e.knownBy.size >= minKnown).sort(rank)
+
+      const picked: BandLibraryEntry[] = []
+      let used = 0
+      for (const e of [...common, ...partial]) {
+        if (used >= targetSec || picked.length >= 40) break
+        picked.push(e); used += (e.song.duration_sec || 240) + 20
+      }
+      const ordered = arrangeEnergyArc(picked.map((e) => ({ e, bpm: e.song.bpm as number | null }))).map((x) => x.e)
+      const missingNames = (e: BandLibraryEntry) => lib.missingFor(e.song.id).map((m) => lib.names.get(m))
+
+      const byMember = new Map<string, string[]>()
+      for (const e of ordered) for (const m of lib.missingFor(e.song.id)) byMember.set(m, [...(byMember.get(m) || []), e.song.title])
+
+      return {
+        band_name: lib.band.name,
+        members: [...lib.names.values()],
+        shared_song_count: common.length,
+        genre_matched: genre ? genreMatched : undefined,
+        mood, target_minutes: Math.round(targetSec / 60), approx_minutes: Math.round(used / 60),
+        setlist: ordered.map((e, i) => ({
+          order: i + 1, song_id: e.song.id, title: e.song.title, artist: e.song.artist, genre: e.song.genre ?? null, bpm: e.song.bpm ?? null,
+          known_by_all: e.knownBy.size === n, missing_for: missingNames(e),
+        })),
+        missing_by_member: [...byMember].map(([m, songs]) => ({ member: lib.names.get(m), songs })),
+        other_partial_candidates: partial.filter((e) => !picked.includes(e)).slice(0, 8)
+          .map((e) => ({ song_id: e.song.id, title: e.song.title, artist: e.song.artist, missing_for: missingNames(e) })),
+        next_step: 'Show the user this setlist, marking songs as "missing for: <names>". To apply it, call propose_band_setlist with the gig and these song ids in order; the user must confirm before anything is created or added to anyone\'s library.',
+      }
+    },
+  },
 ]
 
 // Write tools: validate, then create a pending proposal. They never touch domain tables.
@@ -753,6 +957,21 @@ const PROPOSE_TOOLS: { tool: string; kind: string; description: string; paramete
       type: 'object',
       properties: { songs: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, artist: { type: 'string' }, genre: { type: 'string' } }, required: ['title', 'artist'] } } },
       required: ['songs'],
+    },
+  },
+  {
+    tool: 'propose_band_setlist', kind: 'band_setlist',
+    description: "Propose creating a band's setlist for a gig (appends if the gig already has one) AND adding each song to the libraries of the members who don't know it yet. The server works out who is missing which song. Use after plan_band_setlist; needs a gig — if the band has none, ask the user or propose_create_gig first. Changing other members' libraries needs the user's individual confirmation.",
+    parameters: {
+      type: 'object',
+      properties: {
+        band_id: { type: 'string' },
+        gig_id: { type: 'string' },
+        song_ids: { type: 'array', items: { type: 'string' }, description: 'Song ids in performance order' },
+        name: { type: 'string', description: 'Setlist name, default "Main Setlist"' },
+        add_missing_to_libraries: { type: 'boolean', description: 'Default true. False = only create the setlist.' },
+      },
+      required: ['band_id', 'gig_id', 'song_ids'],
     },
   },
   {
@@ -876,6 +1095,7 @@ HOW YOU WORK
 - Batch related changes into a single propose_* call. Do not propose the same thing twice.
 - If something required is missing (which band, venue, date, which gig), ask one short question first. If the user has exactly one band or the chat is about one gig, use it.
 - For band setlists prefer songs every member knows (get_band_common_songs / suggest_setlist). Mention when the pool is small.
+- When the user asks for a setlist for a band: call plan_band_setlist (pass their genre / mood / duration). Show the songs in order; for any song not everyone knows write "missing for: <names>". Then call propose_band_setlist so they can review it. Say clearly that confirming will also add the missing songs to those members' libraries, and that they can Edit or Cancel. Never add songs to other people's libraries any other way.
 - Resolve relative dates ("next Friday") from today's date and confirm the exact date in your reply.
 
 SAFETY
@@ -997,6 +1217,21 @@ const EDITABLE_FIELDS: Record<string, string[]> = {
   create_gig: ['name', 'venue', 'date', 'duration_min'],
   update_gig: ['name', 'venue', 'date', 'duration_min'],
   invite_musician: ['message'],
+  band_setlist: ['name', 'song_ids', 'library_adds'],
+}
+
+/** Edits may narrow a proposal but never widen it past what the user was shown. */
+const EDIT_GUARDS: Record<string, (original: any, edited: any) => void> = {
+  band_setlist(original, edited) {
+    const songs = new Set<string>((original.song_ids || []).map((id: string) => id.toLowerCase()))
+    if (!Array.isArray(edited.song_ids) || edited.song_ids.some((id: any) => !songs.has(String(id).toLowerCase()))) {
+      throw new ToolError('Edits can only remove or reorder songs from the proposed setlist.')
+    }
+    const pairs = new Set<string>((original.library_adds || []).flatMap((x: any) => x.song_ids.map((s: string) => `${x.musician_id}:${s}`.toLowerCase())))
+    const ok = Array.isArray(edited.library_adds) && edited.library_adds.every((x: any) =>
+      Array.isArray(x?.song_ids) && x.song_ids.every((s: any) => pairs.has(`${x?.musician_id}:${s}`.toLowerCase())))
+    if (!ok) throw new ToolError('Edits can only remove library additions from the proposal.')
+  },
 }
 
 async function handleDecide(auth: { db: any; user: any }, body: any) {
@@ -1040,12 +1275,13 @@ async function handleDecide(auth: { db: any; user: any }, body: any) {
       if (ids.length === 1 && body.edits && typeof body.edits === 'object' && EDITABLE_FIELDS[p.kind]) {
         const merged = { ...args }
         for (const f of EDITABLE_FIELDS[p.kind]) if (body.edits[f] !== undefined) merged[f] = body.edits[f]
+        EDIT_GUARDS[p.kind]?.(p.payload, merged)
         args = merged
       }
       // Re-validate against current data/permissions right before executing.
       const v = await VALIDATORS[p.kind](ctx, args)
       preview = v.preview
-      const result = await EXECUTORS[p.kind](ctx, v.payload)
+      const result = await EXECUTORS[p.kind](ctx, v.payload, { proposalId: id })
       await admin.from('ai_proposals').update({ status: 'executed', result, payload: v.payload, preview, executed_at: new Date().toISOString() }).eq('id', id)
       results.push({ id, status: 'executed', result })
     } catch (e: any) {

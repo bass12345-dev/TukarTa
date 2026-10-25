@@ -674,10 +674,20 @@ export interface AiProposal {
     | 'remove_songs_from_setlist'
     | 'reorder_setlist'
     | 'add_to_dictionary'
-    | 'invite_musician';
+    | 'invite_musician'
+    | 'band_setlist';
   risk: 'low' | 'medium' | 'high';
   payload: Record<string, any>;
-  preview: { title: string; subtitle: string; lines: string[] };
+  preview: {
+    title: string;
+    subtitle: string;
+    lines: string[];
+    /** band_setlist only: song + member names for the editor. */
+    detail?: {
+      songs: { song_id: string; title: string; artist: string; missing_for: string[] }[];
+      members: Record<string, string>;
+    };
+  };
   status: AiProposalStatus;
   error: string | null;
   expires_at: string;

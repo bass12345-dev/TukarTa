@@ -52,10 +52,12 @@ App (ai-agent.tsx)
 | `search_musicians` | read | Recruit by instrument / city / genre / availability |
 | `search_song_catalog` | read | Resolve song ids from the shared catalog |
 | `suggest_setlist` | read | Deterministic draft: band-common pool, duration fit, mood filter, energy-arc ordering |
+| `plan_band_setlist` | read | Reads every member's library; ranks songs all members know (genre / mood / confidence / live-ready), then songs only some know, each with "missing for: names"; fills the target duration |
 | `propose_create_gig` / `propose_update_gig` | write→proposal | Gig management (date must be future, duplicate-checked) |
 | `propose_add_songs_to_setlist` / `propose_remove_songs_from_setlist` / `propose_reorder_setlist` | write→proposal | Setlist editing (batched; positions rewritten safely around the unique-position constraint) |
 | `propose_add_to_dictionary` | write→proposal | Add up to 20 songs to the repertoire |
 | `propose_invite_musician` | write→proposal (high) | Leader-only, no links, no duplicates |
+| `propose_band_setlist` | write→proposal (high if it touches other members) | Creates/extends the gig setlist and adds each missing song to the libraries of the members who lack it. The server computes who is missing what |
 
 **Production hardening**
 - Verified identity, RLS everywhere, minimal service-role use; secrets only in function env.
@@ -66,9 +68,23 @@ App (ai-agent.tsx)
 - Observability: every tool call is logged to `ai_tool_calls` (tool, args, ok/error, duration, model).
 - `extract-songs` now requires a verified user and only accepts `extractions/<name>.jpg`; OCR text is sanitised before it reaches the agent.
 
+### Band setlists and other members' libraries
+
+The user asks for a band setlist. `plan_band_setlist` runs first, then `propose_band_setlist` creates **one** proposal card. The card shows the ordered songs, "missing for: …" per song, and "+ Name's library: …" per member.
+
+- **Confirm**: executes the proposal. **Cancel**: rejects it. **Edit**: opens a review sheet where the user can rename the setlist, untick songs, or untick individual "add to X's library" chips.
+- Edits can only *narrow* the proposal. `EDIT_GUARDS.band_setlist` rejects any song or (member, song) pair that wasn't in the original proposal. Re-validation then drops pairs for members who learned the song in the meantime, and fails if a target has left the band.
+- When the proposal touches someone other than the requester, it is `risk: 'high'`. It is never part of "Approve all" and needs its own tap.
+- RLS on `musician_song_knowledge` stays `auth.uid() = musician_id`, so the user's JWT cannot write another member's library. Execution order:
+  1. Store the final payload on the proposal row.
+  2. Create or extend the setlist under the user's RLS.
+  3. Call `ai_apply_band_library_adds(proposal_id)` (migration `0018`). This is `SECURITY DEFINER` and **executable by `service_role` only** (anon and authenticated are revoked). It only acts on a `band_setlist` proposal in status `executing` with `decided_at` set, i.e. one the user just approved. It re-checks band membership of the approver and every target, accepts only songs in the approved setlist, and only `INSERT … ON CONFLICT DO NOTHING`s rows (`confidence_level 1`, `source 'band_setlist'`). It never edits or deletes what a member already has.
+- If step 3 fails after step 2 succeeded, the proposal is marked `failed` with "Setlist saved, but member libraries were not updated".
+- Setlists still require a gig (`setlists.gig_id NOT NULL`). If the band has no gig, the agent asks the user or proposes `create_gig` first.
+
 ## 3. Rollout (nothing below has been applied to Supabase yet)
 
-1. Apply `supabase/migrations/0016_ai_agent_proposals.sql`.
+1. Apply `supabase/migrations/0016_ai_agent_proposals.sql`, then `0018_band_setlist_library_adds.sql` (must land before the function that proposes `band_setlist`).
 2. Ensure function secrets exist: `GROQ_API_KEY`, `GEMINI_API_KEY` (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` are provided by the platform).
 3. Deploy `setlist-agent` and `extract-songs`. Keep `verify_jwt` off: the new publishable key format is not a JWT, so gateway verification would reject calls; the functions verify the user themselves.
 4. **Order matters:** the new app build calls `action: 'chat' | 'decide'`. The old app build keeps calling the old contract, so deploy the function and ship the APK together, or old installs will see "Unknown action"-style errors until updated.

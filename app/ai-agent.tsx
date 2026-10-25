@@ -113,9 +113,16 @@ const KIND_LABEL: Record<AiProposal['kind'], string> = {
   reorder_setlist: 'Reorder setlist',
   add_to_dictionary: 'Add to repertoire',
   invite_musician: 'Invite musician',
+  band_setlist: 'Band setlist',
 };
 
-const EDITABLE_KINDS: AiProposal['kind'][] = ['create_gig', 'update_gig', 'invite_musician'];
+const EDITABLE_KINDS: AiProposal['kind'][] = ['create_gig', 'update_gig', 'invite_musician', 'band_setlist'];
+
+/** What a high-risk proposal does to other people, shown next to the kind label. */
+const HIGH_RISK_NOTE: Partial<Record<AiProposal['kind'], string>> = {
+  invite_musician: 'SENDS A MESSAGE',
+  band_setlist: "UPDATES MEMBERS' LIBRARIES",
+};
 
 function ProposalCard({
   proposal,
@@ -163,7 +170,7 @@ function ProposalCard({
         <View style={styles.proposalTextContainer}>
           <Text style={[styles.proposalKind, { color: isHigh ? '#F59E0B' : colors.primaryDark }]}>
             {KIND_LABEL[proposal.kind]?.toUpperCase()}
-            {isHigh ? '  ·  SENDS A MESSAGE' : ''}
+            {isHigh ? `  ·  ${HIGH_RISK_NOTE[proposal.kind] ?? 'NEEDS YOUR CONFIRMATION'}` : ''}
           </Text>
           <Text style={[styles.proposalTitle, { color: colors.text }]} numberOfLines={2}>
             {proposal.preview?.title}
@@ -224,7 +231,9 @@ function ProposalCard({
             disabled={busy}
           >
             <X size={14} color={colors.textDim} />
-            <Text style={[styles.proposalBtnText, { color: colors.textDim }]}>Dismiss</Text>
+            <Text style={[styles.proposalBtnText, { color: colors.textDim }]}>
+              {proposal.kind === 'band_setlist' ? 'Cancel' : 'Dismiss'}
+            </Text>
           </TouchableOpacity>
           {EDITABLE_KINDS.includes(proposal.kind) && (
             <TouchableOpacity
@@ -241,11 +250,153 @@ function ProposalCard({
             disabled={busy}
           >
             {busy ? <ActivityIndicator size="small" color="#FFF" /> : <Check size={14} color="#FFF" strokeWidth={3} />}
-            <Text style={[styles.proposalBtnText, { color: '#FFF' }]}>{isHigh ? 'Send' : 'Approve'}</Text>
+            <Text style={[styles.proposalBtnText, { color: '#FFF' }]}>
+              {proposal.kind === 'band_setlist' ? 'Confirm' : isHigh ? 'Send' : 'Approve'}
+            </Text>
           </TouchableOpacity>
         </View>
       )}
     </View>
+  );
+}
+
+/**
+ * Band setlist review: drop songs, rename, and choose which members get which missing songs added to
+ * their library. It can only narrow the proposal; the server rejects anything it did not originally propose.
+ */
+function BandSetlistEditor({
+  proposal,
+  onClose,
+  onSave,
+}: {
+  proposal: AiProposal;
+  onClose: () => void;
+  onSave: (edits: Record<string, any>) => void;
+}) {
+  const { colors } = useAppTheme();
+  const payload = proposal.payload || {};
+  const detail = proposal.preview?.detail;
+  const songs = detail?.songs ?? [];
+  const members = detail?.members ?? {};
+  const pairKey = (member: string, song: string) => `${member}:${song}`;
+  const proposedPairs = React.useMemo(
+    () =>
+      new Set<string>(
+        (payload.library_adds || []).flatMap((a: any) => (a.song_ids || []).map((s: string) => pairKey(a.musician_id, s)))
+      ),
+    [proposal.id]
+  );
+  const [name, setName] = useState<string>(payload.name ?? 'Main Setlist');
+  const [selectedSongs, setSelectedSongs] = useState<Set<string>>(() => new Set(payload.song_ids || []));
+  const [pairs, setPairs] = useState<Set<string>>(() => new Set(proposedPairs));
+
+  const toggle = <T,>(set: Set<T>, value: T) => {
+    const next = new Set(set);
+    next.has(value) ? next.delete(value) : next.add(value);
+    return next;
+  };
+
+  const keptSongIds: string[] = (payload.song_ids || []).filter((id: string) => selectedSongs.has(id));
+  const libraryAdds = (payload.library_adds || [])
+    .map((a: any) => ({
+      musician_id: a.musician_id,
+      song_ids: (a.song_ids || []).filter((s: string) => selectedSongs.has(s) && pairs.has(pairKey(a.musician_id, s))),
+    }))
+    .filter((a: any) => a.song_ids.length > 0);
+  const addCount = libraryAdds.reduce((n: number, a: any) => n + a.song_ids.length, 0);
+
+  const save = () => {
+    const edits: Record<string, any> = { song_ids: keptSongIds, library_adds: libraryAdds };
+    if (name.trim() && name.trim() !== payload.name) edits.name = name.trim();
+    onSave(edits);
+  };
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
+        <View style={[styles.modalContent, { backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1, maxHeight: '85%' }]}>
+          <View style={styles.modalHeader}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Review band setlist</Text>
+            <TouchableOpacity onPress={onClose}>
+              <X size={24} color={colors.text} />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={[styles.editLabel, { color: colors.textSecondary }]}>Setlist name</Text>
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            maxLength={60}
+            style={[styles.editInput, { color: colors.inputText, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}
+            placeholderTextColor={colors.inputPlaceholder}
+          />
+
+          <ScrollView style={{ marginTop: 12 }} contentContainerStyle={{ gap: 10, paddingBottom: 8 }}>
+            {songs.map((s, i) => {
+              const on = selectedSongs.has(s.song_id);
+              return (
+                <View key={s.song_id} style={[styles.setlistEditRow, { borderColor: colors.border, opacity: on ? 1 : 0.5 }]}>
+                  <TouchableOpacity
+                    style={styles.setlistEditSong}
+                    onPress={() => setSelectedSongs((cur) => toggle(cur, s.song_id))}
+                  >
+                    {on ? <CheckCircle size={18} color={colors.primary} /> : <Circle size={18} color={colors.textDim} />}
+                    <Text style={[styles.proposalLine, { color: colors.text, flex: 1 }]} numberOfLines={2}>
+                      {i + 1}. {s.title} — {s.artist}
+                    </Text>
+                  </TouchableOpacity>
+                  {s.missing_for.length > 0 && (
+                    <View style={styles.setlistEditChips}>
+                      <Text style={[styles.setlistEditHint, { color: colors.textDim }]}>Missing for:</Text>
+                      {s.missing_for.map((m) => {
+                        const key = pairKey(m, s.song_id);
+                        const proposed = proposedPairs.has(key);
+                        const adding = on && proposed && pairs.has(key);
+                        return (
+                          <TouchableOpacity
+                            key={m}
+                            disabled={!on || !proposed}
+                            onPress={() => setPairs((cur) => toggle(cur, key))}
+                            style={[
+                              styles.setlistEditChip,
+                              {
+                                borderColor: adding ? colors.primary : colors.border,
+                                backgroundColor: adding ? colors.primaryLight : colors.bgSecondary,
+                              },
+                            ]}
+                          >
+                            {adding && <Plus size={11} color={colors.primaryDark} />}
+                            <Text style={[styles.setlistEditChipText, { color: adding ? colors.primaryDark : colors.textDim }]}>
+                              {members[m] ?? 'Member'}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+          </ScrollView>
+
+          <Text style={[styles.setlistEditHint, { color: colors.textSecondary, marginVertical: 8 }]}>
+            {keptSongIds.length} song{keptSongIds.length === 1 ? '' : 's'} ·{' '}
+            {addCount
+              ? `adds ${addCount} song${addCount === 1 ? '' : 's'} to ${libraryAdds.length} member librar${libraryAdds.length === 1 ? 'y' : 'ies'}`
+              : 'no library changes'}
+            . Tap a name to stop adding the song to their library.
+          </Text>
+          <TouchableOpacity
+            style={[styles.editSaveBtn, { backgroundColor: colors.primary }, !keptSongIds.length && { opacity: 0.5 }]}
+            onPress={save}
+            disabled={!keptSongIds.length}
+          >
+            <Check size={16} color="#FFF" strokeWidth={3} />
+            <Text style={styles.editSaveText}>Save & confirm</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -263,7 +414,7 @@ function EditProposalModal({
   const [values, setValues] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (!proposal) return;
+    if (!proposal || proposal.kind === 'band_setlist') return;
     const p = proposal.payload || {};
     setValues({
       name: p.name ?? '',
@@ -274,6 +425,9 @@ function EditProposalModal({
   }, [proposal?.id]);
 
   if (!proposal) return null;
+  if (proposal.kind === 'band_setlist') {
+    return <BandSetlistEditor proposal={proposal} onClose={onClose} onSave={onSave} />;
+  }
   const fields: { key: string; label: string; multiline?: boolean; hint?: string }[] =
     proposal.kind === 'invite_musician'
       ? [{ key: 'message', label: 'Message to the musician', multiline: true }]
@@ -948,6 +1102,20 @@ const styles = StyleSheet.create({
   statusChipText: { fontSize: 11, fontWeight: '800' },
   proposalLines: { borderTopWidth: 1, paddingTop: 8, marginTop: 10, gap: 3 },
   proposalLine: { fontSize: 12.5, lineHeight: 17 },
+  setlistEditRow: { borderWidth: 1, borderRadius: 12, padding: 10, gap: 8 },
+  setlistEditSong: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  setlistEditChips: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, paddingLeft: 26 },
+  setlistEditChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  setlistEditChipText: { fontSize: 11, fontWeight: '700' },
+  setlistEditHint: { fontSize: 11.5, lineHeight: 16 },
   proposalActionsBar: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
