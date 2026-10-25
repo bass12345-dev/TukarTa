@@ -21,7 +21,9 @@ import { useMyGigs } from '@/utils/hooks/useMusician';
 import { useAppTheme } from '@/context/theme';
 import { CreateGigModal } from '@/components/gigs/CreateGigModal';
 
+import { useTabBarPadding } from '../../utils/hooks/useTabBarPadding';
 export default function SetlistsScreen() {
+  const tabBarPadding = useTabBarPadding();
   const router = useRouter();
   const { colors, isDark } = useAppTheme();
   const [showCreateGigModal, setShowCreateGigModal] = React.useState(false);
@@ -60,7 +62,7 @@ export default function SetlistsScreen() {
 
       <ScrollView 
         style={styles.scroll} 
-        contentContainerStyle={styles.scrollContent} 
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarPadding }]} 
         showsVerticalScrollIndicator={false}
       >
         {isGigsLoading ? (

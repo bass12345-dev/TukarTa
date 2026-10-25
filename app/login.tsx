@@ -7,17 +7,21 @@ import { Lock, Mail, Music2, ShieldCheck, Zap } from 'lucide-react-native';
 import React from 'react';
 import {
   Alert,
-  KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View
 } from 'react-native';
 import { Button } from '../components/ui/Button';
+import { KeyboardScreen } from '../components/ui/KeyboardScreen';
 import { TextField } from '../components/ui/TextField';
-import { supabase, extractAndSetSessionFromUrl } from '../utils/supabase';
+import {
+  supabase,
+  extractAndSetSessionFromUrl,
+  describeAuthUrl,
+  AUTH_REDIRECT_PATH,
+} from '../utils/supabase';
 import { useAppTheme } from '../context/theme';
 import { useAuth } from '../context/auth';
 
@@ -60,8 +64,9 @@ export default function LoginScreen() {
           ? window.location.origin
           : AuthSession.makeRedirectUri({
               scheme: 'tukarta',
-              path: 'login',
+              path: AUTH_REDIRECT_PATH,
             });
+      console.log('[GoogleAuth] redirectTo =', describeAuthUrl(returnUrl));
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -88,7 +93,9 @@ export default function LoginScreen() {
         throw new Error('Could not generate Google sign-in URL.');
       }
 
+      console.log('[GoogleAuth] provider url host =', data.url.split('/').slice(0, 3).join('/'));
       const res = await WebBrowser.openAuthSessionAsync(data.url, returnUrl);
+      console.log('[GoogleAuth] browser result =', res.type, 'url' in res ? describeAuthUrl(res.url) : '');
 
       if (res.type === 'success' && res.url) {
         const parsed = await extractAndSetSessionFromUrl(res.url);
@@ -133,7 +140,7 @@ export default function LoginScreen() {
     try {
       setIsLoggingIn(true);
       const { error } = await supabase.auth.signInWithPassword({
-        email,
+        email: email.trim(),
         password,
       });
       if (error) throw error;
@@ -158,10 +165,7 @@ export default function LoginScreen() {
         style={StyleSheet.absoluteFill}
       />
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+      <KeyboardScreen>
         {/* ── Brand Header ── */}
         <View style={styles.heroSection}>
           <View style={styles.logoBadge}>
@@ -180,7 +184,7 @@ export default function LoginScreen() {
         </View>
 
         {/* ── Auth card ── */}
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View>
           <View style={[styles.authCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
             <View style={styles.topAccent} />
 
@@ -215,6 +219,7 @@ export default function LoginScreen() {
                   label="Email Address"
                   placeholder="name@example.com"
                   keyboardType="email-address"
+                  autoComplete="email"
                   value={email}
                   onChangeText={setEmail}
                   leftIcon={<Mail size={18} color={colors.primary} />}
@@ -223,6 +228,7 @@ export default function LoginScreen() {
                   label="Password"
                   placeholder="••••••••"
                   secureTextEntry
+                  autoComplete="current-password"
                   value={password}
                   onChangeText={setPassword}
                   leftIcon={<Lock size={18} color={colors.primary} />}
@@ -277,14 +283,14 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </KeyboardAvoidingView>
+        </View>
 
         {/* ── Footer note ── */}
         <View style={styles.footerNote}>
           <ShieldCheck size={14} color="#10B981" />
           <Text style={styles.footerNoteText}>Protected with Supabase Auth & Offline Cache</Text>
         </View>
-      </ScrollView>
+      </KeyboardScreen>
     </View>
   );
 }
@@ -292,14 +298,6 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 60 : 44,
-    paddingBottom: 48,
-    maxWidth: 480,
-    width: '100%',
-    alignSelf: 'center',
   },
   heroSection: {
     alignItems: 'center',

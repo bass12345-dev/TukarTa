@@ -4,9 +4,11 @@ import {
   TextInput, 
   Text, 
   StyleSheet, 
-  TextInputProps, 
-  Platform 
+  TextInputProps,
+  Platform,
+  TouchableOpacity
 } from 'react-native';
+import { Eye, EyeOff } from 'lucide-react-native';
 import { useAppTheme } from '../../context/theme';
 
 interface TextFieldProps extends TextInputProps {
@@ -24,6 +26,8 @@ export const TextField: React.FC<TextFieldProps> = ({
   ...props 
 }) => {
   const { colors } = useAppTheme();
+  const isPassword = !!props.secureTextEntry;
+  const [isHidden, setIsHidden] = React.useState(true);
 
   return (
     <View style={styles.container}>
@@ -44,7 +48,21 @@ export const TextField: React.FC<TextFieldProps> = ({
           selectionColor={colors.primary}
           autoCapitalize="none"
           {...props}
+          secureTextEntry={isPassword ? isHidden : false}
         />
+        {isPassword && (
+          <TouchableOpacity
+            onPress={() => setIsHidden((v) => !v)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel={isHidden ? 'Show password' : 'Hide password'}
+          >
+            {isHidden ? (
+              <Eye size={18} color={colors.textMuted} />
+            ) : (
+              <EyeOff size={18} color={colors.textMuted} />
+            )}
+          </TouchableOpacity>
+        )}
       </View>
       {error && <Text style={styles.errorText}>{error}</Text>}
     </View>

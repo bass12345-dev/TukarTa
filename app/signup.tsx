@@ -2,20 +2,20 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, Stack } from 'expo-router';
 import React from 'react';
 import {
-  Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
   Alert,
-  KeyboardAvoidingView,
 } from 'react-native';
 import { supabase } from '../utils/supabase';
 import { ArrowLeft, Mail, Lock, User, Music2, CheckCircle2 } from 'lucide-react-native';
 import { TextField } from '../components/ui/TextField';
 import { Button } from '../components/ui/Button';
+import { KeyboardScreen } from '../components/ui/KeyboardScreen';
 import { useAppTheme } from '../context/theme';
+
+const MIN_PASSWORD_LENGTH = 8;
 
 export default function SignupScreen() {
   const router = useRouter();
@@ -24,18 +24,47 @@ export default function SignupScreen() {
   const [isSubmitted, setIsSubmitted] = React.useState(false);
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
+  const [confirmPassword, setConfirmPassword] = React.useState('');
   const [fullName, setFullName] = React.useState('');
+  const [touched, setTouched] = React.useState({ email: false, password: false, confirm: false });
+
+  const trimmedEmail = email.trim();
+  const emailError =
+    touched.email && trimmedEmail && !/^\S+@\S+\.\S+$/.test(trimmedEmail)
+      ? 'Enter a valid email address.'
+      : undefined;
+  const passwordError =
+    touched.password && password && password.length < MIN_PASSWORD_LENGTH
+      ? `Use at least ${MIN_PASSWORD_LENGTH} characters.`
+      : undefined;
+  const confirmError =
+    touched.confirm && confirmPassword && confirmPassword !== password
+      ? 'Passwords do not match.'
+      : undefined;
+  const canSubmit =
+    !!fullName.trim() &&
+    /^\S+@\S+\.\S+$/.test(trimmedEmail) &&
+    password.length >= MIN_PASSWORD_LENGTH &&
+    confirmPassword === password;
 
   const handleSignup = async () => {
-    if (!email || !password || !fullName) {
-      Alert.alert('Missing Fields', 'Please fill in all fields (Name, Email, Password).');
+    if (!fullName.trim() || !trimmedEmail || !password || !confirmPassword) {
+      Alert.alert('Missing Fields', 'Please fill in all fields (Name, Email, Password, Confirm Password).');
+      return;
+    }
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      Alert.alert('Weak Password', `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+      return;
+    }
+    if (password !== confirmPassword) {
+      Alert.alert('Passwords Do Not Match', 'Please re-enter the same password in both fields.');
       return;
     }
 
     try {
       setIsLoggingIn(true);
       const { error } = await supabase.auth.signUp({
-        email,
+        email: trimmedEmail,
         password,
         options: {
           data: {
@@ -65,10 +94,7 @@ export default function SignupScreen() {
         style={StyleSheet.absoluteFill}
       />
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+      <KeyboardScreen>
         {/* Header with Back Button */}
         <View style={styles.header}>
           <TouchableOpacity 
@@ -84,7 +110,7 @@ export default function SignupScreen() {
         </View>
 
         {/* ── Auth Card ── */}
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View>
           <View style={[styles.authCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
             <View style={styles.topAccent} />
 
@@ -125,14 +151,31 @@ export default function SignupScreen() {
                       keyboardType="email-address"
                       value={email}
                       onChangeText={setEmail}
+                      onBlur={() => setTouched((t) => ({ ...t, email: true }))}
+                      error={emailError}
+                      autoComplete="email"
                       leftIcon={<Mail size={18} color={colors.primary} />}
                     />
                     <TextField
                       label="Password"
-                      placeholder="••••••••"
+                      placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
                       secureTextEntry
                       value={password}
                       onChangeText={setPassword}
+                      onBlur={() => setTouched((t) => ({ ...t, password: true }))}
+                      error={passwordError}
+                      autoComplete="new-password"
+                      leftIcon={<Lock size={18} color={colors.primary} />}
+                    />
+                    <TextField
+                      label="Confirm Password"
+                      placeholder="Re-enter your password"
+                      secureTextEntry
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                      onBlur={() => setTouched((t) => ({ ...t, confirm: true }))}
+                      error={confirmError}
+                      autoComplete="new-password"
                       leftIcon={<Lock size={18} color={colors.primary} />}
                     />
 
@@ -140,7 +183,8 @@ export default function SignupScreen() {
                       variant="mint"
                       title={isLoggingIn ? 'Creating account...' : 'Create Account'}
                       onPress={handleSignup}
-                      disabled={isLoggingIn}
+                      disabled={isLoggingIn || !canSubmit}
+                      style={!canSubmit ? { opacity: 0.55 } : undefined}
                     />
                   </View>
 
@@ -156,8 +200,8 @@ export default function SignupScreen() {
               )}
             </View>
           </View>
-        </KeyboardAvoidingView>
-      </ScrollView>
+        </View>
+      </KeyboardScreen>
     </View>
   );
 }
@@ -165,14 +209,6 @@ export default function SignupScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 56 : 40,
-    paddingBottom: 48,
-    maxWidth: 480,
-    width: '100%',
-    alignSelf: 'center',
   },
   header: {
     flexDirection: 'row',

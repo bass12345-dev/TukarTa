@@ -39,6 +39,7 @@ import { useMyBands } from '../../utils/hooks/useMusician';
 import { useAppTheme } from '../../context/theme';
 import { useBandSession, MemberRole } from '../../context/bandSession';
 
+import { useTabBarPadding } from '../../utils/hooks/useTabBarPadding';
 const ROLE_ICONS: Record<MemberRole, any> = {
   leader: Crown,
   vocals: Mic,
@@ -51,6 +52,7 @@ const ROLE_ICONS: Record<MemberRole, any> = {
 };
 
 export default function BandSessionScreen() {
+  const tabBarPadding = useTabBarPadding();
   const router = useRouter();
   const { user } = useAuth();
   const { colors, isDark } = useAppTheme();
@@ -206,7 +208,7 @@ export default function BandSessionScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarPadding }]}
         showsVerticalScrollIndicator={false}
       >
         {activeTab === 'sync' ? (

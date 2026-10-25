@@ -22,9 +22,11 @@ import {
 } from '../../utils/hooks/useMusician';
 import { useInfiniteMySongs } from '../../utils/hooks/useSongs';
 
+import { useTabBarPadding } from '../../utils/hooks/useTabBarPadding';
 const { width } = Dimensions.get('window');
 
 export default function ProfileScreen() {
+  const tabBarPadding = useTabBarPadding();
   const { user } = useAuth();
   const router = useRouter();
   const { colors, isDark } = useAppTheme();
@@ -71,7 +73,7 @@ export default function ProfileScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarPadding }]}>
         
         {/* Header Cover Section */}
         <View style={styles.headerCover}>

@@ -44,7 +44,9 @@ import {
   useSetlistSongs,
 } from '@/utils/hooks/useMusician';
 
+import { useTabBarPadding } from '../../utils/hooks/useTabBarPadding';
 export default function DashboardScreen() {
+  const tabBarPadding = useTabBarPadding();
   const router = useRouter();
   const { user } = useAuth();
   const { colors, isDark } = useAppTheme();
@@ -156,7 +158,7 @@ export default function DashboardScreen() {
 
       <ScrollView 
         style={styles.scroll} 
-        contentContainerStyle={styles.scrollContent} 
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarPadding }]} 
         showsVerticalScrollIndicator={false}
       >
         {/* ── Upcoming Gig Showcase Card (Only shown if real gig exists) ── */}

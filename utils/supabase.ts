@@ -58,13 +58,35 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
+export const AUTH_REDIRECT_PATH = 'auth-callback';
+
+type AuthUrlResult = { success: boolean; error?: string };
+const inFlightAuthUrls = new Map<string, Promise<AuthUrlResult>>();
+
+/** Safe-to-log summary of an auth redirect URL (never prints tokens or codes). */
+export function describeAuthUrl(url?: string | null): string {
+  if (!url) return '(none)';
+  const base = url.split(/[?#]/)[0];
+  const keys = [...url.matchAll(/[?#&]([a-z_]+)=/gi)].map((m) => m[1]);
+  return `${base} [params: ${keys.join(', ') || 'none'}]`;
+}
+
 /**
  * Extracts OAuth tokens (access_token & refresh_token) or PKCE auth code
  * from a redirect URL (both hash # and query ? fragments) and sets the Supabase session.
  */
-export async function extractAndSetSessionFromUrl(url: string): Promise<{ success: boolean; error?: string }> {
-  if (!url) return { success: false };
+export function extractAndSetSessionFromUrl(url: string): Promise<AuthUrlResult> {
+  if (!url) return Promise.resolve({ success: false });
+  // The same redirect can arrive via openAuthSessionAsync, the deep-link listener and the
+  // auth-callback route; process each URL once so a PKCE code isn't exchanged twice.
+  const existing = inFlightAuthUrls.get(url);
+  if (existing) return existing;
+  const run = processAuthUrl(url);
+  inFlightAuthUrls.set(url, run);
+  return run;
+}
 
+async function processAuthUrl(url: string): Promise<AuthUrlResult> {
   try {
     const hashPart = url.includes('#') ? url.split('#')[1] : '';
     const queryPart = url.includes('?') ? url.split('?')[1].split('#')[0] : '';

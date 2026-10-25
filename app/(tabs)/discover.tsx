@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useDiscoverMusicians } from '../../utils/hooks/useMusician';
 import { useAppTheme } from '../../context/theme';
 
+import { useTabBarPadding } from '../../utils/hooks/useTabBarPadding';
 const FILTERS = ['All', 'Singer', 'Guitarist', 'Bassist', 'Drummer', 'Keys'];
 
 function StarRating({ value }: { value: number }) {
@@ -47,6 +48,7 @@ function MatchBar({ value }: { value: number }) {
 }
 
 export default function DiscoverScreen() {
+  const tabBarPadding = useTabBarPadding();
   const router = useRouter();
   const { colors, isDark } = useAppTheme();
   const [activeFilter, setActiveFilter] = useState('All');
@@ -159,7 +161,7 @@ export default function DiscoverScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarPadding }]}
         showsVerticalScrollIndicator={false}
       >
         {isLoading && (

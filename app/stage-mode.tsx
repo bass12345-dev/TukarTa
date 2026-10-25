@@ -55,6 +55,7 @@ import {
   transposeChordProText,
 } from '../utils/chordParser';
 import { WebView } from 'react-native-webview';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const SEARCH_PROVIDERS = [
   { name: 'Ultimate Guitar', url: 'https://www.ultimate-guitar.com/search.php?search_type=title&value=', color: '#059669' },
@@ -64,6 +65,7 @@ const SEARCH_PROVIDERS = [
 
 export default function StageModeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const {
     setlistId: setlistIdParam,
     initialSongId,
@@ -930,7 +932,7 @@ export default function StageModeScreen() {
       )}
 
       {/* ── Top Status Bar ── */}
-      <View style={styles.topStatusBar}>
+      <View style={[styles.topStatusBar, { paddingTop: insets.top + 8 }]}>
         {isHeaderHidden ? (
           <TouchableOpacity
             style={styles.compactSongPill}
@@ -1542,7 +1544,7 @@ export default function StageModeScreen() {
       </ScrollView>
 
       {/* ── Footer Controls ── */}
-      <View style={styles.footerControls}>
+      <View style={[styles.footerControls, { paddingBottom: insets.bottom + 16 }]}>
         {/* ── What's Next / Up Next Live Preview Bar (or Dictionary Practice Bar) ── */}
         <View style={styles.footerUpNextBar}>
           <TouchableOpacity
@@ -1748,7 +1750,7 @@ export default function StageModeScreen() {
         onRequestClose={() => setIsQueueVisible(false)}
       >
         <View style={styles.queueOverlay}>
-          <View style={styles.queueSheet}>
+          <View style={[styles.queueSheet, { paddingBottom: insets.bottom + 20 }]}>
             {/* Header */}
             <View style={styles.queueHeader}>
               <View>
