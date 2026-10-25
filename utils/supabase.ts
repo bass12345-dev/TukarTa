@@ -54,9 +54,57 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     storage: ExpoAsyncStorageAdapter as any,
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false,
+    detectSessionInUrl: Platform.OS === 'web',
   },
 });
+
+/**
+ * Extracts OAuth tokens (access_token & refresh_token) or PKCE auth code
+ * from a redirect URL (both hash # and query ? fragments) and sets the Supabase session.
+ */
+export async function extractAndSetSessionFromUrl(url: string): Promise<{ success: boolean; error?: string }> {
+  if (!url) return { success: false };
+
+  try {
+    const hashPart = url.includes('#') ? url.split('#')[1] : '';
+    const queryPart = url.includes('?') ? url.split('?')[1].split('#')[0] : '';
+
+    const hashParams = Object.fromEntries(new URLSearchParams(hashPart));
+    const queryParams = Object.fromEntries(new URLSearchParams(queryPart));
+    const params: Record<string, string> = { ...queryParams, ...hashParams };
+
+    if (params.error_description || params.error) {
+      return {
+        success: false,
+        error: decodeURIComponent((params.error_description || params.error).replace(/\+/g, ' ')),
+      };
+    }
+
+    if (params.access_token && params.refresh_token) {
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: params.access_token,
+        refresh_token: params.refresh_token,
+      });
+      if (sessionError) {
+        return { success: false, error: sessionError.message };
+      }
+      return { success: true };
+    }
+
+    if (params.code) {
+      const { error: codeError } = await supabase.auth.exchangeCodeForSession(params.code);
+      if (codeError) {
+        return { success: false, error: codeError.message };
+      }
+      return { success: true };
+    }
+
+    return { success: false };
+  } catch (err: any) {
+    console.warn('Error parsing OAuth redirect URL:', err);
+    return { success: false, error: err?.message };
+  }
+}
 
 /**
  * Optimized user retrieval: retrieves user from local session storage

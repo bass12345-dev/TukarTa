@@ -284,6 +284,8 @@ function SongListItem({ item, colors, isDark }: { item: any; colors: any; isDark
         title: song.title,
         artist: song.artist,
         key: song.original_key || 'C',
+        bpm: song.bpm ? String(song.bpm) : '',
+        source: 'dictionary',
       },
     });
   };

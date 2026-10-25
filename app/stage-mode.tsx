@@ -48,7 +48,7 @@ import { useSongLyrics } from '../utils/hooks/useSongs';
 import { useBandSession } from '../context/bandSession';
 import { getOfflineGigPackage } from '../utils/offlineManager';
 import { supabase } from '../utils/supabase';
-import { searchSongs, getLyrics, fetchKaraokeVideoIds } from '../utils/musicApi';
+import { searchSongs, getLyrics, fetchKaraokeVideoIds, fetchSongRealBpm } from '../utils/musicApi';
 import {
   parseLineSegments,
   transposeChord,
@@ -64,7 +64,16 @@ const SEARCH_PROVIDERS = [
 
 export default function StageModeScreen() {
   const router = useRouter();
-  const { setlistId: setlistIdParam, initialSongId, songId, title, artist, key: paramKey } = useLocalSearchParams();
+  const {
+    setlistId: setlistIdParam,
+    initialSongId,
+    songId,
+    title,
+    artist,
+    key: paramKey,
+    bpm: paramBpm,
+    source: paramSource,
+  } = useLocalSearchParams();
 
   // Band Session Integration
   const {
@@ -84,8 +93,13 @@ export default function StageModeScreen() {
     syncMode,
   } = useBandSession();
 
-  // Fall back to the live session's setlist when opened without params (e.g. from Band Session)
-  const setlistId = (setlistIdParam as string) || (isLeader ? sessionSetlistId : null) || undefined;
+  // Single direct song mode (e.g., opened directly from Song Dictionary)
+  const isDirectSongMode = (!setlistIdParam && !!songId) || paramSource === 'dictionary';
+
+  // Fall back to the live session's setlist ONLY when not opening a single dictionary song
+  const setlistId = isDirectSongMode
+    ? undefined
+    : ((setlistIdParam as string) || (isLeader ? sessionSetlistId : null) || undefined);
 
   // 1. Full setlist
   const { data: setlistSongs } = useSetlistSongs(setlistId as string);
@@ -103,6 +117,9 @@ export default function StageModeScreen() {
   const scrollOffsetRef = useRef<number>(0);
   const tapTimesRef = useRef<number[]>([]);
   const isUserScrollingRef = useRef<boolean>(false);
+  const userScrollTimerRef = useRef<any>(null);
+  const lastProgrammaticYRef = useRef<number>(0);
+  const lastTickAtRef = useRef<number>(Date.now());
 
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
   const [currentBpm, setCurrentBpm] = useState<number>(120);
@@ -119,11 +136,36 @@ export default function StageModeScreen() {
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
-  // Minus 1 Backing Track Video State
+  // Minus 1 Backing Track Video State & Real-Time YouTube-to-Lyrics Sync
   const [minusOneVideoId, setMinusOneVideoId] = useState<string | null>(null);
   const [isLoadingMinusOne, setIsLoadingMinusOne] = useState<boolean>(false);
   const [minusOneCandidates, setMinusOneCandidates] = useState<string[]>([]);
   const [minusOneCandidateIdx, setMinusOneCandidateIdx] = useState<number>(0);
+  const [isYtSynced, setIsYtSynced] = useState<boolean>(false);
+  const ytIframeRef = useRef<any>(null);
+  const ytWebViewRef = useRef<WebView>(null);
+
+  const sendYoutubeCommand = (func: string, args: any[] = []) => {
+    if (!isMinusOneVisible || !minusOneVideoId) return;
+    try {
+      if (Platform.OS === 'web') {
+        ytIframeRef.current?.contentWindow?.postMessage(
+          JSON.stringify({ event: 'command', func, args }),
+          '*'
+        );
+      } else {
+        const js =
+          func === 'playVideo'
+            ? `try { const v = document.querySelector('video'); if (v) v.play(); } catch(e){} true;`
+            : func === 'pauseVideo'
+            ? `try { const v = document.querySelector('video'); if (v) v.pause(); } catch(e){} true;`
+            : func === 'seekTo'
+            ? `try { const v = document.querySelector('video'); if (v) v.currentTime = ${Number(args[0]) || 0}; } catch(e){} true;`
+            : 'true;';
+        ytWebViewRef.current?.injectJavaScript(js);
+      }
+    } catch {}
+  };
 
   const formatSongTime = (sec: any): string => {
     const num = Number(sec);
@@ -179,21 +221,21 @@ export default function StageModeScreen() {
     }
   }, [setlistId]);
 
-  // Single direct song mode (e.g., opened directly from Song Dictionary)
-  const isDirectSongMode = !setlistId && !!songId;
   const directSongObj = useMemo(() => {
     if (!isDirectSongMode) return null;
+    const parsedBpm = paramBpm ? parseInt(String(paramBpm), 10) : undefined;
     return {
-      id: songId as string,
+      id: (songId as string) || 'direct_song',
       position: 1,
       song: {
-        id: songId as string,
+        id: (songId as string) || 'direct_song',
         title: (title as string) || 'Untitled Song',
         artist: (artist as string) || 'Unknown Artist',
         original_key: (paramKey as string) || 'C',
+        bpm: parsedBpm && !isNaN(parsedBpm) ? parsedBpm : undefined,
       },
     };
-  }, [isDirectSongMode, songId, title, artist, paramKey]);
+  }, [isDirectSongMode, songId, title, artist, paramKey, paramBpm]);
 
   // Real setlist songs from DB, or fallback to offline cached package, or single direct song
   const baseSongsList = isDirectSongMode && directSongObj
@@ -541,15 +583,62 @@ export default function StageModeScreen() {
 
   const totalPlayableLines = Math.max(playableLines.length, 1);
 
-  // Sync BPM when current song changes
-  useEffect(() => {
-    if (currentSetlistSong?.song?.bpm) {
-      setCurrentBpm(currentSetlistSong.song.bpm);
-    }
-  }, [currentSetlistSong?.song?.id, currentSetlistSong?.song?.bpm]);
+  const [scrapedDuration, setScrapedDuration] = useState<number | null>(null);
 
-  // Real song duration calculation (from BPM or line count estimate, default 210s)
+  // Sync BPM & scrape real online tempo/duration when current song changes
+  useEffect(() => {
+    let cancelled = false;
+    setScrapedDuration(null);
+
+    const existingBpm = currentSetlistSong?.song?.bpm;
+    if (existingBpm && existingBpm !== 120) {
+      setCurrentBpm(existingBpm);
+    } else if (existingBpm) {
+      setCurrentBpm(existingBpm);
+    } else {
+      setCurrentBpm(120);
+    }
+
+    const sTitle = isMemberFollowing ? syncCurrentSong?.title : currentSetlistSong?.song?.title;
+    const sArtist = isMemberFollowing ? syncCurrentSong?.artist : currentSetlistSong?.song?.artist;
+    const sId = isMemberFollowing ? syncCurrentSong?.songId : currentSetlistSong?.song?.id;
+
+    if (sTitle && (!existingBpm || existingBpm === 120)) {
+      fetchSongRealBpm(sTitle, sArtist).then((meta) => {
+        if (cancelled) return;
+        if (meta.bpm && meta.bpm >= 45 && meta.bpm <= 220) {
+          setCurrentBpm(meta.bpm);
+          // Persist real tempo to Supabase songs table if it has a valid UUID
+          if (sId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(sId))) {
+            supabase
+              .from('songs')
+              .update({ bpm: meta.bpm })
+              .eq('id', sId)
+              .then(() => {});
+          }
+        }
+        if (meta.duration && meta.duration > 30) {
+          setScrapedDuration(meta.duration);
+        }
+      });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentSetlistSong?.song?.id,
+    currentSetlistSong?.song?.title,
+    currentSetlistSong?.song?.artist,
+    currentSetlistSong?.song?.bpm,
+    isMemberFollowing,
+    syncCurrentSong?.songId,
+    syncCurrentSong?.title,
+  ]);
+
+  // Real song duration calculation (from scraped duration, DB duration, or BPM/line estimate, default 210s)
   const songDuration = useMemo(() => {
+    if (scrapedDuration && scrapedDuration > 30) return scrapedDuration;
     const rawDur = (currentSetlistSong?.song as any)?.duration_seconds;
     if (typeof rawDur === 'number' && rawDur > 30) return rawDur;
     if (totalPlayableLines > 2) {
@@ -559,7 +648,7 @@ export default function StageModeScreen() {
       }
     }
     return 210;
-  }, [totalPlayableLines, currentBpm, currentSetlistSong]);
+  }, [scrapedDuration, totalPlayableLines, currentBpm, currentSetlistSong]);
 
   // Reset playback timer & auto-scroll on song change or manual reset
   useEffect(() => {
@@ -568,13 +657,64 @@ export default function StageModeScreen() {
     setMinusOneCandidates([]);
     setMinusOneCandidateIdx(0);
     setIsLoadingMinusOne(false);
+    setIsYtSynced(false);
     scrollOffsetRef.current = 0;
     scrollViewRef.current?.scrollTo({ y: 0, animated: false });
   }, [currentIndex, syncCurrentSong?.songId]);
 
-  // Real-time playback timer ticker
+  // Listen to YouTube IFrame postMessage events on Web to lock lyrics timer & auto-scroll to Minus 1 video
   useEffect(() => {
-    if (!isPlaying) return;
+    if (Platform.OS !== 'web' || !isMinusOneVisible || !minusOneVideoId || typeof window === 'undefined') {
+      if (!isMinusOneVisible) setIsYtSynced(false);
+      return;
+    }
+
+    const handleYtMessage = (event: MessageEvent) => {
+      if (!event.origin || !event.origin.includes('youtube.com')) return;
+      try {
+        const payload = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        if (payload?.event === 'infoDelivery' && payload?.info) {
+          const info = payload.info;
+          setIsYtSynced(true);
+          if (typeof info.duration === 'number' && info.duration > 30) {
+            setScrapedDuration(Math.round(info.duration));
+          }
+          if (typeof info.currentTime === 'number' && !isNaN(info.currentTime)) {
+            const sec = Math.floor(info.currentTime);
+            setElapsedSeconds(sec);
+            elapsedRef.current = info.currentTime;
+            lastTickAtRef.current = Date.now();
+          }
+          if (info.playerState === 1) {
+            setIsPlaying(true);
+          } else if (info.playerState === 2 || info.playerState === 0) {
+            setIsPlaying(false);
+          }
+        }
+      } catch {
+        // ignore non-json message
+      }
+    };
+
+    window.addEventListener('message', handleYtMessage);
+    const pollHandshake = setInterval(() => {
+      try {
+        ytIframeRef.current?.contentWindow?.postMessage(
+          JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
+          '*'
+        );
+      } catch {}
+    }, 1000);
+
+    return () => {
+      window.removeEventListener('message', handleYtMessage);
+      clearInterval(pollHandshake);
+    };
+  }, [isMinusOneVisible, minusOneVideoId]);
+
+  // Real-time playback timer ticker (runs when YT sync is not actively driving currentTime)
+  useEffect(() => {
+    if (!isPlaying || (isMinusOneVisible && isYtSynced)) return;
     const timer = setInterval(() => {
       setElapsedSeconds((sec) => {
         if (sec >= songDuration) {
@@ -585,22 +725,34 @@ export default function StageModeScreen() {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [isPlaying, songDuration]);
+  }, [isPlaying, songDuration, isMinusOneVisible, isYtSynced]);
 
-  // Smooth auto-scroll: position derived from elapsed time (no accumulating drift / feedback)
+  // Smooth auto-scroll: position derived from elapsed time (no drift / feedback loop)
   const elapsedRef = useRef<number>(0);
   elapsedRef.current = elapsedSeconds;
   useEffect(() => {
+    lastTickAtRef.current = Date.now();
+  }, [elapsedSeconds]);
+
+  const markUserScrolling = () => {
+    isUserScrollingRef.current = true;
+    if (userScrollTimerRef.current) clearTimeout(userScrollTimerRef.current);
+    userScrollTimerRef.current = setTimeout(() => {
+      isUserScrollingRef.current = false;
+    }, 1200);
+  };
+
+  useEffect(() => {
     if (!isPlaying || !isAutoScroll || contentHeight <= containerHeight) return;
     const maxScroll = Math.max(0, contentHeight - containerHeight);
-    const startedAt = Date.now();
-    const startElapsed = elapsedRef.current;
     const scrollTimer = setInterval(() => {
       if (isUserScrollingRef.current) return;
-      const t = startElapsed + ((Date.now() - startedAt) / 1000) * scrollSpeedMultiplier;
+      const frac = Math.min(1, (Date.now() - lastTickAtRef.current) / 1000);
+      const t = (elapsedRef.current + frac) * (scrollSpeedMultiplier || 1);
       const ratio = Math.max(0, Math.min(1, t / songDuration));
       const y = ratio * maxScroll;
       if (Math.abs(y - scrollOffsetRef.current) >= 1) {
+        lastProgrammaticYRef.current = y;
         scrollOffsetRef.current = y;
         scrollViewRef.current?.scrollTo({ y, animated: false });
       }
@@ -798,13 +950,15 @@ export default function StageModeScreen() {
             <View
               style={[
                 styles.pulseDot,
-                sessionCode
+                !isDirectSongMode && sessionCode
                   ? { backgroundColor: isOfflineHotspot ? '#F59E0B' : isLeader ? '#EF4444' : '#10B981' }
                   : null,
               ]}
             />
             <Text style={styles.syncStatusText}>
-              {sessionCode
+              {isDirectSongMode
+                ? `SONG DICTIONARY • ${lyricsData?.provider === 'user_import' ? 'CHORDPRO' : 'LYRICS & PRACTICE'}`
+                : sessionCode
                 ? isLeader
                   ? isOfflineHotspot
                     ? `HOTSPOT P2P (${members.length}) • ${sessionCode}`
@@ -1004,6 +1158,9 @@ export default function StageModeScreen() {
                   const newSec = Math.round(ratio * songDuration);
                   if (!isNaN(newSec)) {
                     setElapsedSeconds(newSec);
+                    elapsedRef.current = newSec;
+                    lastTickAtRef.current = Date.now();
+                    sendYoutubeCommand('seekTo', [newSec, true]);
                     if (contentHeight > containerHeight) {
                       const targetY = ratio * (contentHeight - containerHeight);
                       scrollOffsetRef.current = targetY;
@@ -1029,7 +1186,7 @@ export default function StageModeScreen() {
         </View>
       )}
 
-      {/* ── Embedded Minus 1 Player (Auto-Searched YouTube Video & Auto-Play) ── */}
+      {/* ── Embedded Minus 1 Player (Auto-Searched YouTube Video & Auto-Play + Lyrics Sync) ── */}
       {isMinusOneVisible && currentSetlistSong && (
         <View style={styles.playerContainer}>
           <View style={styles.playerHeaderBar}>
@@ -1038,6 +1195,22 @@ export default function StageModeScreen() {
               <Text style={styles.playerHeaderTitle} numberOfLines={1}>
                 Minus 1: {currentSetlistSong.song?.title}
               </Text>
+              {minusOneVideoId && (
+                <View
+                  style={{
+                    backgroundColor: '#065F46',
+                    borderRadius: 4,
+                    paddingHorizontal: 5,
+                    paddingVertical: 1,
+                    borderWidth: 1,
+                    borderColor: '#10B981',
+                  }}
+                >
+                  <Text style={{ color: '#A7F3D0', fontSize: 9, fontWeight: '800' }}>
+                    {isYtSynced ? 'YT SYNCED' : 'AUTO-SYNC'}
+                  </Text>
+                </View>
+              )}
             </View>
 
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -1086,20 +1259,66 @@ export default function StageModeScreen() {
           ) : minusOneVideoId ? (
             Platform.OS === 'web' ? (
               <iframe
-                src={`https://www.youtube.com/embed/${minusOneVideoId}?autoplay=1&enablejsapi=1`}
+                ref={ytIframeRef}
+                src={`https://www.youtube.com/embed/${minusOneVideoId}?autoplay=1&enablejsapi=1&playsinline=1`}
                 style={{ width: '100%', height: '100%', border: 'none' } as any}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
+                onLoad={() => {
+                  try {
+                    ytIframeRef.current?.contentWindow?.postMessage(
+                      JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
+                      '*'
+                    );
+                  } catch {}
+                }}
               />
             ) : (
               <WebView
+                ref={ytWebViewRef}
                 style={styles.webview}
                 source={{
-                  uri: `https://www.youtube.com/embed/${minusOneVideoId}?autoplay=1`,
+                  uri: `https://www.youtube.com/embed/${minusOneVideoId}?autoplay=1&enablejsapi=1&playsinline=1`,
                 }}
                 javaScriptEnabled={true}
                 domStorageEnabled={true}
                 allowsFullscreenVideo={true}
+                mediaPlaybackRequiresUserAction={false}
+                injectedJavaScript={`
+                  (function() {
+                    setInterval(function() {
+                      try {
+                        var v = document.querySelector('video');
+                        if (v && window.ReactNativeWebView) {
+                          window.ReactNativeWebView.postMessage(JSON.stringify({
+                            type: 'yt_sync',
+                            currentTime: v.currentTime || 0,
+                            duration: v.duration || 0,
+                            paused: v.paused
+                          }));
+                        }
+                      } catch (e) {}
+                    }, 350);
+                  })();
+                  true;
+                `}
+                onMessage={(evt) => {
+                  try {
+                    const msg = JSON.parse(evt.nativeEvent.data);
+                    if (msg?.type === 'yt_sync') {
+                      setIsYtSynced(true);
+                      if (typeof msg.duration === 'number' && msg.duration > 30) {
+                        setScrapedDuration(Math.round(msg.duration));
+                      }
+                      if (typeof msg.currentTime === 'number' && !isNaN(msg.currentTime)) {
+                        setElapsedSeconds(Math.floor(msg.currentTime));
+                        elapsedRef.current = msg.currentTime;
+                        lastTickAtRef.current = Date.now();
+                      }
+                      setIsPlaying(!msg.paused);
+                    }
+                  } catch {}
+                }}
               />
             )
           ) : (
@@ -1136,29 +1355,26 @@ export default function StageModeScreen() {
         scrollEventThrottle={50}
         onContentSizeChange={(_, h) => setContentHeight(h)}
         onLayout={(e) => setContainerHeight(e.nativeEvent.layout.height)}
-        onScrollBeginDrag={() => {
-          isUserScrollingRef.current = true;
-        }}
-        onScrollEndDrag={() => {
-          setTimeout(() => {
-            isUserScrollingRef.current = false;
-          }, 400);
-        }}
-        onMomentumScrollEnd={() => {
-          isUserScrollingRef.current = false;
-        }}
+        onScrollBeginDrag={markUserScrolling}
+        onScrollEndDrag={markUserScrolling}
+        onMomentumScrollBegin={markUserScrolling}
+        onMomentumScrollEnd={markUserScrolling}
+        {...(Platform.OS === 'web' ? ({ onWheel: markUserScrolling, onTouchMove: markUserScrolling } as any) : {})}
         onScroll={(e) => {
-          // Only user-driven scrolling syncs the timer; programmatic auto-scroll must not feed back
-          if (!isUserScrollingRef.current) return;
           const currentY = e.nativeEvent.contentOffset.y;
-          if (typeof currentY === 'number' && !isNaN(currentY)) {
-            scrollOffsetRef.current = currentY;
-            const maxScroll = contentHeight - containerHeight;
-            if (maxScroll > 20 && songDuration > 0) {
-              const scrollRatio = Math.max(0, Math.min(1, currentY / maxScroll));
-              const syncedSec = Math.round(scrollRatio * songDuration);
-              if (!isNaN(syncedSec)) setElapsedSeconds(syncedSec);
-            }
+          if (typeof currentY !== 'number' || isNaN(currentY)) return;
+          // A position that differs from our last programmatic write means the user moved it
+          if (Math.abs(currentY - lastProgrammaticYRef.current) > 4) {
+            markUserScrolling();
+          }
+          if (!isUserScrollingRef.current) return;
+          scrollOffsetRef.current = currentY;
+          lastProgrammaticYRef.current = currentY;
+          const maxScroll = contentHeight - containerHeight;
+          if (maxScroll > 20 && songDuration > 0) {
+            const scrollRatio = Math.max(0, Math.min(1, currentY / maxScroll));
+            const syncedSec = Math.round(scrollRatio * songDuration);
+            if (!isNaN(syncedSec)) setElapsedSeconds(syncedSec);
           }
         }}
       >
@@ -1327,34 +1543,41 @@ export default function StageModeScreen() {
 
       {/* ── Footer Controls ── */}
       <View style={styles.footerControls}>
-        {/* ── What's Next / Up Next Live Preview Bar ── */}
+        {/* ── What's Next / Up Next Live Preview Bar (or Dictionary Practice Bar) ── */}
         <View style={styles.footerUpNextBar}>
           <TouchableOpacity
             activeOpacity={0.8}
-            onPress={() => setIsQueueVisible(true)}
+            disabled={isDirectSongMode}
+            onPress={() => !isDirectSongMode && setIsQueueVisible(true)}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}
           >
             <View style={styles.footerUpNextBadge}>
-              <Text style={styles.footerUpNextBadgeText}>UP NEXT</Text>
+              <Text style={styles.footerUpNextBadgeText}>
+                {isDirectSongMode ? 'REPERTOIRE' : 'UP NEXT'}
+              </Text>
             </View>
 
             <Text style={styles.footerUpNextTitle} numberOfLines={1}>
-              {displayedNextTitle ? displayedNextTitle : 'End of Setlist (No Upcoming Song)'}
+              {isDirectSongMode
+                ? `${displayedTitle} • Practice & Lyrics View`
+                : displayedNextTitle
+                ? displayedNextTitle
+                : 'End of Setlist (No Upcoming Song)'}
             </Text>
 
-            {displayedNextArtist ? (
+            {!isDirectSongMode && displayedNextArtist ? (
               <Text style={styles.footerUpNextArtist} numberOfLines={1}>
                 • {displayedNextArtist}
               </Text>
             ) : null}
 
-            {displayedNextKey ? (
+            {!isDirectSongMode && displayedNextKey ? (
               <View style={styles.footerUpNextKeyBadge}>
                 <Text style={styles.footerUpNextKeyText}>KEY {displayedNextKey}</Text>
               </View>
             ) : null}
 
-            {isNextRequest && (
+            {!isDirectSongMode && isNextRequest && (
               <View style={styles.requestInlineTag}>
                 <Text style={styles.requestInlineTagText}>REQUEST</Text>
               </View>
@@ -1381,13 +1604,15 @@ export default function StageModeScreen() {
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.footerUpNextAction}
-              onPress={() => setIsQueueVisible(true)}
-            >
-              <ListMusic size={12} color="#059669" />
-              <Text style={styles.footerUpNextActionText}>QUEUE ▾</Text>
-            </TouchableOpacity>
+            {!isDirectSongMode && (
+              <TouchableOpacity
+                style={styles.footerUpNextAction}
+                onPress={() => setIsQueueVisible(true)}
+              >
+                <ListMusic size={12} color="#059669" />
+                <Text style={styles.footerUpNextActionText}>QUEUE ▾</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -1406,14 +1631,16 @@ export default function StageModeScreen() {
               ) : (
                 /* Leader / Solo view */
                 <>
-                  <TouchableOpacity
-                    style={[styles.transportBtnSide, currentIndex === 0 && { opacity: 0.4 }]}
-                    activeOpacity={0.8}
-                    disabled={currentIndex === 0}
-                    onPress={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
-                  >
-                    <SkipBack size={22} color="#166534" fill="#166534" />
-                  </TouchableOpacity>
+                  {!isDirectSongMode && (
+                    <TouchableOpacity
+                      style={[styles.transportBtnSide, currentIndex === 0 && { opacity: 0.4 }]}
+                      activeOpacity={0.8}
+                      disabled={currentIndex === 0}
+                      onPress={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
+                    >
+                      <SkipBack size={22} color="#166534" fill="#166534" />
+                    </TouchableOpacity>
+                  )}
 
                   <TouchableOpacity
                     style={styles.transportBtnMain}
@@ -1421,7 +1648,8 @@ export default function StageModeScreen() {
                     onPress={() => {
                       const nextState = !isPlaying;
                       setIsPlaying(nextState);
-                      if (isLeader) broadcastPlayback(nextState);
+                      sendYoutubeCommand(nextState ? 'playVideo' : 'pauseVideo');
+                      if (isLeader && !isDirectSongMode) broadcastPlayback(nextState);
                     }}
                   >
                     {isPlaying ? (
@@ -1431,21 +1659,23 @@ export default function StageModeScreen() {
                     )}
                   </TouchableOpacity>
 
-                  <View style={{ alignItems: 'center' }}>
-                    <TouchableOpacity
-                      style={[styles.transportBtnSide, currentIndex >= songsList.length - 1 && { opacity: 0.4 }]}
-                      activeOpacity={0.8}
-                      disabled={currentIndex >= songsList.length - 1}
-                      onPress={() => setCurrentIndex((prev) => Math.min(songsList.length - 1, prev + 1))}
-                    >
-                      <SkipForward size={22} color="#166534" fill="#166534" />
-                    </TouchableOpacity>
-                    {displayedNextTitle ? (
-                      <Text style={styles.nextSongBtnSubLabel} numberOfLines={1}>
-                        {displayedNextTitle}
-                      </Text>
-                    ) : null}
-                  </View>
+                  {!isDirectSongMode && (
+                    <View style={{ alignItems: 'center' }}>
+                      <TouchableOpacity
+                        style={[styles.transportBtnSide, currentIndex >= songsList.length - 1 && { opacity: 0.4 }]}
+                        activeOpacity={0.8}
+                        disabled={currentIndex >= songsList.length - 1}
+                        onPress={() => setCurrentIndex((prev) => Math.min(songsList.length - 1, prev + 1))}
+                      >
+                        <SkipForward size={22} color="#166534" fill="#166534" />
+                      </TouchableOpacity>
+                      {displayedNextTitle ? (
+                        <Text style={styles.nextSongBtnSubLabel} numberOfLines={1}>
+                          {displayedNextTitle}
+                        </Text>
+                      ) : null}
+                    </View>
+                  )}
                 </>
               )}
             </View>
@@ -1456,8 +1686,11 @@ export default function StageModeScreen() {
                 activeOpacity={0.7}
                 onPress={() => {
                   setElapsedSeconds(0);
+                  elapsedRef.current = 0;
                   setIsPlaying(false);
                   setTransposeSteps(0);
+                  sendYoutubeCommand('seekTo', [0, true]);
+                  sendYoutubeCommand('pauseVideo');
                   scrollOffsetRef.current = 0;
                   scrollViewRef.current?.scrollTo({ y: 0, animated: true });
                 }}
@@ -1466,11 +1699,11 @@ export default function StageModeScreen() {
                 <Text style={styles.subActionText}>RESET</Text>
               </TouchableOpacity>
 
-              {isLeader && (
+              {isLeader && !isDirectSongMode && (
                 <TouchableOpacity
                   style={[styles.subActionBtn, { borderColor: '#10B981' }]}
                   activeOpacity={0.7}
-                  onPress={() => broadcastCountIn(120)}
+                  onPress={() => broadcastCountIn(currentBpm || 120)}
                 >
                   <Sparkles size={14} color="#10B981" />
                   <Text style={[styles.subActionText, { color: '#10B981', fontWeight: '800' }]}>
@@ -1490,16 +1723,18 @@ export default function StageModeScreen() {
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.subActionBtn}
-                activeOpacity={0.7}
-                onPress={() => setIsQueueVisible(true)}
-              >
-                <ListMusic size={14} color="#10B981" />
-                <Text style={styles.subActionText}>
-                  QUEUE{songsList.length > 0 ? ` (${Math.max(songsList.length - currentIndex - 1, 0)})` : ''}
-                </Text>
-              </TouchableOpacity>
+              {!isDirectSongMode && (
+                <TouchableOpacity
+                  style={styles.subActionBtn}
+                  activeOpacity={0.7}
+                  onPress={() => setIsQueueVisible(true)}
+                >
+                  <ListMusic size={14} color="#10B981" />
+                  <Text style={styles.subActionText}>
+                    QUEUE{songsList.length > 0 ? ` (${Math.max(songsList.length - currentIndex - 1, 0)})` : ''}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </>
         )}

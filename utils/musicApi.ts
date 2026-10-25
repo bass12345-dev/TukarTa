@@ -1,7 +1,8 @@
 /**
  * musicApi.ts
- * Integration with LRCLIB, iTunes, and TheAudioDB for song search, metadata, and lyrics.
+ * Integration with LRCLIB, iTunes, Deezer, and Supabase Edge Functions for song search, metadata, real BPM, and lyrics.
  */
+import { supabase } from './supabase';
 
 export interface SongResult {
   id: string | number;
@@ -238,8 +239,67 @@ export async function getLyrics(artist: string, title: string) {
 }
 
 /**
+ * Fetches real song BPM / tempo, duration (sec), and verified artist from online sources (Deezer + Web tempo scrape)
+ * via our server-side Supabase Edge Function (CORS-safe on Web & Native), with direct native fallback.
+ */
+export async function fetchSongRealBpm(
+  title: string,
+  artist?: string
+): Promise<{ bpm: number | null; duration: number | null; artist: string | null }> {
+  const cleanArtist = (artist || '')
+    .replace(/\b(audience request|unknown artist|custom request|requested song|request|unknown)\b/gi, '')
+    .trim();
+  const cleanTitle = (title || '').trim();
+  if (!cleanTitle) return { bpm: null, duration: null, artist: null };
+
+  // 1. Primary: Server-side Supabase Edge Function (zero CORS issues on Web & Mobile)
+  try {
+    const { data, error } = await supabase.functions.invoke('youtube-minus-one', {
+      body: { title: cleanTitle, artist: cleanArtist, mode: 'bpm' },
+    });
+    if (!error && data && (data.bpm || data.duration)) {
+      return {
+        bpm: typeof data.bpm === 'number' && data.bpm >= 40 ? Math.round(data.bpm) : null,
+        duration: typeof data.duration === 'number' && data.duration > 30 ? Math.round(data.duration) : null,
+        artist: data.artist || cleanArtist || null,
+      };
+    }
+  } catch {
+    // Fallback to direct Deezer API below
+  }
+
+  // 2. Fallback: Direct Deezer public API (works natively on iOS/Android)
+  try {
+    const q = cleanArtist ? `${cleanTitle} ${cleanArtist}` : cleanTitle;
+    const sRes = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=5`);
+    if (sRes.ok) {
+      const sJson = await sRes.json();
+      const items = (sJson?.data || []).slice(0, 5);
+      for (const item of items) {
+        const tRes = await fetch(`https://api.deezer.com/track/${item.id}`);
+        if (tRes.ok) {
+          const track = await tRes.json();
+          if (track && typeof track.bpm === 'number' && track.bpm >= 40) {
+            return {
+              bpm: Math.round(track.bpm),
+              duration: track.duration ? Number(track.duration) : null,
+              artist: track.artist?.name || cleanArtist || null,
+            };
+          }
+        }
+      }
+    }
+  } catch {
+    // Ignore fallback error
+  }
+
+  return { bpm: null, duration: null, artist: null };
+}
+
+/**
  * Searches YouTube for the most reliable Minus 1 / Karaoke backing track for a song,
- * sanitizes placeholder artists, and returns the direct videoId to embed and auto-play.
+ * sanitizes placeholder artists, and returns the direct videoIds to embed and auto-play.
+ * Uses the Supabase `youtube-minus-one` Edge Function first so Web and Mobile never hit CORS limits.
  */
 export async function fetchKaraokeVideoIds(title: string, artist?: string): Promise<string[]> {
   const cleanArtist = (artist || '')
@@ -248,6 +308,19 @@ export async function fetchKaraokeVideoIds(title: string, artist?: string): Prom
   const cleanTitle = (title || '').trim();
   if (!cleanTitle) return [];
 
+  // 1. Primary: Supabase Edge Function (server-side YouTube scrape + oEmbed embeddability check, zero CORS)
+  try {
+    const { data, error } = await supabase.functions.invoke('youtube-minus-one', {
+      body: { title: cleanTitle, artist: cleanArtist },
+    });
+    if (!error && Array.isArray(data?.ids) && data.ids.length > 0) {
+      return data.ids;
+    }
+  } catch (err) {
+    console.warn('Edge function youtube-minus-one fallback to direct:', err);
+  }
+
+  // 2. Fallback: Direct YouTube search (works on Native Android/iOS without CORS)
   const query = cleanArtist ? `${cleanTitle} ${cleanArtist} karaoke minus 1` : `${cleanTitle} karaoke minus 1`;
 
   try {

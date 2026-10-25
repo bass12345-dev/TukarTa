@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from '../utils/supabase';
+import * as Linking from 'expo-linking';
+import { supabase, extractAndSetSessionFromUrl } from '../utils/supabase';
 
 const OFFLINE_GUEST_KEY = '@tukarta_is_offline_guest';
 const CACHED_USER_KEY = '@tukarta_cached_user';
@@ -65,6 +66,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        // 1.5 Check if app was opened or resumed via an OAuth deep link URL
+        try {
+          const initialUrl = await Linking.getInitialURL();
+          if (initialUrl && (initialUrl.includes('access_token=') || initialUrl.includes('code='))) {
+            await extractAndSetSessionFromUrl(initialUrl);
+          }
+        } catch {}
+
         // 2. Check Supabase session
         const { data: { session: onlineSession } } = await supabase.auth.getSession();
         if (onlineSession?.user) {
@@ -123,8 +132,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
     });
 
+    // Listen for incoming deep link OAuth callbacks (e.g. Android Custom Tabs redirecting to tukarta://login)
+    const linkSub = Linking.addEventListener('url', async ({ url }) => {
+      if (url && (url.includes('access_token=') || url.includes('code='))) {
+        await extractAndSetSessionFromUrl(url);
+      }
+    });
+
     return () => {
       subscription.unsubscribe();
+      linkSub.remove();
     };
   }, []);
 

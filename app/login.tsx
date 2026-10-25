@@ -1,4 +1,5 @@
 import * as AuthSession from 'expo-auth-session';
+import * as Linking from 'expo-linking';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
@@ -16,7 +17,7 @@ import {
 } from 'react-native';
 import { Button } from '../components/ui/Button';
 import { TextField } from '../components/ui/TextField';
-import { supabase } from '../utils/supabase';
+import { supabase, extractAndSetSessionFromUrl } from '../utils/supabase';
 import { useAppTheme } from '../context/theme';
 import { useAuth } from '../context/auth';
 
@@ -29,6 +30,16 @@ export default function LoginScreen() {
   const [isLoggingIn, setIsLoggingIn] = React.useState(false);
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
+
+  // Warm up custom tabs on Android for faster, reliable OAuth return
+  React.useEffect(() => {
+    if (Platform.OS === 'android') {
+      WebBrowser.warmUpAsync().catch(() => {});
+      return () => {
+        WebBrowser.coolDownAsync().catch(() => {});
+      };
+    }
+  }, []);
 
   const handleOfflineGuestEntry = async () => {
     try {
@@ -43,38 +54,71 @@ export default function LoginScreen() {
   const handleGoogleLogin = async () => {
     try {
       setIsLoggingIn(true);
-      const returnUrl = AuthSession.makeRedirectUri();
-      
+
+      const returnUrl =
+        Platform.OS === 'web' && typeof window !== 'undefined'
+          ? window.location.origin
+          : AuthSession.makeRedirectUri({
+              scheme: 'tukarta',
+              path: 'login',
+            });
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: returnUrl,
-          skipBrowserRedirect: true,
+          skipBrowserRedirect: Platform.OS !== 'web',
+          queryParams: {
+            prompt: 'select_account',
+          },
         },
       });
 
       if (error) throw error;
 
+      // On Web, Supabase redirects the window directly when skipBrowserRedirect is false
+      if (Platform.OS === 'web') {
+        if (data?.url && typeof window !== 'undefined') {
+          window.location.href = data.url;
+        }
+        return;
+      }
+
+      if (!data?.url) {
+        throw new Error('Could not generate Google sign-in URL.');
+      }
+
       const res = await WebBrowser.openAuthSessionAsync(data.url, returnUrl);
 
       if (res.type === 'success' && res.url) {
-        const hash = res.url.split('#')[1];
-        if (!hash) return;
-        
-        const params = Object.fromEntries(new URLSearchParams(hash));
-        
-        if (params.access_token && params.refresh_token) {
-          const { error: sessionError } = await supabase.auth.setSession({
-            access_token: params.access_token,
-            refresh_token: params.refresh_token,
-          });
-          
-          if (sessionError) throw sessionError;
+        const parsed = await extractAndSetSessionFromUrl(res.url);
+        if (parsed.error) {
+          throw new Error(parsed.error);
         }
+        if (parsed.success) {
+          router.replace('/(tabs)');
+          return;
+        }
+      }
+
+      // On Android, Chrome Custom Tabs may dismiss after triggering the OS deep link intent;
+      // check if the deep link listener or initial URL already established the session.
+      const latestUrl = await Linking.getInitialURL();
+      if (latestUrl && (latestUrl.includes('access_token=') || latestUrl.includes('code='))) {
+        const parsed = await extractAndSetSessionFromUrl(latestUrl);
+        if (parsed.success) {
+          router.replace('/(tabs)');
+          return;
+        }
+      }
+
+      const { data: sessionCheck } = await supabase.auth.getSession();
+      if (sessionCheck?.session) {
+        router.replace('/(tabs)');
       }
     } catch (error: any) {
       console.error('Login error:', error);
-      Alert.alert('Login Error', error.message || 'An error occurred during sign in.');
+      Alert.alert('Login Error', error.message || 'An error occurred during Google sign in.');
     } finally {
       setIsLoggingIn(false);
     }
@@ -93,6 +137,7 @@ export default function LoginScreen() {
         password,
       });
       if (error) throw error;
+      router.replace('/(tabs)');
     } catch (error: any) {
       console.error('Authentication Error', error.message);
       Alert.alert('Authentication Error', error.message);
