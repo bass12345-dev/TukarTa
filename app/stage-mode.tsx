@@ -57,7 +57,7 @@ import {
   transposeChord,
   transposeChordProText,
 } from '../utils/chordParser';
-import { WebView } from 'react-native-webview';
+import YoutubePlayer, { YoutubeIframeRef } from 'react-native-youtube-iframe';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../context/theme';
 
@@ -166,7 +166,12 @@ export default function StageModeScreen() {
   const [minusOneCandidateIdx, setMinusOneCandidateIdx] = useState<number>(0);
   const [isYtSynced, setIsYtSynced] = useState<boolean>(false);
   const ytIframeRef = useRef<any>(null);
-  const ytWebViewRef = useRef<WebView>(null);
+  // Native: react-native-youtube-iframe loads the player from a hosted https page, so YouTube sees a
+  // valid origin/referrer (an inline HTML WebView gets "Error 153 / player configuration" on real phones)
+  const ytPlayerRef = useRef<YoutubeIframeRef>(null);
+  const ytStateRef = useRef<string>('unstarted');
+  const [ytPlay, setYtPlay] = useState<boolean>(true);
+  const [ytPlayerHeight, setYtPlayerHeight] = useState<number>(0);
 
   const sendYoutubeCommand = (func: string, args: any[] = []) => {
     if (!isMinusOneVisible || !minusOneVideoId) return;
@@ -176,18 +181,25 @@ export default function StageModeScreen() {
           JSON.stringify({ event: 'command', func, args }),
           '*'
         );
-      } else {
-        const js =
-          func === 'playVideo'
-            ? `try { window.__ytPlayer && window.__ytPlayer.playVideo(); } catch(e){} true;`
-            : func === 'pauseVideo'
-            ? `try { window.__ytPlayer && window.__ytPlayer.pauseVideo(); } catch(e){} true;`
-            : func === 'seekTo'
-            ? `try { window.__ytPlayer && window.__ytPlayer.seekTo(${Number(args[0]) || 0}, true); } catch(e){} true;`
-            : 'true;';
-        ytWebViewRef.current?.injectJavaScript(js);
+      } else if (func === 'playVideo') {
+        setYtPlay(true);
+      } else if (func === 'pauseVideo') {
+        setYtPlay(false);
+      } else if (func === 'seekTo') {
+        ytPlayerRef.current?.seekTo(Number(args[0]) || 0, true);
       }
     } catch {}
+  };
+
+  const handleYtError = () => {
+    // Not embeddable / removed: move on to the next candidate automatically
+    if (minusOneCandidates.length > 1 && minusOneCandidateIdx < minusOneCandidates.length - 1) {
+      const next = minusOneCandidateIdx + 1;
+      setMinusOneCandidateIdx(next);
+      setMinusOneVideoId(minusOneCandidates[next]);
+    } else {
+      setMinusOneVideoId(null);
+    }
   };
 
   const formatSongTime = (sec: any): string => {
@@ -733,6 +745,32 @@ export default function StageModeScreen() {
       window.removeEventListener('message', handleYtMessage);
       clearInterval(pollHandshake);
     };
+  }, [isMinusOneVisible, minusOneVideoId]);
+
+  // Native: poll the YouTube player's clock to lock lyrics timer & auto-scroll to the Minus 1 video
+  useEffect(() => {
+    if (Platform.OS === 'web' || !isMinusOneVisible || !minusOneVideoId) return;
+    setYtPlay(true);
+    ytStateRef.current = 'unstarted';
+
+    const poll = setInterval(async () => {
+      const player = ytPlayerRef.current;
+      if (!player || ytStateRef.current === 'unstarted') return;
+      try {
+        const [currentTime, duration] = await Promise.all([player.getCurrentTime(), player.getDuration()]);
+        setIsYtSynced(true);
+        if (typeof duration === 'number' && duration > 30) {
+          setScrapedDuration(Math.round(duration));
+        }
+        if (typeof currentTime === 'number' && !isNaN(currentTime)) {
+          setElapsedSeconds(Math.floor(currentTime));
+          elapsedRef.current = currentTime;
+          lastTickAtRef.current = Date.now();
+        }
+      } catch {}
+    }, 350);
+
+    return () => clearInterval(poll);
   }, [isMinusOneVisible, minusOneVideoId]);
 
   // Real-time playback timer ticker (runs when YT sync is not actively driving currentTime)
@@ -1304,47 +1342,34 @@ export default function StageModeScreen() {
                 }}
               />
             ) : (
-              <WebView
-                key={minusOneVideoId}
-                ref={ytWebViewRef}
+              <View
                 style={styles.webview}
-                originWhitelist={['*']}
-                source={{ html: buildYoutubePlayerHtml(minusOneVideoId), baseUrl: 'https://www.youtube.com' }}
-                javaScriptEnabled={true}
-                domStorageEnabled={true}
-                allowsInlineMediaPlayback={true}
-                allowsFullscreenVideo={true}
-                mediaPlaybackRequiresUserAction={false}
-                setSupportMultipleWindows={false}
-                onMessage={(evt) => {
-                  try {
-                    const msg = JSON.parse(evt.nativeEvent.data);
-                    if (msg?.type === 'yt_error') {
-                      // Not embeddable / removed: move on to the next candidate automatically
-                      if (minusOneCandidates.length > 1 && minusOneCandidateIdx < minusOneCandidates.length - 1) {
-                        const next = minusOneCandidateIdx + 1;
-                        setMinusOneCandidateIdx(next);
-                        setMinusOneVideoId(minusOneCandidates[next]);
-                      } else {
-                        setMinusOneVideoId(null);
+                onLayout={(e) => setYtPlayerHeight(Math.floor(e.nativeEvent.layout.height))}
+              >
+                {ytPlayerHeight > 0 && (
+                  <YoutubePlayer
+                    key={minusOneVideoId}
+                    ref={ytPlayerRef}
+                    height={ytPlayerHeight}
+                    videoId={minusOneVideoId}
+                    play={ytPlay}
+                    forceAndroidAutoplay
+                    initialPlayerParams={{ controls: true, rel: false, modestbranding: true }}
+                    webViewProps={{ allowsInlineMediaPlayback: true, mediaPlaybackRequiresUserAction: false }}
+                    onError={handleYtError}
+                    onChangeState={(state: string) => {
+                      ytStateRef.current = state;
+                      if (state === 'playing') {
+                        setYtPlay(true);
+                        setIsPlaying(true);
+                      } else if (state === 'paused' || state === 'ended') {
+                        setYtPlay(false);
+                        setIsPlaying(false);
                       }
-                      return;
-                    }
-                    if (msg?.type === 'yt_sync') {
-                      setIsYtSynced(true);
-                      if (typeof msg.duration === 'number' && msg.duration > 30) {
-                        setScrapedDuration(Math.round(msg.duration));
-                      }
-                      if (typeof msg.currentTime === 'number' && !isNaN(msg.currentTime)) {
-                        setElapsedSeconds(Math.floor(msg.currentTime));
-                        elapsedRef.current = msg.currentTime;
-                        lastTickAtRef.current = Date.now();
-                      }
-                      setIsPlaying(!msg.paused);
-                    }
-                  } catch {}
-                }}
-              />
+                    }}
+                  />
+                )}
+              </View>
             )
           ) : (
             <View style={styles.playerLoadingBox}>
@@ -2138,40 +2163,6 @@ export default function StageModeScreen() {
       </Modal>
     </View>
   );
-}
-
-/**
- * HTML host for the YouTube IFrame Player API. Loaded with baseUrl https://www.youtube.com so the embed
- * receives a valid origin/referrer (loading /embed/ID directly in a WebView triggers "player configuration" errors).
- */
-function buildYoutubePlayerHtml(rawVideoId: string): string {
-  const videoId = rawVideoId.replace(/[^\w-]/g, '');
-  return `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>html,body{margin:0;padding:0;height:100%;background:#000;overflow:hidden}#player{width:100%;height:100%}</style></head>
-<body><div id="player"></div>
-<script>
-  function post(o){ try { window.ReactNativeWebView.postMessage(JSON.stringify(o)); } catch(e){} }
-  var tag=document.createElement('script'); tag.src='https://www.youtube.com/iframe_api'; document.head.appendChild(tag);
-  function onYouTubeIframeAPIReady(){
-    window.__ytPlayer = new YT.Player('player', {
-      videoId: '${videoId}',
-      width: '100%', height: '100%',
-      playerVars: { autoplay: 1, playsinline: 1, controls: 1, rel: 0, modestbranding: 1, origin: 'https://www.youtube.com' },
-      events: {
-        onReady: function(e){ try { e.target.playVideo(); } catch(x){} },
-        onError: function(e){ post({ type: 'yt_error', code: e.data }); }
-      }
-    });
-    setInterval(function(){
-      var p = window.__ytPlayer;
-      if (!p || !p.getPlayerState) return;
-      try {
-        var st = p.getPlayerState();
-        post({ type: 'yt_sync', currentTime: p.getCurrentTime() || 0, duration: p.getDuration() || 0, paused: st !== 1 && st !== 3 });
-      } catch(e){}
-    }, 350);
-  }
-</script></body></html>`;
 }
 
 const DARK_BG: Record<string, string> = {
