@@ -19,6 +19,7 @@ export interface ThemeColors {
   primaryLight: string;
   primaryDark: string;
   accent: string;
+  warm: string;
   card: string;
   tabBg: string;
   tabBorder: string;
@@ -34,57 +35,60 @@ export interface ThemeColors {
 
 export const lightColors: ThemeColors = {
   isDark: false,
-  bg: '#FFFFFF',
-  bgSecondary: '#F0FDF4',
+  bg: '#FAFBFA',
+  bgSecondary: '#F1F5F3',
   bgCard: '#FFFFFF',
-  border: '#D1FAE5',
-  borderSubtle: '#F0FDF4',
-  text: '#166534',
-  textSecondary: '#065F46',
-  textMuted: '#059669',
-  textDim: '#10B981',
+  border: '#E2E8E5',
+  borderSubtle: '#EEF2F0',
+  text: '#0F1B17',
+  textSecondary: '#2F433B',
+  textMuted: '#5B6F66',
+  textDim: '#6B7F76',
   primary: '#10B981',
   primaryLight: '#D1FAE5',
-  primaryDark: '#064E3B',
+  primaryDark: '#047857',
   accent: '#10B981',
+  warm: '#D97706',
   card: '#FFFFFF',
   tabBg: '#FFFFFF',
-  tabBorder: '#D1FAE5',
-  tabActive: '#166534',
-  tabInactive: '#9CA3AF',
-  inputBg: '#F0FDF4',
-  inputBorder: '#D1FAE5',
-  inputText: '#166534',
-  inputPlaceholder: '#6EE7B7',
+  tabBorder: '#E2E8E5',
+  tabActive: '#047857',
+  tabInactive: '#8A9A93',
+  inputBg: '#F1F5F3',
+  inputBorder: '#E2E8E5',
+  inputText: '#0F1B17',
+  inputPlaceholder: '#8A9A93',
   statusPillBg: '#D1FAE5',
   statusPillText: '#065F46',
 };
 
+// "Backstage": near-black neutral surfaces, mint for brand/live, amber for warm highlights
 export const darkColors: ThemeColors = {
   isDark: true,
-  bg: '#0A1612',
-  bgSecondary: '#0E1F1A',
-  bgCard: '#132821',
-  border: '#1F3F34',
-  borderSubtle: '#162F27',
-  text: '#F0FDF4',
-  textSecondary: '#D1FAE5',
-  textMuted: '#A7F3D0',
-  textDim: '#6EE7B7',
+  bg: '#0B0D0E',
+  bgSecondary: '#111517',
+  bgCard: '#171C1F',
+  border: '#242B2F',
+  borderSubtle: '#1B2125',
+  text: '#F4F7F6',
+  textSecondary: '#C9D3CF',
+  textMuted: '#93A39D',
+  textDim: '#7E908A',
   primary: '#10B981',
-  primaryLight: '#16382C',
-  primaryDark: '#047857',
+  primaryLight: '#12332A',
+  primaryDark: '#34D399',
   accent: '#34D399',
-  card: '#132821',
-  tabBg: '#0D1D18',
-  tabBorder: '#1A382E',
+  warm: '#F5A524',
+  card: '#171C1F',
+  tabBg: '#0F1214',
+  tabBorder: '#1F2629',
   tabActive: '#34D399',
-  tabInactive: '#6EE7B7',
-  inputBg: '#0E1F1A',
-  inputBorder: '#1F3F34',
-  inputText: '#F0FDF4',
-  inputPlaceholder: '#4B7B6B',
-  statusPillBg: '#18382C',
+  tabInactive: '#7E908A',
+  inputBg: '#111517',
+  inputBorder: '#242B2F',
+  inputText: '#F4F7F6',
+  inputPlaceholder: '#5E706A',
+  statusPillBg: '#12332A',
   statusPillText: '#A7F3D0',
 };
 
@@ -99,16 +103,16 @@ interface ThemeContextType {
 const THEME_STORAGE_KEY = '@tukarta_theme_mode';
 
 const ThemeContext = createContext<ThemeContextType>({
-  themeMode: 'light',
+  themeMode: 'dark',
   setThemeMode: () => {},
   toggleTheme: () => {},
-  isDark: false,
-  colors: lightColors,
+  isDark: true,
+  colors: darkColors,
 });
 
 export function AppThemeProvider({ children }: { children: React.ReactNode }) {
   const systemColorScheme = useRNColorScheme();
-  const [themeMode, setThemeModeState] = useState<ThemeMode>('light');
+  const [themeMode, setThemeModeState] = useState<ThemeMode>('dark');
 
   useEffect(() => {
     // Load persisted theme

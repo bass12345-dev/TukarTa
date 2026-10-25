@@ -661,38 +661,120 @@ export function useAddSongToSetlist() {
   });
 }
 
+export type AiProposalStatus = 'pending' | 'executing' | 'executed' | 'rejected' | 'failed' | 'expired';
+
+export interface AiProposal {
+  id: string;
+  session_id: string;
+  message_id: string | null;
+  kind:
+    | 'create_gig'
+    | 'update_gig'
+    | 'add_songs_to_setlist'
+    | 'remove_songs_from_setlist'
+    | 'reorder_setlist'
+    | 'add_to_dictionary'
+    | 'invite_musician';
+  risk: 'low' | 'medium' | 'high';
+  payload: Record<string, any>;
+  preview: { title: string; subtitle: string; lines: string[] };
+  status: AiProposalStatus;
+  error: string | null;
+  expires_at: string;
+}
+
+export class AgentError extends Error {
+  code: string;
+  constructor(message: string, code = 'unknown') {
+    super(message);
+    this.code = code;
+  }
+}
+
+async function invokeAgent<T>(body: Record<string, any>): Promise<T> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  if (!token) throw new AgentError('Please sign in again to use the assistant.', 'unauthenticated');
+
+  const { data, error } = await supabase.functions.invoke('setlist-agent', {
+    body,
+    headers: { 'X-Auth-Token': token },
+  });
+
+  if (error) {
+    let detail = error.message;
+    let code = 'unknown';
+    try {
+      const json = await (error as any).context?.json?.();
+      if (json?.error) detail = json.error;
+      if (json?.code) code = json.code;
+    } catch (_) {}
+    throw new AgentError(detail, code);
+  }
+  return data as T;
+}
+
 export function useSetlistAI() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ gigId, message, setlistId, sessionId }: { gigId: string; message: string; setlistId: string; sessionId?: string }) => {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-
-      const { data, error } = await supabase.functions.invoke('setlist-agent', {
-        body: { gigId, message, setlistId, sessionId },
-        headers: {
-          'X-Auth-Token': token || ''
-        }
-      });
-      
-      if (error) {
-        let errorDetail = error.message;
-        try {
-          if ((error as any).context?.json) {
-            const jsonBody = await (error as any).context.json();
-            if (jsonBody?.error) errorDetail = jsonBody.error;
-          }
-        } catch (_) {}
-        throw new Error(errorDetail);
-      }
-      return data;
-    },
+    mutationFn: ({ sessionId, message, clientMsgId }: { sessionId: string; message: string; clientMsgId?: string }) =>
+      invokeAgent<{ reply: string; messageId: string; proposals: AiProposal[] }>({
+        action: 'chat',
+        sessionId,
+        message,
+        clientMsgId,
+      }),
     onSuccess: (_, variables) => {
-      if (variables.sessionId) {
-        queryClient.invalidateQueries({ queryKey: ['ai-history', variables.sessionId] });
-      }
+      queryClient.invalidateQueries({ queryKey: ['ai-history', variables.sessionId] });
+      queryClient.invalidateQueries({ queryKey: ['ai-proposals', variables.sessionId] });
       queryClient.invalidateQueries({ queryKey: ['ai-sessions'] });
+    },
+  });
+}
+
+/** Proposals the agent has prepared for this conversation (pending / decided), oldest first. */
+export function useSessionProposals(sessionId: string | undefined) {
+  return useQuery({
+    queryKey: ['ai-proposals', sessionId],
+    queryFn: async () => {
+      if (!sessionId) return [] as AiProposal[];
+      const { data, error } = await supabase
+        .from('ai_proposals')
+        .select('id, session_id, message_id, kind, risk, payload, preview, status, error, expires_at')
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return (data || []) as AiProposal[];
+    },
+    enabled: !!sessionId,
+    staleTime: 0,
+  });
+}
+
+/** The human-in-the-loop gate: approve (optionally with edits) or reject agent proposals. */
+export function useDecideProposals() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      proposalIds,
+      decision,
+      edits,
+    }: {
+      proposalIds: string[];
+      decision: 'approve' | 'reject';
+      edits?: Record<string, any>;
+    }) =>
+      invokeAgent<{ results: { id: string; status: string; error?: string; skipped?: boolean }[] }>({
+        action: 'decide',
+        proposalIds,
+        decision,
+        edits,
+      }),
+    onSuccess: () => {
+      // An approved proposal may have changed gigs, setlists, repertoire or invites.
+      queryClient.invalidateQueries();
     },
   });
 }

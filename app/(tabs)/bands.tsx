@@ -41,7 +41,7 @@ import { useBandSession, MemberRole } from '../../context/bandSession';
 
 import { RefreshControl } from 'react-native';
 import { useRefresh } from '../../utils/hooks/useRefresh';
-import { useTabBarPadding } from '../../utils/hooks/useTabBarPadding';
+import { useHeaderTopPadding, useTabBarPadding } from '../../utils/hooks/useTabBarPadding';
 const ROLE_ICONS: Record<MemberRole, any> = {
   leader: Crown,
   vocals: Mic,
@@ -55,6 +55,7 @@ const ROLE_ICONS: Record<MemberRole, any> = {
 
 export default function BandSessionScreen() {
   const tabBarPadding = useTabBarPadding();
+  const headerTop = useHeaderTopPadding();
   const { refreshing, onRefresh } = useRefresh();
   const router = useRouter();
   const { user } = useAuth();
@@ -140,7 +141,7 @@ export default function BandSessionScreen() {
       )}
 
       {/* ── Header ── */}
-      <View style={[styles.header, { backgroundColor: colors.bg, borderBottomColor: colors.border }]}>
+      <View style={[styles.header, { backgroundColor: colors.bg, borderBottomColor: colors.border, paddingTop: headerTop }]}>
         <View style={styles.headerTitleRow}>
           <Text style={[styles.title, { color: colors.text }]}>Band Session</Text>
           {activeTab === 'bands' ? (

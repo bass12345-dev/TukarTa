@@ -22,10 +22,12 @@ import { useAppTheme } from '@/context/theme';
 import { CreateGigModal } from '@/components/gigs/CreateGigModal';
 
 import { RefreshControl } from 'react-native';
+import { AiHeaderButton } from '../../components/ui/AiHeaderButton';
 import { useRefresh } from '../../utils/hooks/useRefresh';
-import { useTabBarPadding } from '../../utils/hooks/useTabBarPadding';
+import { useHeaderTopPadding, useTabBarPadding } from '../../utils/hooks/useTabBarPadding';
 export default function SetlistsScreen() {
   const tabBarPadding = useTabBarPadding();
+  const headerTop = useHeaderTopPadding();
   const { refreshing, onRefresh } = useRefresh();
   const router = useRouter();
   const { colors, isDark } = useAppTheme();
@@ -42,20 +44,23 @@ export default function SetlistsScreen() {
       />
 
       {/* ── Header ── */}
-      <View style={[styles.header, { backgroundColor: colors.bg, borderBottomColor: colors.border }]}>
+      <View style={[styles.header, { backgroundColor: colors.bg, borderBottomColor: colors.border, paddingTop: headerTop }]}>
         <View style={styles.headerTop}>
           <View>
             <Text style={[styles.screenEyebrow, { color: colors.primary }]}>PERFORMANCE GIGS</Text>
             <Text style={[styles.screenTitle, { color: colors.text }]}>My Gigs</Text>
           </View>
 
-          <TouchableOpacity 
-            style={[styles.addBtn, { backgroundColor: colors.primary }]}
-            activeOpacity={0.85}
-            onPress={() => setShowCreateGigModal(true)}
-          >
-            <Plus size={20} color="#FFF" strokeWidth={2.5} />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <AiHeaderButton />
+            <TouchableOpacity
+              style={[styles.addBtn, { backgroundColor: colors.primary }]}
+              activeOpacity={0.85}
+              onPress={() => setShowCreateGigModal(true)}
+            >
+              <Plus size={20} color="#FFF" strokeWidth={2.5} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
@@ -63,8 +68,8 @@ export default function SetlistsScreen() {
         </Text>
       </View>
 
-      <ScrollView 
-        style={styles.scroll} 
+      <ScrollView
+        style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarPadding }]}
         refreshControl={
           <RefreshControl
@@ -74,7 +79,7 @@ export default function SetlistsScreen() {
             colors={[colors.primary]}
             progressBackgroundColor={colors.bgCard}
           />
-        } 
+        }
         showsVerticalScrollIndicator={false}
       >
         {isGigsLoading ? (
@@ -106,7 +111,7 @@ export default function SetlistsScreen() {
               const name = gig.name || 'Untitled Gig';
               const venue = gig.venue || 'TBA';
               const bandName = gig.band?.name || 'My Band';
-              const dateStr = gig.gig_date 
+              const dateStr = gig.gig_date
                 ? new Date(gig.gig_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                 : 'Date TBA';
 

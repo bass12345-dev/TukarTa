@@ -79,7 +79,7 @@ export function SongReview({ onSave, stepLabel, initialSongs = [] }: SongReviewP
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
       <LinearGradient
-        colors={isDark ? ['#132821', colors.bg] : ['#F0FDF4', '#FFFFFF']}
+        colors={[colors.bgSecondary, colors.bg]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 0.3 }}
         style={StyleSheet.absoluteFill}

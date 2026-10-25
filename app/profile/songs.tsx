@@ -27,6 +27,10 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { Pill } from '../../components/ui/Pill';
 import { useInfiniteMySongs, useDeleteMySong } from '../../utils/hooks/useSongs';
 import { useAppTheme } from '../../context/theme';
+import { RefreshControl } from 'react-native';
+import { AiHeaderButton } from '../../components/ui/AiHeaderButton';
+import { useRefresh } from '../../utils/hooks/useRefresh';
+import { useHeaderTopPadding, useTabBarPadding } from '../../utils/hooks/useTabBarPadding';
 
 const { width } = Dimensions.get('window');
 
@@ -54,17 +58,25 @@ const CATEGORIES = [
 ];
 
 export default function SongDictionaryScreen() {
+  return <SongLibraryView />;
+}
+
+/** Song library. `embedded` renders it as the Library tab (no back button, tab-bar padding, pull-to-refresh). */
+export function SongLibraryView({ embedded = false }: { embedded?: boolean }) {
   const router = useRouter();
+  const tabBarPadding = useTabBarPadding();
+  const headerTop = useHeaderTopPadding();
+  const { refreshing, onRefresh } = useRefresh();
   const { colors, isDark } = useAppTheme();
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
-  
-  const { 
-    data, 
-    fetchNextPage, 
-    hasNextPage, 
-    isFetchingNextPage, 
-    isLoading 
+
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading
   } = useInfiniteMySongs(20);
 
   // 1. Flatten pages into a single array
@@ -80,38 +92,41 @@ export default function SongDictionaryScreen() {
   const filteredSongs = allSongs.filter(item => {
     const song = item.song as any;
     if (!song) return false;
-    
+
     // Search filter
-    const searchMatch = search.toLowerCase() === '' || 
+    const searchMatch = search.toLowerCase() === '' ||
       song.title.toLowerCase().includes(search.toLowerCase()) ||
       song.artist.toLowerCase().includes(search.toLowerCase());
-    
+
     // Category filter
     const effectiveGenre = item.genre || song.genre;
-    const categoryMatch = activeCategory === 'All' || 
+    const categoryMatch = activeCategory === 'All' ||
       effectiveGenre === activeCategory;
-      
+
     return searchMatch && categoryMatch;
   });
 
   const renderHeader = () => (
     <>
-      <View style={[styles.header, { backgroundColor: colors.bg }]}>
+      <View style={[styles.header, { backgroundColor: colors.bg }, embedded && { paddingTop: headerTop }]}>
         <View style={styles.headerTop}>
-          <TouchableOpacity 
-            onPress={() => router.back()} 
-            style={[styles.backBtn, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}
-            activeOpacity={0.7}
-          >
-            <ChevronLeft size={22} color={colors.text} />
-          </TouchableOpacity>
+          {!embedded && (
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={[styles.backBtn, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}
+              activeOpacity={0.7}
+            >
+              <ChevronLeft size={22} color={colors.text} />
+            </TouchableOpacity>
+          )}
           <View style={styles.headerTitleContainer}>
-            <Text style={[styles.headerTitle, { color: colors.text }]}>My Song Dictionary</Text>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>{embedded ? 'Library' : 'My Song Dictionary'}</Text>
             <Text style={[styles.headerSubtitle, { color: colors.textDim }]}>
               {totalCount} songs · {liveCount} live-ready
             </Text>
           </View>
-          <TouchableOpacity 
+          {embedded && <AiHeaderButton />}
+          <TouchableOpacity
             style={[styles.addBtn, { backgroundColor: colors.primary }]}
             onPress={() => router.push('/songs/add')}
             activeOpacity={0.85}
@@ -135,7 +150,7 @@ export default function SongDictionaryScreen() {
             placeholder="Search songs, artists, keys..."
             placeholderTextColor={colors.inputPlaceholder}
             style={[
-              styles.searchInput, 
+              styles.searchInput,
               { color: colors.inputText },
               Platform.OS === 'web' && ({ outlineStyle: 'none' } as any)
             ]}
@@ -156,11 +171,11 @@ export default function SongDictionaryScreen() {
             {CATEGORIES.map(cat => {
               const isActive = activeCategory === cat;
               return (
-                <TouchableOpacity 
-                  key={cat} 
+                <TouchableOpacity
+                  key={cat}
                   style={[
-                    styles.categoryPill, 
-                    { 
+                    styles.categoryPill,
+                    {
                       backgroundColor: isActive ? colors.primary : colors.bgCard,
                       borderColor: isActive ? colors.primary : colors.border
                     }
@@ -168,10 +183,10 @@ export default function SongDictionaryScreen() {
                   onPress={() => setActiveCategory(cat)}
                   activeOpacity={0.7}
                 >
-                  <Text 
+                  <Text
                     style={[
-                      styles.categoryText, 
-                      { 
+                      styles.categoryText,
+                      {
                         color: isActive ? '#FFFFFF' : colors.text,
                         fontWeight: isActive ? '700' : '500'
                       }
@@ -224,7 +239,7 @@ export default function SongDictionaryScreen() {
           {search ? "Try adjusting your search or category filter" : "Start adding songs manually or scan with AI!"}
         </Text>
         {!search && (
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.addFirstBtn, { backgroundColor: colors.primary }]}
             onPress={() => router.push('/songs/add')}
             activeOpacity={0.85}
@@ -254,7 +269,16 @@ export default function SongDictionaryScreen() {
           }
         }}
         onEndReachedThreshold={0.5}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, embedded && { paddingBottom: tabBarPadding }]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+            progressBackgroundColor={colors.bgCard}
+          />
+        }
         showsVerticalScrollIndicator={false}
       />
     </View>
@@ -304,9 +328,9 @@ function SongListItem({ item, colors, isDark }: { item: any; colors: any; isDark
       `Are you sure you want to remove "${song.title}" from your dictionary?`,
       [
         { text: "Cancel", style: "cancel" },
-        { 
-          text: "Delete", 
-          style: "destructive", 
+        {
+          text: "Delete",
+          style: "destructive",
           onPress: () => deleteSong(song.id)
         }
       ]
@@ -315,8 +339,8 @@ function SongListItem({ item, colors, isDark }: { item: any; colors: any; isDark
 
   const renderRightActions = () => {
     return (
-      <TouchableOpacity 
-        style={styles.deleteAction} 
+      <TouchableOpacity
+        style={styles.deleteAction}
         onPress={handleDelete}
         activeOpacity={0.7}
         disabled={isDeleting}
@@ -334,7 +358,7 @@ function SongListItem({ item, colors, isDark }: { item: any; colors: any; isDark
   };
 
   return (
-    <Swipeable 
+    <Swipeable
       renderRightActions={renderRightActions}
       friction={2}
       rightThreshold={40}
@@ -344,8 +368,8 @@ function SongListItem({ item, colors, isDark }: { item: any; colors: any; isDark
         activeOpacity={0.7}
         onPress={handleOpenSong}
         style={[
-          styles.songItem, 
-          { 
+          styles.songItem,
+          {
             backgroundColor: colors.bgCard,
             borderColor: colors.border
           }
@@ -364,11 +388,11 @@ function SongListItem({ item, colors, isDark }: { item: any; colors: any; isDark
           </Text>
           <View style={styles.starsRow}>
             {[1, 2, 3, 4, 5].map(i => (
-              <Star 
-                key={i} 
-                size={11} 
-                color="#F59E0B" 
-                fill={i <= (item.confidence_level || 3) ? "#F59E0B" : "transparent"} 
+              <Star
+                key={i}
+                size={11}
+                color="#F59E0B"
+                fill={i <= (item.confidence_level || 3) ? "#F59E0B" : "transparent"}
               />
             ))}
           </View>
@@ -386,18 +410,18 @@ function SongListItem({ item, colors, isDark }: { item: any; colors: any; isDark
               <Text style={[styles.bpmText, { color: colors.textDim }]}>{song.bpm} BPM</Text>
             )}
           </View>
-          <View 
+          <View
             style={[
-              styles.statusBadge, 
-              { 
+              styles.statusBadge,
+              {
                 backgroundColor: isLive ? (isDark ? '#14382A' : '#D1FAE5') : (isDark ? '#3D280E' : '#FEF3C7'),
                 borderColor: isLive ? '#10B981' : '#F59E0B'
               }
             ]}
           >
-            <Text 
+            <Text
               style={[
-                styles.statusBadgeText, 
+                styles.statusBadgeText,
                 { color: isLive ? (isDark ? '#34D399' : '#065F46') : '#B45309' }
               ]}
             >
@@ -408,8 +432,8 @@ function SongListItem({ item, colors, isDark }: { item: any; colors: any; isDark
 
         {/* Web delete button for accessibility */}
         {Platform.OS === 'web' && (
-          <TouchableOpacity 
-            style={styles.webDeleteBtn} 
+          <TouchableOpacity
+            style={styles.webDeleteBtn}
             onPress={(e) => {
               e.stopPropagation?.();
               handleDelete();

@@ -45,10 +45,12 @@ import {
 } from '@/utils/hooks/useMusician';
 
 import { RefreshControl } from 'react-native';
+import { AiHeaderButton } from '../../components/ui/AiHeaderButton';
 import { useRefresh } from '../../utils/hooks/useRefresh';
-import { useTabBarPadding } from '../../utils/hooks/useTabBarPadding';
+import { useHeaderTopPadding, useTabBarPadding } from '../../utils/hooks/useTabBarPadding';
 export default function DashboardScreen() {
   const tabBarPadding = useTabBarPadding();
+  const headerTop = useHeaderTopPadding();
   const { refreshing, onRefresh } = useRefresh();
   const router = useRouter();
   const { user } = useAuth();
@@ -118,13 +120,14 @@ export default function DashboardScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
       {/* ── Top Header ── */}
-      <View style={[styles.header, { backgroundColor: colors.bg, borderBottomColor: colors.border }]}>
+      <View style={[styles.header, { backgroundColor: colors.bg, borderBottomColor: colors.border, paddingTop: headerTop }]}>
         <View style={styles.headerLeft}>
           <Text style={[styles.welcomeGreeting, { color: colors.textDim }]}>Welcome back 👋</Text>
           <Text style={[styles.profileName, { color: colors.text }]}>{displayName}</Text>
         </View>
 
         <View style={styles.headerRight}>
+          <AiHeaderButton />
           <TouchableOpacity 
             style={[styles.stagePill, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}
             onPress={() => router.push('/setlists')}

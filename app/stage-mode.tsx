@@ -2175,24 +2175,24 @@ function buildYoutubePlayerHtml(rawVideoId: string): string {
 }
 
 const DARK_BG: Record<string, string> = {
-  '#FFFFFF': '#0A1612',
-  '#ECFDF5': '#132821',
-  '#F0FDF4': '#0E1F1A',
-  '#D1FAE5': '#16382C',
+  '#FFFFFF': '#0B0D0E',
+  '#ECFDF5': '#171C1F',
+  '#F0FDF4': '#111517',
+  '#D1FAE5': '#12332A',
   '#FEF3C7': '#3A2D0B',
   '#FDE68A': '#5A4510',
-  '#F8FAFC': '#0E1F1A',
-  '#F1F5F9': '#132821',
-  '#E2E8F0': '#1F3F34',
+  '#F8FAFC': '#111517',
+  '#F1F5F9': '#171C1F',
+  '#E2E8F0': '#242B2F',
 };
 const DARK_BORDER: Record<string, string> = {
-  '#FFFFFF': '#0A1612',
-  '#D1FAE5': '#1F3F34',
+  '#FFFFFF': '#0B0D0E',
+  '#D1FAE5': '#242B2F',
   '#A7F3D0': '#1F5A47',
-  '#ECFDF5': '#1F3F34',
-  '#F0FDF4': '#162F27',
+  '#ECFDF5': '#242B2F',
+  '#F0FDF4': '#1B2125',
   '#FDE68A': '#5A4510',
-  '#E2E8F0': '#1F3F34',
+  '#E2E8F0': '#242B2F',
 };
 const DARK_TEXT: Record<string, string> = {
   '#166534': '#D1FAE5',

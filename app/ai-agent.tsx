@@ -11,6 +11,7 @@ import {
   Circle,
   CheckCircle,
   Check,
+  AlertTriangle,
   Camera,
   Image as ImageIcon,
   Loader2
@@ -21,6 +22,7 @@ import { readAsArrayBuffer } from '../utils/file';
 import * as ImageManipulator from 'expo-image-manipulator';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -38,20 +40,16 @@ import { useAppTheme } from '../context/theme';
 import { Button } from '../components/ui/Button';
 import { GlassCard } from '../components/ui/GlassCard';
 import {
-  useAddSongToSetlist,
-  useCreateGig,
-  useGigDetails,
-  useGigSetlist,
-  useInviteMusician,
-  useSetlistAI,
-  useSetlistSongs,
-  useAISessions,
+  AgentError,
+  AiProposal,
   useAIChatHistory,
+  useAISessions,
   useCreateAISession,
-  useAddSongToKnowledge,
-  useAddSongsToSetlistBulk
+  useDecideProposals,
+  useGigDetails,
+  useSessionProposals,
+  useSetlistAI,
 } from '@/utils/hooks/useMusician';
-import { useAddMultipleSongs } from '@/utils/hooks/useSongs';
 import { supabase } from '../utils/supabase';
 import { decode } from 'base64-arraybuffer';
 
@@ -61,8 +59,6 @@ type Message = {
   id: string;
   role: 'assistant' | 'user';
   segments: Segment[];
-  badge?: string;
-  actions?: any[];
   isAnimating?: boolean;
 };
 
@@ -103,91 +99,236 @@ function TypewriterText({ segments, onComplete }: { segments: Segment[]; onCompl
   return <RichText segments={displayedSegments} isUser={false} />;
 }
 
+/** Old transcripts embedded an `ACTIONS: [...]` blob; strip it (those were applied/handled in their own session). */
 function parseAIMessage(content: string) {
-  const actionRegex = /ACTIONS:\s*(\[.*\])/s;
-  const match = content.match(actionRegex);
-  let cleanText = content.replace(actionRegex, '').trim();
-  let actions = [];
-  
-  if (match) {
-    try {
-      actions = JSON.parse(match[1]);
-    } catch (e) {
-      console.error('Failed to parse AI actions:', e);
-    }
-  }
-  
-  return { text: cleanText, actions };
+  return { text: content.replace(/ACTIONS:\s*\[[\s\S]*\]\s*$/, '').trim() };
 }
 
-// ─── Proposal Card Component ─────────────────────────────────────────────────
-function ProposalCard({ action, onApprove, onCancel }: any) {
-  const { colors, isDark } = useAppTheme();
-  const type = action.type?.toLowerCase() || '';
-  const isSong = type === 'add' || type === 'add_song' || type === 'proposal_add_song';
-  const isGig = type === 'proposal_create_gig' || type === 'create_gig';
-  const isInvite = type === 'proposal_invite' || type === 'invite_musician';
-  const isDictionary = type === 'proposal_add_to_dictionary' || type === 'add_to_dictionary' || type === 'proposal_add_to_dictionary';
-  const isApplied = action.isApplied;
+// ─── Proposal Card (human-in-the-loop) ───────────────────────────────────────────────────────
+const KIND_LABEL: Record<AiProposal['kind'], string> = {
+  create_gig: 'New gig',
+  update_gig: 'Edit gig',
+  add_songs_to_setlist: 'Add to setlist',
+  remove_songs_from_setlist: 'Remove from setlist',
+  reorder_setlist: 'Reorder setlist',
+  add_to_dictionary: 'Add to repertoire',
+  invite_musician: 'Invite musician',
+};
+
+const EDITABLE_KINDS: AiProposal['kind'][] = ['create_gig', 'update_gig', 'invite_musician'];
+
+function ProposalCard({
+  proposal,
+  busy,
+  onApprove,
+  onReject,
+  onEdit,
+}: {
+  proposal: AiProposal;
+  busy: boolean;
+  onApprove: () => void;
+  onReject: () => void;
+  onEdit: () => void;
+}) {
+  const { colors } = useAppTheme();
+  const isPending = proposal.status === 'pending';
+  const isHigh = proposal.risk === 'high';
+  const Icon =
+    proposal.kind === 'create_gig' || proposal.kind === 'update_gig'
+      ? Calendar
+      : proposal.kind === 'invite_musician'
+      ? UserPlus
+      : Music;
+
+  const statusLabel: Record<string, string> = {
+    executed: 'Done',
+    rejected: 'Dismissed',
+    failed: 'Failed',
+    expired: 'Expired',
+    executing: 'Applying…',
+  };
 
   return (
-    <View 
+    <View
       style={[
-        styles.proposalCard, 
-        { 
-          backgroundColor: colors.bgCard, 
-          borderColor: isApplied ? colors.primary : colors.border 
-        },
-        isApplied && { backgroundColor: colors.primaryLight }
+        styles.proposalCard,
+        { backgroundColor: colors.bgCard, borderColor: isHigh && isPending ? '#F59E0B' : colors.border },
+        proposal.status === 'executed' && { borderColor: colors.primary },
       ]}
     >
       <View style={styles.proposalContent}>
         <View style={[styles.proposalIconBox, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}>
-          {isSong && <Music size={18} color={colors.primary} />}
-          {isGig && <Calendar size={18} color="#F59E0B" />}
-          {isInvite && <UserPlus size={18} color={colors.primaryDark} />}
-          {isDictionary && <Check size={18} color={colors.primary} />}
+          <Icon size={18} color={isHigh ? '#F59E0B' : colors.primary} />
         </View>
-        
         <View style={styles.proposalTextContainer}>
-          <Text style={[styles.proposalTitle, { color: colors.text }]} numberOfLines={1}>
-            {isSong ? (action.data?.title || action.title || 'SONG SUGGESTION') : 
-             isGig ? (action.data?.name || 'GIG PROPOSAL') : 
-             isDictionary ? (action.data?.title || 'ADD TO DICTIONARY') : 
-             isInvite ? (action.data?.musicianName || 'RECRUITMENT') : 'PROPOSAL'}
+          <Text style={[styles.proposalKind, { color: isHigh ? '#F59E0B' : colors.primaryDark }]}>
+            {KIND_LABEL[proposal.kind]?.toUpperCase()}
+            {isHigh ? '  ·  SENDS A MESSAGE' : ''}
           </Text>
-          <Text style={[styles.proposalSubtitle, { color: colors.textDim }]} numberOfLines={1}>
-            {isSong ? (action.data?.artist || action.artist || 'Proposed addition') : 
-             isGig ? (action.data?.venue || 'Proposed event') : 
-             isDictionary ? `${action.data?.artist || ''} • ${action.data?.genre || 'Music'}` : 
-             isInvite ? (action.data?.message || 'Proposed recruitment') : 'AI Suggestion'}
+          <Text style={[styles.proposalTitle, { color: colors.text }]} numberOfLines={2}>
+            {proposal.preview?.title}
+          </Text>
+          <Text style={[styles.proposalSubtitle, { color: colors.textDim }]} numberOfLines={2}>
+            {proposal.preview?.subtitle}
           </Text>
         </View>
+        {!isPending && (
+          <View
+            style={[
+              styles.statusChip,
+              {
+                backgroundColor:
+                  proposal.status === 'executed' ? colors.primaryLight : colors.bgSecondary,
+                borderColor: proposal.status === 'failed' ? '#EF4444' : colors.border,
+              },
+            ]}
+          >
+            {proposal.status === 'executing' ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Text
+                style={[
+                  styles.statusChipText,
+                  { color: proposal.status === 'failed' ? '#EF4444' : colors.primaryDark },
+                ]}
+              >
+                {statusLabel[proposal.status] || proposal.status}
+              </Text>
+            )}
+          </View>
+        )}
+      </View>
 
-        <View style={styles.proposalRight}>
-          {!isApplied ? (
-            <View style={styles.proposalActionsRow}>
-              <TouchableOpacity 
-                style={[styles.miniCancelBtn, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]} 
-                onPress={onCancel}
-              >
-                <X size={14} color={colors.textDim} />
-              </TouchableOpacity>
-              <TouchableOpacity 
-                onPress={onApprove} 
-                style={[styles.approveMiniBtn, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]}
-              >
-                <Text style={[styles.approveMiniText, { color: colors.primaryDark }]}>Approve</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={[styles.checkboxActive, { backgroundColor: colors.primary }]}>
-              <Check size={14} color="#FFF" strokeWidth={3} />
-            </View>
+      {proposal.preview?.lines?.length > 0 && (
+        <View style={[styles.proposalLines, { borderTopColor: colors.border }]}>
+          {proposal.preview.lines.map((line, i) => (
+            <Text key={i} style={[styles.proposalLine, { color: colors.textSecondary }]} numberOfLines={2}>
+              {line}
+            </Text>
+          ))}
+        </View>
+      )}
+
+      {proposal.status === 'failed' && !!proposal.error && (
+        <View style={[styles.proposalLines, { borderTopColor: colors.border, flexDirection: 'row', gap: 6 }]}>
+          <AlertTriangle size={14} color="#EF4444" />
+          <Text style={[styles.proposalLine, { color: '#EF4444', flex: 1 }]}>{proposal.error}</Text>
+        </View>
+      )}
+
+      {isPending && (
+        <View style={[styles.proposalActionsBar, { borderTopColor: colors.border }]}>
+          <TouchableOpacity
+            style={[styles.proposalBtn, { borderColor: colors.border, backgroundColor: colors.bgSecondary }]}
+            onPress={onReject}
+            disabled={busy}
+          >
+            <X size={14} color={colors.textDim} />
+            <Text style={[styles.proposalBtnText, { color: colors.textDim }]}>Dismiss</Text>
+          </TouchableOpacity>
+          {EDITABLE_KINDS.includes(proposal.kind) && (
+            <TouchableOpacity
+              style={[styles.proposalBtn, { borderColor: colors.border, backgroundColor: colors.bgSecondary }]}
+              onPress={onEdit}
+              disabled={busy}
+            >
+              <Text style={[styles.proposalBtnText, { color: colors.text }]}>Edit</Text>
+            </TouchableOpacity>
           )}
+          <TouchableOpacity
+            style={[styles.proposalBtn, styles.proposalBtnPrimary, { backgroundColor: colors.primary }, busy && { opacity: 0.6 }]}
+            onPress={onApprove}
+            disabled={busy}
+          >
+            {busy ? <ActivityIndicator size="small" color="#FFF" /> : <Check size={14} color="#FFF" strokeWidth={3} />}
+            <Text style={[styles.proposalBtnText, { color: '#FFF' }]}>{isHigh ? 'Send' : 'Approve'}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+}
+
+/** Lets the user tweak the editable fields of a proposal before approving it. */
+function EditProposalModal({
+  proposal,
+  onClose,
+  onSave,
+}: {
+  proposal: AiProposal | null;
+  onClose: () => void;
+  onSave: (edits: Record<string, any>) => void;
+}) {
+  const { colors } = useAppTheme();
+  const [values, setValues] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!proposal) return;
+    const p = proposal.payload || {};
+    setValues({
+      name: p.name ?? '',
+      venue: p.venue ?? '',
+      date: p.date ? String(p.date).slice(0, 10) : '',
+      message: p.message ?? '',
+    });
+  }, [proposal?.id]);
+
+  if (!proposal) return null;
+  const fields: { key: string; label: string; multiline?: boolean; hint?: string }[] =
+    proposal.kind === 'invite_musician'
+      ? [{ key: 'message', label: 'Message to the musician', multiline: true }]
+      : [
+          { key: 'name', label: 'Gig name' },
+          { key: 'venue', label: 'Venue' },
+          { key: 'date', label: 'Date', hint: 'YYYY-MM-DD' },
+        ];
+
+  const save = () => {
+    const edits: Record<string, any> = {};
+    for (const f of fields) {
+      const original = f.key === 'date' && proposal.payload?.date ? String(proposal.payload.date).slice(0, 10) : proposal.payload?.[f.key] ?? '';
+      if ((values[f.key] ?? '') !== original && (values[f.key] ?? '').trim()) edits[f.key] = values[f.key].trim();
+    }
+    onSave(edits);
+  };
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
+        <View style={[styles.modalContent, { backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1 }]}>
+          <View style={styles.modalHeader}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Edit before approving</Text>
+            <TouchableOpacity onPress={onClose}>
+              <X size={24} color={colors.text} />
+            </TouchableOpacity>
+          </View>
+          {fields.map((f) => (
+            <View key={f.key} style={{ marginBottom: 12 }}>
+              <Text style={[styles.editLabel, { color: colors.textSecondary }]}>
+                {f.label}
+                {f.hint ? `  (${f.hint})` : ''}
+              </Text>
+              <TextInput
+                value={values[f.key] ?? ''}
+                onChangeText={(t) => setValues((v) => ({ ...v, [f.key]: t }))}
+                multiline={f.multiline}
+                maxLength={f.multiline ? 300 : 120}
+                style={[
+                  styles.editInput,
+                  { color: colors.inputText, backgroundColor: colors.inputBg, borderColor: colors.inputBorder },
+                  f.multiline && { minHeight: 90, textAlignVertical: 'top' },
+                ]}
+                placeholderTextColor={colors.inputPlaceholder}
+              />
+            </View>
+          ))}
+          <TouchableOpacity style={[styles.editSaveBtn, { backgroundColor: colors.primary }]} onPress={save}>
+            <Check size={16} color="#FFF" strokeWidth={3} />
+            <Text style={styles.editSaveText}>{proposal.risk === 'high' ? 'Save & send' : 'Save & approve'}</Text>
+          </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </Modal>
   );
 }
 
@@ -234,19 +375,39 @@ export default function AIAgentScreen() {
 
   // 1. Data Hooks
   const { data: gig } = useGigDetails(gigId as string);
-  const { data: setlist } = useGigSetlist(gigId as string);
-  const { data: currentSongs } = useSetlistSongs(setlist?.id);
   
   const { data: sessions, isLoading: isLoadingSessions } = useAISessions();
   const { data: historyMessages, isLoading: isLoadingHistory } = useAIChatHistory(sessionId || undefined);
   const createSession = useCreateAISession();
   const aiMutation = useSetlistAI();
-  const addSongToSetlist = useAddSongToSetlist();
-  const addSongToKnowledge = useAddSongToKnowledge();
-  const createGig = useCreateGig();
-  const inviteMusician = useInviteMusician();
-  const addSongsBulk = useAddSongsToSetlistBulk();
-  const addMultipleSongs = useAddMultipleSongs();
+  const decideMutation = useDecideProposals();
+  const { data: proposals } = useSessionProposals(sessionId || undefined);
+  const [editingProposal, setEditingProposal] = useState<AiProposal | null>(null);
+  const [decidingIds, setDecidingIds] = useState<string[]>([]);
+
+  const proposalsByMessage = React.useMemo(() => {
+    const map: Record<string, AiProposal[]> = {};
+    for (const pr of proposals || []) {
+      if (!pr.message_id) continue;
+      (map[pr.message_id] ||= []).push(pr);
+    }
+    return map;
+  }, [proposals]);
+
+  const decide = async (ids: string[], decision: 'approve' | 'reject', edits?: Record<string, any>) => {
+    setDecidingIds((cur) => [...cur, ...ids]);
+    try {
+      const { results } = await decideMutation.mutateAsync({ proposalIds: ids, decision, edits });
+      const failed = results.filter((r) => r.error && r.status !== 'executed' && r.status !== 'rejected');
+      if (failed.length) {
+        Alert.alert('Could not apply', failed[0].error || 'That change could not be applied. Ask the assistant to try again.');
+      }
+    } catch (e: any) {
+      Alert.alert('Something went wrong', e?.message || 'Could not reach the assistant. Please try again.');
+    } finally {
+      setDecidingIds((cur) => cur.filter((id) => !ids.includes(id)));
+    }
+  };
 
   // 2. Sync history to local state
   useEffect(() => {
@@ -258,12 +419,11 @@ export default function AIAgentScreen() {
 
       if (isInitialLoad || isSessionSwitch || isFirstLoadForSession) {
         const mapped: Message[] = historyMessages.map((m: any) => {
-          const { text, actions } = parseAIMessage(m.content);
+          const { text } = parseAIMessage(m.content);
           return {
             id: m.id,
             role: m.role as 'user' | 'assistant',
             segments: [{ text }],
-            actions,
             isAnimating: false,
           };
         });
@@ -335,80 +495,6 @@ export default function AIAgentScreen() {
     const text = overrideMsg || input.trim();
     if (!text || !sessionId) return;
 
-    // INTERCEPT: Approve All Command
-    const cleanText = text.toLowerCase().trim().replace(/[.!?]$/, '');
-    const approveAllTriggers = ['approve all', 'add all', 'yes please', 'sure', 'go ahead', 'do it', 'approved'];
-    if (approveAllTriggers.includes(cleanText)) {
-      const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant' && m.actions && m.actions.length > 0);
-      if (lastAssistantMsg) {
-        const unappliedActions = lastAssistantMsg.actions?.filter(a => !a.isApplied) || [];
-        if (unappliedActions.length > 0) {
-          // Show user message
-          const userMsg: Message = { id: Date.now().toString(), role: 'user', segments: [{ text }] };
-          setMessages(prev => [...prev, userMsg]);
-          setInput('');
-
-          // Batch apply actions (Optimized for O(1) requests where possible)
-          const songActions = unappliedActions.filter(a => {
-            const t = a.type?.toLowerCase();
-            return t === 'add' || t === 'add_song' || t === 'proposal_add_song';
-          });
-          const dictActions = unappliedActions.filter(a => {
-            const t = a.type?.toLowerCase();
-            return t === 'proposal_add_to_dictionary' || t === 'add_to_dictionary';
-          });
-          const otherActions = unappliedActions.filter(a => !songActions.includes(a) && !dictActions.includes(a));
-
-          // 1. Bulk Songs
-          if (songActions.length > 0 && setlist?.id) {
-            await addSongsBulk.mutateAsync({
-              setlistId: setlist.id,
-              songs: songActions.map((a, i) => ({
-                songId: a.songId,
-                position: (currentSongs?.length || 0) + i + 1
-              }))
-            });
-          }
-
-          // 2. Bulk Dictionary
-          if (dictActions.length > 0) {
-            await addMultipleSongs.mutateAsync(
-              dictActions.map(a => ({
-                title: a.data?.title || a.title || '',
-                artist: a.data?.artist || a.artist || '',
-                genre: a.data?.genre || 'Music'
-              }))
-            );
-          }
-
-          // 3. Others (One by one)
-          for (const action of otherActions) {
-            await applySingleAction(lastAssistantMsg.id, action);
-          }
-
-          // Mark all as applied in local state
-          setMessages(prev => prev.map(m => 
-            m.id === lastAssistantMsg.id ? { 
-              ...m, 
-              actions: m.actions?.map(a => 
-                unappliedActions.includes(a) ? { ...a, isApplied: true } : a
-              ),
-              badge: 'All actions approved! ✓' 
-            } : m
-          ));
-
-          // Confirmation
-          const aiReply: Message = {
-            id: (Date.now() + 1).toString(),
-            role: 'assistant',
-            segments: [{ text: `Done! I've approved all ${unappliedActions.length} suggestions for you. 🎸` }],
-          };
-          setMessages(prev => [...prev, aiReply]);
-          return;
-        }
-      }
-    }
-
     const userMsg: Message = {
       id: Date.now().toString(),
       role: 'user',
@@ -426,45 +512,43 @@ export default function AIAgentScreen() {
         .from('ai_sessions')
         .update({ title: cleanTitle })
         .eq('id', sessionId)
-        .then(() => {
+        .then(({ error }) => {
+          if (error) console.warn('Could not update session title:', error.message);
           queryClient.invalidateQueries({ queryKey: ['ai-sessions'] });
-        })
-        .catch((e) => console.warn('Could not update session title:', e));
+        });
     }
 
     try {
       const response = await aiMutation.mutateAsync({
-        gigId: gigId as string,
-        setlistId: setlist?.id,
+        sessionId,
         message: text,
-        sessionId: sessionId
+        clientMsgId: userMsg.id,
       });
 
-      const { text: cleanReply, actions } = parseAIMessage(response.reply);
-
+      const { text: cleanReply } = parseAIMessage(response.reply);
       const aiReply: Message = {
-        id: (Date.now() + 1).toString(),
+        id: response.messageId,
         role: 'assistant',
         segments: [{ text: cleanReply }],
-        actions,
-        badge: actions.length > 0 
-          ? `${actions.length} proposals ready ✓ ${actions.length > 1 ? '(Type "Approve All" to add all)' : ''}` 
-          : undefined,
-        isAnimating: true
+        isAnimating: true,
       };
-      
+
       setMessages((prev) => [...prev, aiReply]);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (error: any) {
       console.error('AI error:', error);
-      const replyText = "Sorry, I'm having trouble connecting right now. 🎤 Catching my breath! Please try sending your message again in a moment.";
+      const code = (error as AgentError)?.code;
+      const replyText =
+        code === 'rate_limited'
+          ? error.message
+          : code === 'unauthenticated'
+          ? 'Your session expired. Please sign in again to keep chatting.'
+          : "Sorry, I'm having trouble right now. Please try sending your message again in a moment.";
 
-      const errorMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        segments: [{ text: replyText }],
-      };
-      setMessages((prev) => [...prev, errorMsg]);
+      setMessages((prev) => [
+        ...prev,
+        { id: (Date.now() + 1).toString(), role: 'assistant', segments: [{ text: replyText }] },
+      ]);
     }
   };
 
@@ -538,7 +622,12 @@ export default function AIAgentScreen() {
       if (error) throw error;
 
       if (data.songs && data.songs.length > 0) {
-        const songList = data.songs.map((s: any) => `- ${s.title} by ${s.artist} (${s.genre || 'Music'})`).join('\n');
+        // OCR output is untrusted: strip control chars/line breaks and cap size before it reaches the agent
+        const clean = (v: any, max: number) => String(v ?? '').replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, max);
+        const songList = data.songs
+          .slice(0, 30)
+          .map((s: any) => `- ${clean(s.title, 100)} by ${clean(s.artist, 100)} (${clean(s.genre || 'Music', 30)})`)
+          .join('\n');
         handleSend(`I've uploaded a screenshot. Please help me add these extracted songs to my music dictionary:\n${songList}`);
       } else {
         handleSend("I uploaded an image but couldn't find any songs. Can you help me check if it's clear enough?");
@@ -552,54 +641,6 @@ export default function AIAgentScreen() {
       handleSend(errorMsg);
     } finally {
       setIsExtracting(false);
-    }
-  };
-
-  const applySingleAction = async (msgId: string, action: any) => {
-    try {
-      if (action.type === 'add' || action.type === 'reorder') {
-        const isReorder = action.type === 'reorder';
-        const nextPosition = (currentSongs?.length || 0) + 1;
-        const targetPosition = action.position || (isReorder ? 1 : nextPosition); // Default to start if reorder, end if add
-
-        await addSongToSetlist.mutateAsync({
-          setlistId: setlist?.id || '',
-          songId: action.songId,
-          position: targetPosition
-        });
-      } else if (action.type === 'proposal_create_gig') {
-        await createGig.mutateAsync({
-          bandId: action.data.bandId,
-          name: action.data.name,
-          venue: action.data.venue,
-          date: action.data.date,
-        });
-      } else if (action.type === 'proposal_invite') {
-        await inviteMusician.mutateAsync({
-          bandId: action.data.bandId,
-          musicianId: action.data.musicianId,
-          message: action.data.message
-        });
-      } else if (action.type === 'proposal_add_to_dictionary') {
-        await addSongToKnowledge.mutateAsync({
-          title: action.data.title,
-          artist: action.data.artist,
-          genre: action.data.genre
-        });
-      }
-
-      setMessages(prev => prev.map(m => 
-        m.id === msgId ? { 
-          ...m, 
-          actions: m.actions?.map(a => 
-            // Better matching for actions
-            (a === action) ? { ...a, isApplied: true } : a
-          ),
-          badge: 'Action approved! ✓' 
-        } : m
-      ));
-    } catch (error) {
-       console.error('Failed to apply action:', error);
     }
   };
 
@@ -784,28 +825,37 @@ export default function AIAgentScreen() {
                     <RichText segments={msg.segments} isUser={msg.role === 'user'} colors={colors} />
                   )}
                   
-                  {msg.badge && (
-                    <View style={[styles.badge, { borderTopColor: colors.border }]}>
-                      <Text style={[styles.badgeText, { color: colors.primaryDark }]}>{msg.badge}</Text>
-                    </View>
-                  )}
                 </View>
               </View>
 
-              {msg.role === 'assistant' && msg.actions && msg.actions.length > 0 && (
+              {msg.role === 'assistant' && (proposalsByMessage[msg.id]?.length ?? 0) > 0 && (
                 <View style={styles.proposalsContainer}>
-                  {msg.actions.map((action, idx) => (
-                    <ProposalCard 
-                      key={idx} 
-                      action={action} 
-                      onApprove={() => applySingleAction(msg.id, action)}
-                      onCancel={() => {
-                        setMessages(prev => prev.map(m => 
-                          m.id === msg.id ? { ...m, actions: m.actions?.filter((_, i) => i !== idx) } : m
-                        ));
-                      }}
+                  {proposalsByMessage[msg.id].map((pr) => (
+                    <ProposalCard
+                      key={pr.id}
+                      proposal={pr}
+                      busy={decidingIds.includes(pr.id) || pr.status === 'executing'}
+                      onApprove={() => decide([pr.id], 'approve')}
+                      onReject={() => decide([pr.id], 'reject')}
+                      onEdit={() => setEditingProposal(pr)}
                     />
                   ))}
+                  {(() => {
+                    const bulk = proposalsByMessage[msg.id].filter((x) => x.status === 'pending' && x.risk !== 'high');
+                    if (bulk.length < 2) return null;
+                    return (
+                      <TouchableOpacity
+                        style={[styles.approveAllBtn, { borderColor: colors.primary, backgroundColor: colors.primaryLight }]}
+                        onPress={() => decide(bulk.map((x) => x.id), 'approve')}
+                        disabled={bulk.some((x) => decidingIds.includes(x.id))}
+                      >
+                        <Check size={15} color={colors.primaryDark} strokeWidth={3} />
+                        <Text style={[styles.approveAllText, { color: colors.primaryDark }]}>
+                          Approve all {bulk.length} (invites are always approved one by one)
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })()}
                 </View>
               )}
             </View>
@@ -861,6 +911,16 @@ export default function AIAgentScreen() {
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      <EditProposalModal
+        proposal={editingProposal}
+        onClose={() => setEditingProposal(null)}
+        onSave={(edits) => {
+          const target = editingProposal;
+          setEditingProposal(null);
+          if (target) decide([target.id], 'approve', edits);
+        }}
+      />
     </View>
   );
 }
@@ -883,6 +943,54 @@ function RichText({ segments, isUser, colors }: { segments: Segment[]; isUser: b
 }
 
 const styles = StyleSheet.create({
+  proposalKind: { fontSize: 10, fontWeight: '800', letterSpacing: 0.6, marginBottom: 2 },
+  statusChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, borderWidth: 1, alignSelf: 'flex-start' },
+  statusChipText: { fontSize: 11, fontWeight: '800' },
+  proposalLines: { borderTopWidth: 1, paddingTop: 8, marginTop: 10, gap: 3 },
+  proposalLine: { fontSize: 12.5, lineHeight: 17 },
+  proposalActionsBar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    borderTopWidth: 1,
+    paddingTop: 10,
+    marginTop: 10,
+  },
+  proposalBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    height: 38,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  proposalBtnPrimary: { borderColor: 'transparent' },
+  proposalBtnText: { fontSize: 13, fontWeight: '800' },
+  approveAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 4,
+    paddingHorizontal: 12,
+  },
+  approveAllText: { fontSize: 12.5, fontWeight: '800', flexShrink: 1 },
+  editLabel: { fontSize: 12.5, fontWeight: '700', marginBottom: 6 },
+  editInput: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15 },
+  editSaveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 48,
+    borderRadius: 14,
+    marginTop: 4,
+  },
+  editSaveText: { color: '#FFF', fontSize: 15, fontWeight: '800' },
   container: {
     flex: 1,
   },

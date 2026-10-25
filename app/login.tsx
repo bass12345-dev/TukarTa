@@ -159,7 +159,7 @@ export default function LoginScreen() {
 
       {/* Subtle top mint background wash */}
       <LinearGradient
-        colors={isDark ? ['#132821', colors.bg] : ['#F0FDF4', '#FFFFFF']}
+        colors={[colors.bgSecondary, colors.bg]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 0.35 }}
         style={StyleSheet.absoluteFill}

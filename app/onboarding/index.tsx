@@ -191,7 +191,7 @@ export default function OnboardingScreen() {
 
       {/* Subtle top wash */}
       <LinearGradient
-        colors={isDark ? ['#132821', colors.bg] : ['#F0FDF4', '#FFFFFF']}
+        colors={[colors.bgSecondary, colors.bg]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 0.3 }}
         style={StyleSheet.absoluteFill}

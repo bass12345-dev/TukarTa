@@ -11,19 +11,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-auth-token',
 }
 
-// Helper to decode JWT without external dependencies
-function decodeSafe(token: string) {
-  try {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-    }).join(''));
-    return JSON.parse(jsonPayload);
-  } catch (e) {
-    console.error("JWT Decode Error:", e);
-    return null;
-  }
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')
+
+/** Verifies the caller's JWT with Supabase Auth (never trust an unverified token's claims). */
+async function verifyUser(token: string): Promise<string | null> {
+  if (!token) return null
+  const client = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+  const { data, error } = await client.auth.getUser(token)
+  return error || !data?.user ? null : data.user.id
 }
 
 serve(async (req) => {
@@ -33,22 +31,25 @@ serve(async (req) => {
   }
 
   try {
+    // 1. Authenticate: only signed-in users may run extraction
+    const token = (req.headers.get('X-Auth-Token') || req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim()
+    const userId = await verifyUser(token)
+    if (!userId) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 401,
+      })
+    }
+
     const { filePath } = await req.json()
 
-    if (!filePath) {
-      return new Response(JSON.stringify({ error: 'No filePath provided' }), {
+    // Only files uploaded by the app's extraction flow (no path traversal into other objects)
+    if (typeof filePath !== 'string' || !/^extractions\/[\w.-]+\.jpg$/.test(filePath)) {
+      return new Response(JSON.stringify({ error: 'Invalid filePath' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,
       })
     }
-
-    // 1. Get User ID from JWT
-    const authHeader = req.headers.get('Authorization')
-    const customAuthHeader = req.headers.get('X-Auth-Token')
-    
-    const token = (customAuthHeader || authHeader || '').replace('Bearer ', '')
-    const payload = token ? decodeSafe(token) : null;
-    const userId = payload?.sub;
 
     // 2. Initialize Supabase client with Service Role to access storage
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!)

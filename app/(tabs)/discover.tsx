@@ -17,7 +17,7 @@ import { useAppTheme } from '../../context/theme';
 
 import { RefreshControl } from 'react-native';
 import { useRefresh } from '../../utils/hooks/useRefresh';
-import { useTabBarPadding } from '../../utils/hooks/useTabBarPadding';
+import { useHeaderTopPadding, useTabBarPadding } from '../../utils/hooks/useTabBarPadding';
 const FILTERS = ['All', 'Singer', 'Guitarist', 'Bassist', 'Drummer', 'Keys'];
 
 function StarRating({ value }: { value: number }) {
@@ -51,6 +51,7 @@ function MatchBar({ value }: { value: number }) {
 
 export default function DiscoverScreen() {
   const tabBarPadding = useTabBarPadding();
+  const headerTop = useHeaderTopPadding();
   const { refreshing, onRefresh } = useRefresh();
   const router = useRouter();
   const { colors, isDark } = useAppTheme();
@@ -89,7 +90,7 @@ export default function DiscoverScreen() {
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={[styles.header, { backgroundColor: colors.bg, borderBottomColor: colors.border }]}>
+      <View style={[styles.header, { backgroundColor: colors.bg, borderBottomColor: colors.border, paddingTop: headerTop }]}>
         <View>
           <Text style={[styles.eyebrow, { color: colors.primary }]}>EXPLORE</Text>
           <Text style={[styles.title, { color: colors.text }]}>Discover Musicians</Text>
