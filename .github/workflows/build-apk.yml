@@ -36,9 +36,6 @@ jobs:
         with:
           version: 9
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
