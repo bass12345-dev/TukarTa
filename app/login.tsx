@@ -2,7 +2,7 @@ import * as AuthSession from 'expo-auth-session';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { Lock, Mail, Music2, ShieldCheck } from 'lucide-react-native';
+import { Lock, Mail, Music2, ShieldCheck, Zap } from 'lucide-react-native';
 import React from 'react';
 import {
   Alert,
@@ -18,15 +18,27 @@ import { Button } from '../components/ui/Button';
 import { TextField } from '../components/ui/TextField';
 import { supabase } from '../utils/supabase';
 import { useAppTheme } from '../context/theme';
+import { useAuth } from '../context/auth';
 
 WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
   const router = useRouter();
   const { colors, isDark } = useAppTheme();
+  const { loginAsOfflineGuest } = useAuth();
   const [isLoggingIn, setIsLoggingIn] = React.useState(false);
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
+
+  const handleOfflineGuestEntry = async () => {
+    try {
+      await loginAsOfflineGuest('Stage Musician');
+      router.replace('/(tabs)');
+    } catch (e) {
+      console.warn('Offline guest entry failed:', e);
+      router.replace('/(tabs)');
+    }
+  };
 
   const handleGoogleLogin = async () => {
     try {
@@ -178,6 +190,37 @@ export default function LoginScreen() {
                   disabled={isLoggingIn}
                 />
               </View>
+
+              {/* ── Offline Gig Mode Divider & Button ── */}
+              <View style={styles.offlineDividerRow}>
+                <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+                <Text style={[styles.dividerText, { color: colors.textMuted }]}>or perform without internet</Text>
+                <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.offlineGigBtn,
+                  {
+                    backgroundColor: isDark ? '#064E3B' : '#ECFDF5',
+                    borderColor: '#10B981',
+                  },
+                ]}
+                onPress={handleOfflineGuestEntry}
+                activeOpacity={0.85}
+              >
+                <View style={styles.offlineIconCircle}>
+                  <Zap size={16} color="#10B981" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.offlineGigBtnTitle, { color: isDark ? '#FFFFFF' : '#064E3B' }]}>
+                    Continue in Offline Gig Mode
+                  </Text>
+                  <Text style={[styles.offlineGigBtnSub, { color: isDark ? '#A7F3D0' : '#059669' }]}>
+                    Access cached setlists, chords & Stage Mode (0-Internet)
+                  </Text>
+                </View>
+              </TouchableOpacity>
 
               <TouchableOpacity 
                 style={styles.toggleMode}
@@ -336,6 +379,40 @@ const styles = StyleSheet.create({
   },
   form: {
     gap: 12,
+  },
+  offlineDividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 14,
+    gap: 8,
+  },
+  offlineGigBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1.5,
+    borderRadius: 14,
+    padding: 12,
+  },
+  offlineIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  offlineGigBtnTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+  },
+  offlineGigBtnSub: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 1,
   },
   toggleMode: {
     alignItems: 'center',
