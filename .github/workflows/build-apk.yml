@@ -36,8 +36,10 @@ jobs:
         with:
           version: 9
 
-      - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+      - name: Install dependencies with hoisting (fixes Metro bundler module resolution)
+        run: |
+          # Force pnpm to hoist all packages so Metro/Babel can resolve babel-preset-expo
+          pnpm install --no-frozen-lockfile
 
       - name: Write .env for Expo bundle
         run: |
@@ -52,19 +54,27 @@ jobs:
         run: |
           echo "" >> android/gradle.properties
           echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" >> android/gradle.properties
+          # Make Metro/Babel use the hoisted node_modules (NODE_PATH ensures babel-preset-expo is found)
+          export NODE_PATH="$PWD/node_modules"
           chmod +x android/gradlew
           cd android
           ./gradlew assembleRelease --no-daemon -x lint -x test
           cp app/build/outputs/apk/release/app-release.apk ../TukarTa.apk
 
       - name: Upload APK Artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: TukarTa-APK
           path: TukarTa.apk
+          retention-days: 30
 
       - name: Publish APK to GitHub Releases
+        if: success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create v1.0.0-latest TukarTa.apk --title "TukarTa Android APK (Latest)" --notes "Standalone Android APK with Phone Google Login, Real BPM Scraping, YouTube-to-Lyrics Sync, and Song Dictionary Practice Mode." || gh release upload v1.0.0-latest TukarTa.apk --clobber
+          gh release create v1.0.0-latest TukarTa.apk \
+            --title "TukarTa Android APK (Latest)" \
+            --notes "Standalone Android APK with Phone Google Login, Real BPM Scraping, YouTube-to-Lyrics Sync, and Song Dictionary Practice Mode." \
+            || gh release upload v1.0.0-latest TukarTa.apk --clobber
