@@ -44,9 +44,12 @@ import {
   useSetlistSongs,
 } from '@/utils/hooks/useMusician';
 
+import { RefreshControl } from 'react-native';
+import { useRefresh } from '../../utils/hooks/useRefresh';
 import { useTabBarPadding } from '../../utils/hooks/useTabBarPadding';
 export default function DashboardScreen() {
   const tabBarPadding = useTabBarPadding();
+  const { refreshing, onRefresh } = useRefresh();
   const router = useRouter();
   const { user } = useAuth();
   const { colors, isDark } = useAppTheme();
@@ -158,7 +161,16 @@ export default function DashboardScreen() {
 
       <ScrollView 
         style={styles.scroll} 
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarPadding }]} 
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarPadding }]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+            progressBackgroundColor={colors.bgCard}
+          />
+        } 
         showsVerticalScrollIndicator={false}
       >
         {/* ── Upcoming Gig Showcase Card (Only shown if real gig exists) ── */}

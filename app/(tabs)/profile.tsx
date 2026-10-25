@@ -22,11 +22,14 @@ import {
 } from '../../utils/hooks/useMusician';
 import { useInfiniteMySongs } from '../../utils/hooks/useSongs';
 
+import { RefreshControl } from 'react-native';
+import { useRefresh } from '../../utils/hooks/useRefresh';
 import { useTabBarPadding } from '../../utils/hooks/useTabBarPadding';
 const { width } = Dimensions.get('window');
 
 export default function ProfileScreen() {
   const tabBarPadding = useTabBarPadding();
+  const { refreshing, onRefresh } = useRefresh();
   const { user } = useAuth();
   const router = useRouter();
   const { colors, isDark } = useAppTheme();
@@ -73,7 +76,16 @@ export default function ProfileScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarPadding }]}>
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarPadding }]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+            progressBackgroundColor={colors.bgCard}
+          />
+        }>
         
         {/* Header Cover Section */}
         <View style={styles.headerCover}>

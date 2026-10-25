@@ -5,6 +5,7 @@ import React from 'react';
 import { Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../context/theme';
+import { OfflineBanner } from '../../components/ui/OfflineBanner';
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
@@ -13,6 +14,7 @@ export default function TabLayout() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
+      <OfflineBanner />
       <Tabs
         screenOptions={{
           tabBarActiveTintColor: colors.tabActive,

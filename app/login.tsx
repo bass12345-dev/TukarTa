@@ -48,10 +48,10 @@ export default function LoginScreen() {
   const handleOfflineGuestEntry = async () => {
     try {
       await loginAsOfflineGuest('Stage Musician');
-      router.replace('/(tabs)');
+      router.replace('/offline-gigs');
     } catch (e) {
       console.warn('Offline guest entry failed:', e);
-      router.replace('/(tabs)');
+      Alert.alert('Offline Mode', 'Could not start Offline Gig Mode. Please try again.');
     }
   };
 
@@ -233,6 +233,13 @@ export default function LoginScreen() {
                   onChangeText={setPassword}
                   leftIcon={<Lock size={18} color={colors.primary} />}
                 />
+                <TouchableOpacity
+                  onPress={() => router.push('/forgot-password')}
+                  style={styles.forgotLink}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={styles.toggleHighlight}>Forgot password?</Text>
+                </TouchableOpacity>
 
                 <Button
                   variant="mint"
@@ -268,7 +275,7 @@ export default function LoginScreen() {
                     Continue in Offline Gig Mode
                   </Text>
                   <Text style={[styles.offlineGigBtnSub, { color: isDark ? '#A7F3D0' : '#059669' }]}>
-                    Access cached setlists, chords & Stage Mode (0-Internet)
+                    Open your downloaded gigs in Stage Mode — no internet needed
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -456,6 +463,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     marginTop: 1,
+  },
+  forgotLink: {
+    alignSelf: 'flex-end',
+    marginTop: -4,
   },
   toggleMode: {
     alignItems: 'center',

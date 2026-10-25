@@ -39,6 +39,8 @@ import { useMyBands } from '../../utils/hooks/useMusician';
 import { useAppTheme } from '../../context/theme';
 import { useBandSession, MemberRole } from '../../context/bandSession';
 
+import { RefreshControl } from 'react-native';
+import { useRefresh } from '../../utils/hooks/useRefresh';
 import { useTabBarPadding } from '../../utils/hooks/useTabBarPadding';
 const ROLE_ICONS: Record<MemberRole, any> = {
   leader: Crown,
@@ -53,6 +55,7 @@ const ROLE_ICONS: Record<MemberRole, any> = {
 
 export default function BandSessionScreen() {
   const tabBarPadding = useTabBarPadding();
+  const { refreshing, onRefresh } = useRefresh();
   const router = useRouter();
   const { user } = useAuth();
   const { colors, isDark } = useAppTheme();
@@ -209,6 +212,15 @@ export default function BandSessionScreen() {
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarPadding }]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+            progressBackgroundColor={colors.bgCard}
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
         {activeTab === 'sync' ? (

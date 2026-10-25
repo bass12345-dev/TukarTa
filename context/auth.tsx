@@ -183,6 +183,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     lastFetchedUserId.current = null;
     setIsOfflineGuest(false);
+    setSession(null);
+    setUser(null);
+    setOnboardingCompleted(true);
     await AsyncStorage.removeItem(OFFLINE_GUEST_KEY);
     await AsyncStorage.removeItem(CACHED_USER_KEY);
     await supabase.auth.signOut().catch(() => {});

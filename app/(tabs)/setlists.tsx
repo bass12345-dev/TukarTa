@@ -21,9 +21,12 @@ import { useMyGigs } from '@/utils/hooks/useMusician';
 import { useAppTheme } from '@/context/theme';
 import { CreateGigModal } from '@/components/gigs/CreateGigModal';
 
+import { RefreshControl } from 'react-native';
+import { useRefresh } from '../../utils/hooks/useRefresh';
 import { useTabBarPadding } from '../../utils/hooks/useTabBarPadding';
 export default function SetlistsScreen() {
   const tabBarPadding = useTabBarPadding();
+  const { refreshing, onRefresh } = useRefresh();
   const router = useRouter();
   const { colors, isDark } = useAppTheme();
   const [showCreateGigModal, setShowCreateGigModal] = React.useState(false);
@@ -62,7 +65,16 @@ export default function SetlistsScreen() {
 
       <ScrollView 
         style={styles.scroll} 
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarPadding }]} 
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarPadding }]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+            progressBackgroundColor={colors.bgCard}
+          />
+        } 
         showsVerticalScrollIndicator={false}
       >
         {isGigsLoading ? (

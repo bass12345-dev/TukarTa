@@ -18,7 +18,7 @@ const { width, height } = Dimensions.get('window');
 
 export default function SplashScreen() {
   const router = useRouter();
-  const { session, isLoading, loginAsOfflineGuest } = useAuth();
+  const { session, isLoading, loginAsOfflineGuest, isOfflineGuest } = useAuth();
   const [isEnteringOffline, setIsEnteringOffline] = React.useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -28,9 +28,9 @@ export default function SplashScreen() {
   // Auto-route to home tabs if already logged in / cached session exists
   useEffect(() => {
     if (!isLoading && session) {
-      router.replace('/(tabs)');
+      router.replace(isOfflineGuest ? '/offline-gigs' : '/(tabs)');
     }
-  }, [isLoading, session]);
+  }, [isLoading, session, isOfflineGuest]);
 
   useEffect(() => {
     // Entrance animations
@@ -72,10 +72,9 @@ export default function SplashScreen() {
     try {
       setIsEnteringOffline(true);
       await loginAsOfflineGuest('Stage Musician');
-      router.replace('/(tabs)');
+      router.replace('/offline-gigs');
     } catch (e) {
       console.warn('Offline guest entry error:', e);
-      router.replace('/(tabs)');
     } finally {
       setIsEnteringOffline(false);
     }

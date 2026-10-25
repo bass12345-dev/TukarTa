@@ -191,3 +191,27 @@ export async function deleteOfflineGigPackage(setlistId: string): Promise<void> 
     console.warn('Failed to delete offline gig package:', e);
   }
 }
+
+/**
+ * Lists every gig package saved on this device (most recently saved first).
+ * Works without a network or a signed-in account, so the Offline Gig Mode home can show them.
+ */
+export async function listOfflineGigPackages(): Promise<OfflineGigPackage[]> {
+  try {
+    const keys = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(OFFLINE_GIG_PREFIX));
+    if (keys.length === 0) return [];
+    const pairs = await AsyncStorage.multiGet(keys);
+    const packages: OfflineGigPackage[] = [];
+    for (const [, raw] of pairs) {
+      if (!raw) continue;
+      try {
+        const pkg = JSON.parse(raw) as OfflineGigPackage;
+        if (pkg?.setlistId && Array.isArray(pkg.songs)) packages.push(pkg);
+      } catch {}
+    }
+    return packages.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+  } catch (e) {
+    console.warn('Failed to list offline gig packages:', e);
+    return [];
+  }
+}

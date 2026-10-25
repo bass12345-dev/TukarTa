@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { StatusBar } from 'expo-status-bar';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import {
   View,
   Text,
@@ -9,6 +11,7 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  useWindowDimensions,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import {
@@ -56,6 +59,7 @@ import {
 } from '../utils/chordParser';
 import { WebView } from 'react-native-webview';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAppTheme } from '../context/theme';
 
 const SEARCH_PROVIDERS = [
   { name: 'Ultimate Guitar', url: 'https://www.ultimate-guitar.com/search.php?search_type=title&value=', color: '#059669' },
@@ -66,6 +70,23 @@ const SEARCH_PROVIDERS = [
 export default function StageModeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { isDark } = useAppTheme();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const isLandscape = windowWidth > windowHeight;
+  const styles = useMemo(() => themeStyles(baseStyles, isDark), [isDark]);
+  // Theme-aware colors for icons / inline styles that can't live in the stylesheet
+  const ink = isDark ? '#D1FAE5' : '#166534';
+  const ink2 = isDark ? '#A7F3D0' : '#065F46';
+  const accentText = isDark ? '#34D399' : '#059669';
+
+  // Stage Mode may rotate (the rest of the app is locked to portrait)
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    ScreenOrientation.unlockAsync().catch(() => {});
+    return () => {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    };
+  }, []);
   const {
     setlistId: setlistIdParam,
     initialSongId,
@@ -158,11 +179,11 @@ export default function StageModeScreen() {
       } else {
         const js =
           func === 'playVideo'
-            ? `try { const v = document.querySelector('video'); if (v) v.play(); } catch(e){} true;`
+            ? `try { window.__ytPlayer && window.__ytPlayer.playVideo(); } catch(e){} true;`
             : func === 'pauseVideo'
-            ? `try { const v = document.querySelector('video'); if (v) v.pause(); } catch(e){} true;`
+            ? `try { window.__ytPlayer && window.__ytPlayer.pauseVideo(); } catch(e){} true;`
             : func === 'seekTo'
-            ? `try { const v = document.querySelector('video'); if (v) v.currentTime = ${Number(args[0]) || 0}; } catch(e){} true;`
+            ? `try { window.__ytPlayer && window.__ytPlayer.seekTo(${Number(args[0]) || 0}, true); } catch(e){} true;`
             : 'true;';
         ytWebViewRef.current?.injectJavaScript(js);
       }
@@ -912,8 +933,14 @@ export default function StageModeScreen() {
   const isNextRequest = !isMemberFollowing && !!nextSetlistSong?.isRequest;
 
   return (
-    <View style={styles.container}>
-      <Stack.Screen options={{ headerShown: false, orientation: 'portrait' }} />
+    <View
+      style={[
+        styles.container,
+        isLandscape && { flexDirection: 'row', paddingLeft: insets.left, paddingRight: insets.right },
+      ]}
+    >
+      <Stack.Screen options={{ headerShown: false }} />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
 
       {/* ── Count In Banner Notification if triggered ── */}
       {countInNumber !== null && (
@@ -931,6 +958,7 @@ export default function StageModeScreen() {
         </View>
       )}
 
+      <View style={{ flex: 1, minWidth: 0 }}>
       {/* ── Top Status Bar ── */}
       <View style={[styles.topStatusBar, { paddingTop: insets.top + 8 }]}>
         {isHeaderHidden ? (
@@ -945,7 +973,7 @@ export default function StageModeScreen() {
             <View style={styles.compactKeyTag}>
               <Text style={styles.compactKeyText}>KEY: {activeKey}</Text>
             </View>
-            <ChevronDown size={14} color="#065F46" />
+            <ChevronDown size={14} color={ink2} />
           </TouchableOpacity>
         ) : (
           <View style={styles.syncStatusGroup}>
@@ -1002,12 +1030,12 @@ export default function StageModeScreen() {
           >
             {isHeaderHidden ? (
               <>
-                <ChevronDown size={13} color="#065F46" />
+                <ChevronDown size={13} color={ink2} />
                 <Text style={styles.hideTopBtnText}>SHOW TOP</Text>
               </>
             ) : (
               <>
-                <ChevronUp size={13} color="#065F46" />
+                <ChevronUp size={13} color={ink2} />
                 <Text style={styles.hideTopBtnText}>HIDE TOP</Text>
               </>
             )}
@@ -1083,7 +1111,7 @@ export default function StageModeScreen() {
                     onPress={handleTapTempo}
                     activeOpacity={0.75}
                   >
-                    <Gauge size={11} color="#059669" />
+                    <Gauge size={11} color={accentText} />
                     <Text style={styles.bpmBadgeText}>{currentBpm} BPM</Text>
                     <Text style={styles.tapSubText}>TAP</Text>
                   </TouchableOpacity>
@@ -1111,7 +1139,7 @@ export default function StageModeScreen() {
           <View style={styles.progressSection}>
             <View style={styles.timeRow}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                <Clock size={11} color="#059669" />
+                <Clock size={11} color={accentText} />
                 <Text style={styles.timeText}>{formatSongTime(elapsedSeconds)}</Text>
               </View>
 
@@ -1121,7 +1149,7 @@ export default function StageModeScreen() {
                   style={[styles.autoScrollToggleBtn, isAutoScroll && styles.autoScrollToggleBtnActive]}
                   onPress={() => setIsAutoScroll((v) => !v)}
                 >
-                  <ChevronsDown size={11} color={isAutoScroll ? '#FFFFFF' : '#059669'} />
+                  <ChevronsDown size={11} color={isAutoScroll ? '#FFFFFF' : accentText} />
                   <Text style={[styles.autoScrollToggleText, isAutoScroll && { color: '#FFFFFF' }]}>
                     {isAutoScroll ? 'SCROLL ON' : 'SCROLL OFF'}
                   </Text>
@@ -1277,36 +1305,31 @@ export default function StageModeScreen() {
               />
             ) : (
               <WebView
+                key={minusOneVideoId}
                 ref={ytWebViewRef}
                 style={styles.webview}
-                source={{
-                  uri: `https://www.youtube.com/embed/${minusOneVideoId}?autoplay=1&enablejsapi=1&playsinline=1`,
-                }}
+                originWhitelist={['*']}
+                source={{ html: buildYoutubePlayerHtml(minusOneVideoId), baseUrl: 'https://www.youtube.com' }}
                 javaScriptEnabled={true}
                 domStorageEnabled={true}
+                allowsInlineMediaPlayback={true}
                 allowsFullscreenVideo={true}
                 mediaPlaybackRequiresUserAction={false}
-                injectedJavaScript={`
-                  (function() {
-                    setInterval(function() {
-                      try {
-                        var v = document.querySelector('video');
-                        if (v && window.ReactNativeWebView) {
-                          window.ReactNativeWebView.postMessage(JSON.stringify({
-                            type: 'yt_sync',
-                            currentTime: v.currentTime || 0,
-                            duration: v.duration || 0,
-                            paused: v.paused
-                          }));
-                        }
-                      } catch (e) {}
-                    }, 350);
-                  })();
-                  true;
-                `}
+                setSupportMultipleWindows={false}
                 onMessage={(evt) => {
                   try {
                     const msg = JSON.parse(evt.nativeEvent.data);
+                    if (msg?.type === 'yt_error') {
+                      // Not embeddable / removed: move on to the next candidate automatically
+                      if (minusOneCandidates.length > 1 && minusOneCandidateIdx < minusOneCandidates.length - 1) {
+                        const next = minusOneCandidateIdx + 1;
+                        setMinusOneCandidateIdx(next);
+                        setMinusOneVideoId(minusOneCandidates[next]);
+                      } else {
+                        setMinusOneVideoId(null);
+                      }
+                      return;
+                    }
                     if (msg?.type === 'yt_sync') {
                       setIsYtSynced(true);
                       if (typeof msg.duration === 'number' && msg.duration > 30) {
@@ -1432,7 +1455,7 @@ export default function StageModeScreen() {
                             <Text
                               style={[
                                 styles.stageLyricWithChordText,
-                                isHighlighted && { color: '#064E3B', fontWeight: '900' },
+                                isHighlighted && { color: isDark ? '#ECFDF5' : '#064E3B', fontWeight: '900' },
                                 {
                                   fontSize: lyricsFontSize,
                                   lineHeight: Math.round(lyricsFontSize * 1.45),
@@ -1533,7 +1556,7 @@ export default function StageModeScreen() {
                     style={styles.searchPill}
                     onPress={() => handleWebSearch(p.url)}
                   >
-                    <ExternalLink size={12} color="#166534" />
+                    <ExternalLink size={12} color={ink} />
                     <Text style={styles.searchPillText}>{p.name}</Text>
                   </TouchableOpacity>
                 ))}
@@ -1543,8 +1566,17 @@ export default function StageModeScreen() {
         )}
       </ScrollView>
 
+      </View>
+
       {/* ── Footer Controls ── */}
-      <View style={[styles.footerControls, { paddingBottom: insets.bottom + 16 }]}>
+      <View
+        style={[
+          styles.footerControls,
+          isLandscape
+            ? { ...styles.footerLandscape, paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }
+            : { paddingBottom: insets.bottom + 16 },
+        ]}
+      >
         {/* ── What's Next / Up Next Live Preview Bar (or Dictionary Practice Bar) ── */}
         <View style={styles.footerUpNextBar}>
           <TouchableOpacity
@@ -1595,12 +1627,12 @@ export default function StageModeScreen() {
             >
               {isBottomPlayerHidden ? (
                 <>
-                  <ChevronUp size={13} color="#065F46" />
+                  <ChevronUp size={13} color={ink2} />
                   <Text style={styles.footerTogglePlayerText}>PLAYER</Text>
                 </>
               ) : (
                 <>
-                  <ChevronDown size={13} color="#065F46" />
+                  <ChevronDown size={13} color={ink2} />
                   <Text style={styles.footerTogglePlayerText}>HIDE</Text>
                 </>
               )}
@@ -1611,7 +1643,7 @@ export default function StageModeScreen() {
                 style={styles.footerUpNextAction}
                 onPress={() => setIsQueueVisible(true)}
               >
-                <ListMusic size={12} color="#059669" />
+                <ListMusic size={12} color={accentText} />
                 <Text style={styles.footerUpNextActionText}>QUEUE ▾</Text>
               </TouchableOpacity>
             )}
@@ -1640,7 +1672,7 @@ export default function StageModeScreen() {
                       disabled={currentIndex === 0}
                       onPress={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
                     >
-                      <SkipBack size={22} color="#166534" fill="#166534" />
+                      <SkipBack size={22} color={ink} fill="#166534" />
                     </TouchableOpacity>
                   )}
 
@@ -1669,7 +1701,7 @@ export default function StageModeScreen() {
                         disabled={currentIndex >= songsList.length - 1}
                         onPress={() => setCurrentIndex((prev) => Math.min(songsList.length - 1, prev + 1))}
                       >
-                        <SkipForward size={22} color="#166534" fill="#166534" />
+                        <SkipForward size={22} color={ink} fill="#166534" />
                       </TouchableOpacity>
                       {displayedNextTitle ? (
                         <Text style={styles.nextSongBtnSubLabel} numberOfLines={1}>
@@ -1778,7 +1810,7 @@ export default function StageModeScreen() {
             {/* Notification Banner when request is added */}
             {requestNotice && (
               <View style={styles.requestNoticeBanner}>
-                <Check size={14} color="#065F46" />
+                <Check size={14} color={ink2} />
                 <Text style={styles.requestNoticeText}>{requestNotice}</Text>
               </View>
             )}
@@ -1787,12 +1819,12 @@ export default function StageModeScreen() {
             {!isMemberFollowing && (
               <View style={styles.requestSearchContainer}>
                 <View style={styles.requestSearchBar}>
-                  <Search size={16} color="#059669" />
+                  <Search size={16} color={accentText} />
                   <TextInput
                     value={requestSearchQuery}
                     onChangeText={setRequestSearchQuery}
                     placeholder="Audience request? Search repertoire or song..."
-                    placeholderTextColor="#059669"
+                    placeholderTextColor={accentText}
                     style={styles.requestSearchInput}
                     returnKeyType="search"
                   />
@@ -1832,7 +1864,7 @@ export default function StageModeScreen() {
                               style={styles.btnPlayNext}
                               onPress={() => handleAddAudienceRequest(s, 'play_next')}
                             >
-                              <Plus size={13} color="#065F46" />
+                              <Plus size={13} color={ink2} />
                               <Text style={styles.btnPlayNextText}>Next</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
@@ -1863,7 +1895,7 @@ export default function StageModeScreen() {
                               style={styles.btnPlayNext}
                               onPress={() => handleAddAudienceRequest(s, 'play_next')}
                             >
-                              <Plus size={13} color="#065F46" />
+                              <Plus size={13} color={ink2} />
                               <Text style={styles.btnPlayNextText}>Next</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
@@ -1904,7 +1936,7 @@ export default function StageModeScreen() {
                           )
                         }
                       >
-                        <Plus size={13} color="#065F46" />
+                        <Plus size={13} color={ink2} />
                         <Text style={styles.btnPlayNextText}>Next</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
@@ -2049,7 +2081,7 @@ export default function StageModeScreen() {
                                   style={styles.queuePromoteBtn}
                                   hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                                 >
-                                  <CornerDownRight size={11} color="#059669" />
+                                  <CornerDownRight size={11} color={accentText} />
                                   <Text style={styles.queuePromoteText}>Next</Text>
                                 </TouchableOpacity>
                               )}
@@ -2060,7 +2092,7 @@ export default function StageModeScreen() {
                                 style={styles.queuePlayNowBtn}
                                 hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                               >
-                                <Zap size={11} color="#065F46" />
+                                <Zap size={11} color={ink2} />
                                 <Text style={styles.queuePlayNowText}>Skip To</Text>
                               </TouchableOpacity>
 
@@ -2108,7 +2140,97 @@ export default function StageModeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+/**
+ * HTML host for the YouTube IFrame Player API. Loaded with baseUrl https://www.youtube.com so the embed
+ * receives a valid origin/referrer (loading /embed/ID directly in a WebView triggers "player configuration" errors).
+ */
+function buildYoutubePlayerHtml(rawVideoId: string): string {
+  const videoId = rawVideoId.replace(/[^\w-]/g, '');
+  return `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>html,body{margin:0;padding:0;height:100%;background:#000;overflow:hidden}#player{width:100%;height:100%}</style></head>
+<body><div id="player"></div>
+<script>
+  function post(o){ try { window.ReactNativeWebView.postMessage(JSON.stringify(o)); } catch(e){} }
+  var tag=document.createElement('script'); tag.src='https://www.youtube.com/iframe_api'; document.head.appendChild(tag);
+  function onYouTubeIframeAPIReady(){
+    window.__ytPlayer = new YT.Player('player', {
+      videoId: '${videoId}',
+      width: '100%', height: '100%',
+      playerVars: { autoplay: 1, playsinline: 1, controls: 1, rel: 0, modestbranding: 1, origin: 'https://www.youtube.com' },
+      events: {
+        onReady: function(e){ try { e.target.playVideo(); } catch(x){} },
+        onError: function(e){ post({ type: 'yt_error', code: e.data }); }
+      }
+    });
+    setInterval(function(){
+      var p = window.__ytPlayer;
+      if (!p || !p.getPlayerState) return;
+      try {
+        var st = p.getPlayerState();
+        post({ type: 'yt_sync', currentTime: p.getCurrentTime() || 0, duration: p.getDuration() || 0, paused: st !== 1 && st !== 3 });
+      } catch(e){}
+    }, 350);
+  }
+</script></body></html>`;
+}
+
+const DARK_BG: Record<string, string> = {
+  '#FFFFFF': '#0A1612',
+  '#ECFDF5': '#132821',
+  '#F0FDF4': '#0E1F1A',
+  '#D1FAE5': '#16382C',
+  '#FEF3C7': '#3A2D0B',
+  '#FDE68A': '#5A4510',
+  '#F8FAFC': '#0E1F1A',
+  '#F1F5F9': '#132821',
+  '#E2E8F0': '#1F3F34',
+};
+const DARK_BORDER: Record<string, string> = {
+  '#FFFFFF': '#0A1612',
+  '#D1FAE5': '#1F3F34',
+  '#A7F3D0': '#1F5A47',
+  '#ECFDF5': '#1F3F34',
+  '#F0FDF4': '#162F27',
+  '#FDE68A': '#5A4510',
+  '#E2E8F0': '#1F3F34',
+};
+const DARK_TEXT: Record<string, string> = {
+  '#166534': '#D1FAE5',
+  '#065F46': '#A7F3D0',
+  '#064E3B': '#ECFDF5',
+  '#059669': '#34D399',
+  '#047857': '#6EE7B7',
+  '#64748B': '#94A3B8',
+  '#B45309': '#FBBF24',
+  '#92400E': '#FCD34D',
+  '#D97706': '#FBBF24',
+};
+const DARK_COLOR_MAPS: Record<string, Record<string, string>> = {
+  backgroundColor: DARK_BG,
+  borderColor: DARK_BORDER,
+  borderTopColor: DARK_BORDER,
+  borderBottomColor: DARK_BORDER,
+  borderLeftColor: DARK_BORDER,
+  borderRightColor: DARK_BORDER,
+  color: DARK_TEXT,
+};
+
+/** Re-colors the light stylesheet for dark mode: surfaces go dark, dark-green text goes light mint. */
+function themeStyles<T extends Record<string, any>>(base: T, isDark: boolean): T {
+  if (!isDark) return base;
+  const out: Record<string, any> = {};
+  for (const [name, style] of Object.entries(base)) {
+    const next: Record<string, any> = { ...(style as object) };
+    for (const [prop, map] of Object.entries(DARK_COLOR_MAPS)) {
+      const value = next[prop];
+      if (typeof value === 'string' && map[value.toUpperCase()]) next[prop] = map[value.toUpperCase()];
+    }
+    out[name] = next;
+  }
+  return out as T;
+}
+
+const baseStyles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -2564,6 +2686,14 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 8,
   },
+  footerLandscape: {
+    width: 320,
+    borderTopWidth: 0,
+    borderLeftWidth: 2,
+    borderLeftColor: '#D1FAE5',
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+  },
   footerUpNextBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2674,8 +2804,10 @@ const styles = StyleSheet.create({
   },
   subActionsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 28,
+    columnGap: 24,
+    rowGap: 10,
   },
   subActionBtn: {
     flexDirection: 'row',
