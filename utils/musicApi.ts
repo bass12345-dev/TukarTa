@@ -238,6 +238,49 @@ export async function getLyrics(artist: string, title: string) {
 }
 
 /**
+ * Searches YouTube for the most reliable Minus 1 / Karaoke backing track for a song,
+ * sanitizes placeholder artists, and returns the direct videoId to embed and auto-play.
+ */
+export async function fetchKaraokeVideoIds(title: string, artist?: string): Promise<string[]> {
+  const cleanArtist = (artist || '')
+    .replace(/\b(audience request|unknown artist|custom request|requested song|request|unknown)\b/gi, '')
+    .trim();
+  const cleanTitle = (title || '').trim();
+  if (!cleanTitle) return [];
+
+  const query = cleanArtist ? `${cleanTitle} ${cleanArtist} karaoke minus 1` : `${cleanTitle} karaoke minus 1`;
+
+  try {
+    const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+    });
+    if (res.ok) {
+      const html = await res.text();
+      const reg = /"videoId":"([a-zA-Z0-9_-]{11})"/g;
+      const ids: string[] = [];
+      let m: RegExpExecArray | null;
+      while ((m = reg.exec(html)) !== null) {
+        if (!ids.includes(m[1])) ids.push(m[1]);
+      }
+      return ids.slice(0, 6);
+    }
+  } catch (e) {
+    console.warn('YouTube karaoke search failed:', e);
+  }
+  return [];
+}
+
+export async function fetchKaraokeVideoId(title: string, artist?: string): Promise<string | null> {
+  const ids = await fetchKaraokeVideoIds(title, artist);
+  return ids[0] || null;
+}
+
+/**
  * Combines search results with metadata for a better UI experience.
  */
 export async function searchAndEnrichSongs(query: string): Promise<SongResult[]> {

@@ -48,7 +48,7 @@ import { useSongLyrics } from '../utils/hooks/useSongs';
 import { useBandSession } from '../context/bandSession';
 import { getOfflineGigPackage } from '../utils/offlineManager';
 import { supabase } from '../utils/supabase';
-import { searchSongs, getLyrics } from '../utils/musicApi';
+import { searchSongs, getLyrics, fetchKaraokeVideoIds } from '../utils/musicApi';
 import {
   parseLineSegments,
   transposeChord,
@@ -118,8 +118,16 @@ export default function StageModeScreen() {
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
-  const formatSongTime = (sec: number): string => {
-    const s = Math.max(0, Math.floor(sec));
+  // Minus 1 Backing Track Video State
+  const [minusOneVideoId, setMinusOneVideoId] = useState<string | null>(null);
+  const [isLoadingMinusOne, setIsLoadingMinusOne] = useState<boolean>(false);
+  const [minusOneCandidates, setMinusOneCandidates] = useState<string[]>([]);
+  const [minusOneCandidateIdx, setMinusOneCandidateIdx] = useState<number>(0);
+
+  const formatSongTime = (sec: any): string => {
+    const num = Number(sec);
+    if (!Number.isFinite(num) || isNaN(num) || num <= 0) return '00:00';
+    const s = Math.floor(num);
     const mins = Math.floor(s / 60);
     const secs = s % 60;
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
@@ -539,19 +547,26 @@ export default function StageModeScreen() {
     }
   }, [currentSetlistSong?.song?.id, currentSetlistSong?.song?.bpm]);
 
-  // Real song duration calculation (from BPM or line count estimate, min 60s, max 360s)
+  // Real song duration calculation (from BPM or line count estimate, default 210s)
   const songDuration = useMemo(() => {
+    const rawDur = (currentSetlistSong?.song as any)?.duration_seconds;
+    if (typeof rawDur === 'number' && rawDur > 30) return rawDur;
     if (totalPlayableLines > 2) {
-      // average ~4 beats per line
-      const estSeconds = Math.round((totalPlayableLines * 4 * 60) / (currentBpm || 120));
-      return Math.max(75, Math.min(360, estSeconds));
+      const estSeconds = Math.round((totalPlayableLines * 4 * 60) / Math.max(currentBpm || 120, 45));
+      if (!isNaN(estSeconds) && isFinite(estSeconds) && estSeconds > 45) {
+        return Math.max(90, Math.min(360, estSeconds));
+      }
     }
     return 210;
-  }, [totalPlayableLines, currentBpm]);
+  }, [totalPlayableLines, currentBpm, currentSetlistSong]);
 
   // Reset playback timer & auto-scroll on song change or manual reset
   useEffect(() => {
     setElapsedSeconds(0);
+    setMinusOneVideoId(null);
+    setMinusOneCandidates([]);
+    setMinusOneCandidateIdx(0);
+    setIsLoadingMinusOne(false);
     scrollOffsetRef.current = 0;
     scrollViewRef.current?.scrollTo({ y: 0, animated: false });
   }, [currentIndex, syncCurrentSong?.songId]);
@@ -609,6 +624,32 @@ export default function StageModeScreen() {
       const bpm = Math.round(60000 / avgMs);
       if (bpm >= 45 && bpm <= 260) {
         setCurrentBpm(bpm);
+      }
+    }
+  };
+
+  // Toggle Minus 1 Backing Track: auto-search YouTube for the most played karaoke version
+  const handleToggleMinusOne = async () => {
+    if (isMinusOneVisible) {
+      setIsMinusOneVisible(false);
+      return;
+    }
+    setIsMinusOneVisible(true);
+    if (!minusOneVideoId) {
+      setIsLoadingMinusOne(true);
+      try {
+        const titleToSearch = currentSetlistSong?.song?.title || '';
+        const artistToSearch = currentSetlistSong?.song?.artist || '';
+        const ids = await fetchKaraokeVideoIds(titleToSearch, artistToSearch);
+        if (ids.length > 0) {
+          setMinusOneCandidates(ids);
+          setMinusOneCandidateIdx(0);
+          setMinusOneVideoId(ids[0]);
+        }
+      } catch (e) {
+        console.warn('Minus 1 fetch error:', e);
+      } finally {
+        setIsLoadingMinusOne(false);
       }
     }
   };
@@ -939,20 +980,42 @@ export default function StageModeScreen() {
               </Text>
             </View>
 
-            {/* Interactive Progress Bar (Tap to Scrub) */}
+            {/* Interactive Progress Bar (Tap to Scrub & Sync Lyrics) */}
             <TouchableOpacity
               activeOpacity={0.9}
               style={styles.progressBase}
-              onPress={(e) => {
-                const clickX = e.nativeEvent.locationX;
-                const ratio = Math.max(0, Math.min(1, clickX / 300));
-                setElapsedSeconds(Math.round(ratio * songDuration));
+              onPress={(e: any) => {
+                const nativeEvt = e.nativeEvent || {};
+                const clickX =
+                  typeof nativeEvt.locationX === 'number' && !isNaN(nativeEvt.locationX)
+                    ? nativeEvt.locationX
+                    : typeof nativeEvt.offsetX === 'number' && !isNaN(nativeEvt.offsetX)
+                    ? nativeEvt.offsetX
+                    : null;
+
+                if (clickX !== null && songDuration > 0) {
+                  const ratio = Math.max(0, Math.min(1, clickX / 300));
+                  const newSec = Math.round(ratio * songDuration);
+                  if (!isNaN(newSec)) {
+                    setElapsedSeconds(newSec);
+                    if (contentHeight > containerHeight) {
+                      const targetY = ratio * (contentHeight - containerHeight);
+                      scrollOffsetRef.current = targetY;
+                      scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
+                    }
+                  }
+                }
               }}
             >
               <View
                 style={[
                   styles.progressFill,
-                  { width: `${Math.min(100, Math.max(1, (elapsedSeconds / songDuration) * 100))}%` },
+                  {
+                    width: `${Math.min(
+                      100,
+                      Math.max(1, ((elapsedSeconds || 0) / (songDuration || 1)) * 100)
+                    )}%`,
+                  },
                 ]}
               />
             </TouchableOpacity>
@@ -960,58 +1023,127 @@ export default function StageModeScreen() {
         </View>
       )}
 
-      {/* ── Embedded Minus 1 Player (Collapsible & Cross-Platform: Web iframe + Native WebView) ── */}
+      {/* ── Embedded Minus 1 Player (Auto-Searched YouTube Video & Auto-Play) ── */}
       {isMinusOneVisible && currentSetlistSong && (
         <View style={styles.playerContainer}>
           <View style={styles.playerHeaderBar}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
               <Music2 size={13} color="#10B981" />
               <Text style={styles.playerHeaderTitle} numberOfLines={1}>
-                Minus 1: {currentSetlistSong.song?.title} {currentSetlistSong.song?.artist ? `• ${currentSetlistSong.song?.artist}` : ''}
+                Minus 1: {currentSetlistSong.song?.title}
               </Text>
             </View>
-            <TouchableOpacity
-              style={styles.playerCloseBtn}
-              onPress={() => setIsMinusOneVisible(false)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <X size={14} color="#FFFFFF" />
-            </TouchableOpacity>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {minusOneCandidates.length > 1 && (
+                <TouchableOpacity
+                  style={styles.playerOpenYtBtn}
+                  onPress={() => {
+                    const next = (minusOneCandidateIdx + 1) % minusOneCandidates.length;
+                    setMinusOneCandidateIdx(next);
+                    setMinusOneVideoId(minusOneCandidates[next]);
+                  }}
+                >
+                  <SkipForward size={11} color="#A7F3D0" />
+                  <Text style={styles.playerOpenYtText}>Try next</Text>
+                </TouchableOpacity>
+              )}
+              {minusOneVideoId && (
+                <TouchableOpacity
+                  style={styles.playerOpenYtBtn}
+                  onPress={() => {
+                    WebBrowser.openBrowserAsync(`https://www.youtube.com/watch?v=${minusOneVideoId}`);
+                  }}
+                >
+                  <ExternalLink size={11} color="#A7F3D0" />
+                  <Text style={styles.playerOpenYtText}>YouTube ↗</Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={styles.playerCloseBtn}
+                onPress={() => setIsMinusOneVisible(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <X size={14} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
           </View>
 
-          {Platform.OS === 'web' ? (
-            <iframe
-              src={`https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(
-                `${currentSetlistSong.song?.artist || ''} ${currentSetlistSong.song?.title || ''} minus 1`
-              )}`}
-              style={{ width: '100%', height: '100%', border: 'none' } as any}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
+          {isLoadingMinusOne ? (
+            <View style={styles.playerLoadingBox}>
+              <ActivityIndicator size="small" color="#10B981" />
+              <Text style={styles.playerLoadingText}>
+                Finding best minus 1 backing track for "{currentSetlistSong.song?.title}"...
+              </Text>
+            </View>
+          ) : minusOneVideoId ? (
+            Platform.OS === 'web' ? (
+              <iframe
+                src={`https://www.youtube.com/embed/${minusOneVideoId}?autoplay=1&enablejsapi=1`}
+                style={{ width: '100%', height: '100%', border: 'none' } as any}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            ) : (
+              <WebView
+                style={styles.webview}
+                source={{
+                  uri: `https://www.youtube.com/embed/${minusOneVideoId}?autoplay=1`,
+                }}
+                javaScriptEnabled={true}
+                domStorageEnabled={true}
+                allowsFullscreenVideo={true}
+              />
+            )
           ) : (
-            <WebView
-              style={styles.webview}
-              source={{
-                uri: `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(
-                  `${currentSetlistSong.song?.artist || ''} ${currentSetlistSong.song?.title || ''} minus 1`
-                )}`,
-              }}
-              javaScriptEnabled={true}
-              domStorageEnabled={true}
-              allowsFullscreenVideo={true}
-            />
+            <View style={styles.playerLoadingBox}>
+              <Text style={styles.playerLoadingText}>
+                Could not automatically resolve embed ID. Tap to search directly:
+              </Text>
+              <TouchableOpacity
+                style={styles.ytSearchFallbackBtn}
+                onPress={() => {
+                  const cleanArtist = (currentSetlistSong.song?.artist || '')
+                    .replace(/\b(audience request|unknown artist|custom request|requested song|request|unknown)\b/gi, '')
+                    .trim();
+                  const q = cleanArtist
+                    ? `${currentSetlistSong.song?.title} ${cleanArtist} karaoke minus 1`
+                    : `${currentSetlistSong.song?.title} karaoke minus 1`;
+                  WebBrowser.openBrowserAsync(`https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`);
+                }}
+              >
+                <ExternalLink size={13} color="#FFFFFF" />
+                <Text style={styles.ytSearchFallbackText}>Open Search on YouTube</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
       )}
 
-      {/* ── Lyrics & Chords Performance Area with Real-Time Auto-Scroll ── */}
+      {/* ── Lyrics & Chords Performance Area with Real-Time Two-Way Auto-Scroll Sync ── */}
       <ScrollView
         ref={scrollViewRef}
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        scrollEventThrottle={60}
         onContentSizeChange={(_, h) => setContentHeight(h)}
         onLayout={(e) => setContainerHeight(e.nativeEvent.layout.height)}
+        onScroll={(e) => {
+          const currentY = e.nativeEvent.contentOffset.y;
+          if (typeof currentY === 'number' && !isNaN(currentY)) {
+            scrollOffsetRef.current = currentY;
+            const maxScroll = contentHeight - containerHeight;
+            if (maxScroll > 20 && songDuration > 0) {
+              const scrollRatio = Math.max(0, Math.min(1, currentY / maxScroll));
+              const syncedSec = Math.round(scrollRatio * songDuration);
+              if (!isNaN(syncedSec)) {
+                setElapsedSeconds(syncedSec);
+              }
+            }
+          }
+        }}
       >
         {isLoadingLyrics ? (
           <View style={styles.lyricsLoading}>
@@ -1306,8 +1438,11 @@ export default function StageModeScreen() {
                 style={styles.subActionBtn}
                 activeOpacity={0.7}
                 onPress={() => {
-                  setIsPlaying(true);
+                  setElapsedSeconds(0);
+                  setIsPlaying(false);
                   setTransposeSteps(0);
+                  scrollOffsetRef.current = 0;
+                  scrollViewRef.current?.scrollTo({ y: 0, animated: true });
                 }}
               >
                 <RotateCcw size={14} color="#10B981" />
@@ -1330,7 +1465,7 @@ export default function StageModeScreen() {
               <TouchableOpacity
                 style={styles.subActionBtn}
                 activeOpacity={0.7}
-                onPress={() => setIsMinusOneVisible(!isMinusOneVisible)}
+                onPress={handleToggleMinusOne}
               >
                 <Music2 size={14} color="#10B981" />
                 <Text style={styles.subActionText}>
@@ -2794,6 +2929,49 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: 'DM Sans',
     flexShrink: 1,
+  },
+  playerOpenYtBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#10B981',
+  },
+  playerOpenYtText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#A7F3D0',
+  },
+  playerLoadingBox: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 12,
+    backgroundColor: '#022C22',
+  },
+  playerLoadingText: {
+    fontSize: 12,
+    color: '#A7F3D0',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  ytSearchFallbackBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#10B981',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 12,
+  },
+  ytSearchFallbackText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
   playerCloseBtn: {
     padding: 3,
