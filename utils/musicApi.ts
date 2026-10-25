@@ -2,6 +2,7 @@
  * musicApi.ts
  * Integration with LRCLIB, iTunes, Deezer, and Supabase Edge Functions for song search, metadata, real BPM, and lyrics.
  */
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
 
 export interface SongResult {
@@ -295,79 +296,218 @@ export async function fetchSongRealBpm(
   return { bpm: null, duration: null, artist: null };
 }
 
-/**
- * Searches YouTube for the most reliable Minus 1 / Karaoke backing track for a song,
- * sanitizes placeholder artists, and returns the direct videoIds to embed and auto-play.
- * Uses the Supabase `youtube-minus-one` Edge Function first so Web and Mobile never hit CORS limits.
- * `broaden` skips the karaoke-only search and looks for an instrumental version instead (second attempt).
- */
-export async function fetchKaraokeVideoIds(
+// ─── Backing-track (Minus 1) selection ──────────────────────────────────────────────────────────
+// Candidates come from several YouTube searches and are ranked from their titles: true backing tracks
+// with no lead vocal rank first; melody, guide vocals, live and cover versions sink. The ranked list is
+// cached per song on the device, so the same song loads instantly next time.
+
+export interface BackingCandidate {
+  id: string;
+  title: string;
+  score: number;
+}
+
+const BACKING_CACHE_PREFIX = 'backing-track:v2:';
+const BACKING_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const YT_USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+const BOOST_RULES: [RegExp, number][] = [
+  [/\bminus[\s-]?(one|1)\b/i, 40],
+  [/\bbacking[\s-]?tracks?\b/i, 30],
+  [/\binstrumental\b/i, 25],
+  [/\bno[\s-]?vocals?\b/i, 15],
+  [/\bkaraoke\b/i, 5],
+];
+
+const PENALTY_RULES: [RegExp, number][] = [
+  [/\bmelody\b/i, -50],
+  [/\bguide[\s-]?vocals?\b|\bscratch[\s-]?vocals?\b/i, -50],
+  [/\bwith[\s-]?vocals?\b|\bvocals?\s+(version|included)\b/i, -40],
+  [/\blyrics?\b/i, -20],
+  [/\blive\b/i, -30],
+  [/\bcover\b/i, -30],
+  [/\bsing[\s-]?along\b/i, -15],
+];
+
+const normalizeText = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+
+const cleanPlaceholderArtist = (artist?: string) =>
+  (artist || '').replace(/\b(audience request|unknown artist|custom request|requested song|request|unknown)\b/gi, '').trim();
+
+/** Scores one YouTube video title as a backing track for `songTitle` by `artist`. Higher is better. */
+export function scoreBackingTitle(videoTitle: string, songTitle: string, artist = ''): number {
+  let score = 0;
+  for (const [re, weight] of BOOST_RULES) if (re.test(videoTitle)) score += weight;
+  for (const [re, weight] of PENALTY_RULES) if (re.test(videoTitle)) score += weight;
+
+  const nt = normalizeText(videoTitle);
+  const ns = normalizeText(songTitle);
+  const na = normalizeText(artist);
+  if (ns && nt.includes(ns)) score += 15;
+  else score -= 60; // probably a different song
+  if (na && nt.includes(na)) score += 10;
+  return score;
+}
+
+/** Three searches that cover minus-one uploads, instrumental uploads and backing-track uploads. */
+export function buildBackingQueries(title: string, artist = ''): string[] {
+  const base = artist ? `${title} ${artist}` : title;
+  return [`${base} minus one`, `${base} instrumental`, `${base} backing track`];
+}
+
+function unescapeJsonString(raw: string): string {
+  try {
+    return JSON.parse(`"${raw}"`);
+  } catch {
+    return raw;
+  }
+}
+
+/** Pulls (videoId, title) pairs out of a YouTube results page. */
+function parseSearchResults(html: string): { id: string; title: string }[] {
+  const out: { id: string; title: string }[] = [];
+  const seen = new Set<string>();
+  const re = /"videoId":"([a-zA-Z0-9_-]{11})"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    const id = m[1];
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const chunk = html.slice(m.index, m.index + 6000);
+    const t =
+      chunk.match(/"title":\{"runs":\[\{"text":"((?:[^"\\]|\\.)*)"/) ||
+      chunk.match(/"title":\{"simpleText":"((?:[^"\\]|\\.)*)"/);
+    if (t) out.push({ id, title: unescapeJsonString(t[1]) });
+  }
+  return out;
+}
+
+async function youtubeResultsHtml(query: string): Promise<string> {
+  try {
+    const res = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, {
+      headers: { 'User-Agent': YT_USER_AGENT, 'Accept-Language': 'en-US,en;q=0.9' },
+    });
+    return res.ok ? await res.text() : '';
+  } catch {
+    return '';
+  }
+}
+
+/** oEmbed answers 401/403 for uploads whose owner disabled embedding. A network error keeps the candidate. */
+async function isEmbeddable(id: string): Promise<boolean> {
+  try {
+    const r = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${id}&format=json`);
+    return r.ok;
+  } catch {
+    return true;
+  }
+}
+
+/** Runs every backing query, scores each title, drops excluded and non-embeddable videos, best first. */
+export async function searchBackingCandidates(
   title: string,
   artist?: string,
-  options: { broaden?: boolean } = {}
-): Promise<string[]> {
-  const cleanArtist = (artist || '')
-    .replace(/\b(audience request|unknown artist|custom request|requested song|request|unknown)\b/gi, '')
-    .trim();
+  exclude: string[] = []
+): Promise<BackingCandidate[]> {
+  const cleanTitle = (title || '').trim();
+  const cleanArtist = cleanPlaceholderArtist(artist);
+  if (!cleanTitle) return [];
+
+  const pages = await Promise.all(buildBackingQueries(cleanTitle, cleanArtist).map(youtubeResultsHtml));
+  const byId = new Map<string, { id: string; title: string }>();
+  for (const page of pages) {
+    for (const r of parseSearchResults(page)) if (!byId.has(r.id)) byId.set(r.id, r);
+  }
+
+  const ranked = [...byId.values()]
+    .filter((r) => !exclude.includes(r.id))
+    .map((r) => ({ ...r, score: scoreBackingTitle(r.title, cleanTitle, cleanArtist) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 10);
+
+  const embeddable = await Promise.all(ranked.map((c) => isEmbeddable(c.id)));
+  return ranked.filter((_, i) => embeddable[i]).slice(0, 6);
+}
+
+function backingCacheKey(title: string, artist?: string) {
+  return `${BACKING_CACHE_PREFIX}${normalizeText(title)}|${normalizeText(cleanPlaceholderArtist(artist))}`;
+}
+
+async function readBackingCache(key: string): Promise<BackingCandidate[] | null> {
+  try {
+    const raw = await AsyncStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { at: number; list: BackingCandidate[] };
+    if (Date.now() - parsed.at > BACKING_CACHE_TTL_MS || !Array.isArray(parsed.list)) return null;
+    return parsed.list;
+  } catch {
+    return null;
+  }
+}
+
+async function writeBackingCache(key: string, list: BackingCandidate[]) {
+  try {
+    await AsyncStorage.setItem(key, JSON.stringify({ at: Date.now(), list }));
+  } catch {
+    // the cache is an optimisation only
+  }
+}
+
+/** Forget the cached ranking for a song, e.g. after every candidate failed to play. */
+export async function forgetBackingTracks(title: string, artist?: string) {
+  try {
+    await AsyncStorage.removeItem(backingCacheKey(title, artist));
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Ranked backing tracks for a song, best first. Uses the cached ranking when present. Searches YouTube
+ * directly (works on native apps); if that finds nothing, falls back to the `youtube-minus-one` Edge
+ * Function, which returns ids without titles, so those results cannot be scored.
+ */
+export async function fetchBackingTracks(
+  title: string,
+  artist?: string,
+  options: { exclude?: string[] } = {}
+): Promise<BackingCandidate[]> {
+  const exclude = options.exclude ?? [];
   const cleanTitle = (title || '').trim();
   if (!cleanTitle) return [];
 
-  // 1. Primary: Supabase Edge Function (server-side YouTube scrape + oEmbed embeddability check, zero CORS)
-  if (!options.broaden) {
+  const key = backingCacheKey(cleanTitle, artist);
+  const cached = await readBackingCache(key);
+  if (cached) {
+    const usable = cached.filter((c) => !exclude.includes(c.id));
+    if (usable.length > 0) return usable;
+  }
+
+  let list = await searchBackingCandidates(cleanTitle, artist, exclude);
+
+  if (list.length === 0) {
     try {
       const { data, error } = await supabase.functions.invoke('youtube-minus-one', {
-        body: { title: cleanTitle, artist: cleanArtist },
+        body: { title: cleanTitle, artist: cleanPlaceholderArtist(artist) },
       });
-      if (!error && Array.isArray(data?.ids) && data.ids.length > 0) {
-        return data.ids;
+      if (!error && Array.isArray(data?.ids)) {
+        list = (data.ids as string[])
+          .filter((id) => !exclude.includes(id))
+          .map((id) => ({ id, title: '', score: 0 }));
       }
     } catch (err) {
-      console.warn('Edge function youtube-minus-one fallback to direct:', err);
+      console.warn('youtube-minus-one fallback failed:', err);
     }
   }
 
-  // 2. Fallback: Direct YouTube search (works on Native Android/iOS without CORS)
-  const suffix = options.broaden ? 'instrumental' : 'karaoke minus 1';
-  const query = cleanArtist ? `${cleanTitle} ${cleanArtist} ${suffix}` : `${cleanTitle} ${suffix}`;
+  if (list.length > 0) await writeBackingCache(key, list);
+  return list;
+}
 
-  try {
-    const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
-    });
-    if (res.ok) {
-      const html = await res.text();
-      const reg = /"videoId":"([a-zA-Z0-9_-]{11})"/g;
-      const ids: string[] = [];
-      let m: RegExpExecArray | null;
-      while ((m = reg.exec(html)) !== null) {
-        if (!ids.includes(m[1])) ids.push(m[1]);
-      }
-      // Keep only videos that allow embedding (oEmbed returns 401/403 for blocked ones)
-      const candidates = ids.slice(0, 8);
-      const checks = await Promise.all(
-        candidates.map(async (id) => {
-          try {
-            const r = await fetch(
-              `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${id}&format=json`
-            );
-            return r.ok ? id : null;
-          } catch {
-            return id; // network/CORS hiccup: keep as candidate
-          }
-        })
-      );
-      const embeddable = checks.filter((x): x is string => !!x);
-      return (embeddable.length > 0 ? embeddable : candidates).slice(0, 6);
-    }
-  } catch (e) {
-    console.warn('YouTube karaoke search failed:', e);
-  }
-  return [];
+/** Ids only, best first. Kept for callers that do not need titles or scores. */
+export async function fetchKaraokeVideoIds(title: string, artist?: string): Promise<string[]> {
+  return (await fetchBackingTracks(title, artist)).map((c) => c.id);
 }
 
 export async function fetchKaraokeVideoId(title: string, artist?: string): Promise<string | null> {

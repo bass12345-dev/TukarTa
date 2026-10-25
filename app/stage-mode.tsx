@@ -52,7 +52,14 @@ import { useSongLyrics } from '../utils/hooks/useSongs';
 import { useBandSession } from '../context/bandSession';
 import { getOfflineGigPackage } from '../utils/offlineManager';
 import { supabase } from '../utils/supabase';
-import { searchSongs, getLyrics, fetchKaraokeVideoIds, fetchSongRealBpm } from '../utils/musicApi';
+import {
+  searchSongs,
+  getLyrics,
+  fetchBackingTracks,
+  forgetBackingTracks,
+  fetchSongRealBpm,
+  type BackingCandidate,
+} from '../utils/musicApi';
 import {
   parseLineSegments,
   transposeChord,
@@ -166,7 +173,7 @@ export default function StageModeScreen() {
   // Minus 1 Backing Track Video State & Real-Time YouTube-to-Lyrics Sync
   const [minusOneVideoId, setMinusOneVideoId] = useState<string | null>(null);
   const [isLoadingMinusOne, setIsLoadingMinusOne] = useState<boolean>(false);
-  const [minusOneCandidates, setMinusOneCandidates] = useState<string[]>([]);
+  const [minusOneCandidates, setMinusOneCandidates] = useState<BackingCandidate[]>([]);
   const [minusOneCandidateIdx, setMinusOneCandidateIdx] = useState<number>(0);
   const [isYtSynced, setIsYtSynced] = useState<boolean>(false);
   const ytIframeRef = useRef<any>(null);
@@ -841,70 +848,56 @@ export default function StageModeScreen() {
   };
 
   // ── Minus 1 track loading ──
-  // Every load takes a request id. A result is applied only while it is still the latest request, so a
-  // slow search for a previous song can never land on the current one. Cached ids skip the network.
+  // Each load takes a request id; only the latest one may apply its result, so a slow search for a
+  // previous song can never land on the current one. The ranked list is cached per song by fetchBackingTracks.
   const minusOneReqRef = useRef<number>(0);
-  const minusOneCacheRef = useRef<Map<string, string[]>>(new Map());
-  const minusOneBroadRef = useRef<boolean>(false);
   const [minusOneFailed, setMinusOneFailed] = useState<boolean>(false);
 
-  const loadMinusOneTrack = async (title: string, artist: string, broaden = false) => {
+  const loadMinusOneTrack = async (title: string, artist: string, exclude: string[] = []) => {
     const reqId = ++minusOneReqRef.current;
-    const cacheKey = `${title}|${artist}|${broaden ? 'broad' : 'karaoke'}`;
     setMinusOneVideoId(null);
     setMinusOneFailed(false);
+    setIsLoadingMinusOne(true);
 
-    let ids = minusOneCacheRef.current.get(cacheKey);
-    if (!ids) {
-      setIsLoadingMinusOne(true);
-      try {
-        ids = await fetchKaraokeVideoIds(title, artist, { broaden });
-      } catch (e) {
-        console.warn('Minus 1 fetch error:', e);
-        ids = [];
-      }
-      if (reqId !== minusOneReqRef.current) return; // superseded by another song or a close
-      if (ids.length > 0) minusOneCacheRef.current.set(cacheKey, ids);
+    let list: BackingCandidate[] = [];
+    try {
+      // Tracks that already failed to play must not come back from the cache
+      if (exclude.length > 0) await forgetBackingTracks(title, artist);
+      list = await fetchBackingTracks(title, artist, { exclude });
+    } catch (e) {
+      console.warn('Minus 1 fetch error:', e);
     }
+    if (reqId !== minusOneReqRef.current) return; // superseded by another song or a close
     setIsLoadingMinusOne(false);
 
-    if (ids.length > 0) {
-      minusOneBroadRef.current = broaden;
-      setMinusOneCandidates(ids);
-      setMinusOneCandidateIdx(0);
-      setMinusOneVideoId(ids[0]);
+    if (list.length === 0) {
+      setMinusOneFailed(true);
       return;
     }
-    // Nothing from the karaoke search: try once more with a broader search before giving up
-    if (!broaden) {
-      loadMinusOneTrack(title, artist, true);
-      return;
-    }
-    setMinusOneFailed(true);
+    setMinusOneCandidates(list);
+    setMinusOneCandidateIdx(0);
+    setMinusOneVideoId(list[0].id);
   };
 
-  const forgetMinusOne = (title: string, artist: string) => {
-    minusOneCacheRef.current.delete(`${title}|${artist}|karaoke`);
-    minusOneCacheRef.current.delete(`${title}|${artist}|broad`);
+  // Manual swap: step through the ranked backing tracks for this song
+  const swapMinusOneTrack = () => {
+    if (minusOneCandidates.length < 2) return;
+    const next = (minusOneCandidateIdx + 1) % minusOneCandidates.length;
+    setMinusOneCandidateIdx(next);
+    setMinusOneVideoId(minusOneCandidates[next].id);
   };
 
-  // Not embeddable / removed / blocked: try the next candidate, then re-resolve the song
+  // Not embeddable / removed / blocked: try the next ranked track; when all have failed, search again without them
   const handleYtError = () => {
-    if (minusOneCandidates.length > 1 && minusOneCandidateIdx < minusOneCandidates.length - 1) {
-      const next = minusOneCandidateIdx + 1;
-      setMinusOneCandidateIdx(next);
-      setMinusOneVideoId(minusOneCandidates[next]);
+    if (minusOneCandidateIdx < minusOneCandidates.length - 1) {
+      swapMinusOneTrack();
       return;
     }
-    const title = currentSetlistSong?.song?.title || '';
-    const artist = currentSetlistSong?.song?.artist || '';
-    forgetMinusOne(title, artist); // dead ids must not come back from the cache
-    if (!minusOneBroadRef.current) {
-      loadMinusOneTrack(title, artist, true);
-      return;
-    }
-    setMinusOneVideoId(null);
-    setMinusOneFailed(true);
+    loadMinusOneTrack(
+      currentSetlistSong?.song?.title || '',
+      currentSetlistSong?.song?.artist || '',
+      minusOneCandidates.map((c) => c.id)
+    );
   };
 
   // Keep the track in step with the song: loads when Minus 1 opens and again on every Next / Prev / song tap
@@ -1516,15 +1509,14 @@ export default function StageModeScreen() {
               {minusOneCandidates.length > 1 && (
                 <TouchableOpacity
                   style={styles.playerIconBtn}
-                  onPress={() => {
-                    const next = (minusOneCandidateIdx + 1) % minusOneCandidates.length;
-                    setMinusOneCandidateIdx(next);
-                    setMinusOneVideoId(minusOneCandidates[next]);
-                  }}
+                  onPress={swapMinusOneTrack}
                   hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-                  accessibilityLabel="Try next backing track"
+                  accessibilityLabel="Swap backing track"
                 >
                   <SkipForward size={13} color="#A7F3D0" />
+                  <Text style={styles.playerSwapCount}>
+                    {minusOneCandidateIdx + 1}/{minusOneCandidates.length}
+                  </Text>
                 </TouchableOpacity>
               )}
               {minusOneVideoId && (
@@ -1557,7 +1549,7 @@ export default function StageModeScreen() {
             <View style={styles.playerLoadingBox}>
               <ActivityIndicator size="small" color="#10B981" />
               <Text style={styles.playerLoadingText}>
-                {minusOneBroadRef.current ? 'No karaoke track, trying an instrumental...' : 'Finding backing track...'}
+                Finding backing track...
               </Text>
             </View>
           ) : minusOneVideoId ? (
@@ -1616,8 +1608,7 @@ export default function StageModeScreen() {
                   onPress={() => {
                     const title = currentSetlistSong.song?.title || '';
                     const artist = currentSetlistSong.song?.artist || '';
-                    forgetMinusOne(title, artist);
-                    loadMinusOneTrack(title, artist, false);
+                    forgetBackingTracks(title, artist).then(() => loadMinusOneTrack(title, artist));
                   }}
                 >
                   <RotateCw size={13} color="#FFFFFF" />
@@ -3397,6 +3388,12 @@ const baseStyles = StyleSheet.create({
     gap: 8,
     padding: 12,
     backgroundColor: '#022C22',
+  },
+  playerSwapCount: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#A7F3D0',
+    fontFamily: 'JetBrains Mono',
   },
   playerFallbackRow: {
     flexDirection: 'row',
