@@ -134,8 +134,9 @@ function RootLayoutNav() {
     const inAuthGroup = segments[0] === '(tabs)';
     const inOnboarding = segments[0] === 'onboarding';
     
-    if (!session && inAuthGroup) {
-      // Redirect to login if not authenticated and trying to access tabs
+    const publicScreens = ['login', 'signup', 'forgot-password', 'reset-password', 'auth-callback', 'offline-gigs', 'stage-mode'];
+    if (!session && !publicScreens.includes(String(segments[0]))) {
+      // Redirect to login if not authenticated and trying to access tabs or protected routes
       router.replace('/login');
     } else if (session && isOfflineGuest) {
       // Offline guests have no account data: keep them on the Offline Gigs home instead of the account tabs

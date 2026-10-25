@@ -52,8 +52,7 @@ async function fetchWithRetry(
         signal: controller?.signal,
       });
       if (timer) clearTimeout(timer);
-      if (res.ok) return res;
-      if (res.status !== 503 && res.status !== 429 && res.status < 500) return res;
+      if (res.ok || res.status === 404 || (res.status >= 400 && res.status < 500 && res.status !== 429)) return res;
       lastErr = new Error(`HTTP ${res.status}`);
     } catch (e) {
       if (timer) clearTimeout(timer);
@@ -179,8 +178,8 @@ export async function getLyrics(artist: string, title: string) {
           };
         }
       }
-    } catch (error) {
-      console.warn('LRCLIB /get fallback triggered:', error);
+    } catch (error: any) {
+      if (error?.message && !error.message.includes('404')) { console.warn('LRCLIB /get fallback triggered:', error); }
     }
   }
 

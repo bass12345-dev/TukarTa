@@ -1026,7 +1026,7 @@ export default function StageModeScreen() {
                   : null,
               ]}
             />
-            <Text style={styles.syncStatusText}>
+            <Text style={styles.syncStatusText} numberOfLines={1}>
               {isDirectSongMode
                 ? `SONG DICTIONARY • ${lyricsData?.provider === 'user_import' ? 'CHORDPRO' : 'LYRICS & PRACTICE'}`
                 : sessionCode
@@ -1041,6 +1041,14 @@ export default function StageModeScreen() {
             </Text>
           </View>
         )}
+
+        <TouchableOpacity
+          style={styles.exitBtn}
+          onPress={() => router.back()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Text style={styles.exitBtnText}>EXIT</Text>
+        </TouchableOpacity>
 
         <View style={styles.topRightActions}>
           {/* ── Customizable Lyrics Font Size (A- / A+) ── */}
@@ -1089,13 +1097,6 @@ export default function StageModeScreen() {
             </TouchableOpacity>
           )}
 
-          <TouchableOpacity
-            style={styles.exitBtn}
-            onPress={() => router.back()}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Text style={styles.exitBtnText}>EXIT</Text>
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -1103,17 +1104,17 @@ export default function StageModeScreen() {
       {!isHeaderHidden && (
         <View style={styles.songInfoSection}>
           <View style={styles.songInfoMain}>
-            <View style={{ flex: 1 }}>
+            <View style={{ width: '100%' }}>
               <Text style={styles.songTitle} numberOfLines={1}>
                 {displayedTitle}
               </Text>
-              <Text style={styles.songArtist}>
+              <Text style={styles.songArtist} numberOfLines={1}>
                 {displayedArtist}
               </Text>
             </View>
 
             <View style={styles.songInfoRight}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-start' }}>
                 {/* ── Key Transposer ── */}
                 <View style={styles.transposeControls}>
                   <TouchableOpacity
@@ -2222,6 +2223,8 @@ const baseStyles = StyleSheet.create({
   },
   topStatusBar: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    rowGap: 8,
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
@@ -2318,6 +2321,8 @@ const baseStyles = StyleSheet.create({
     fontFamily: 'DM Sans',
   },
   syncStatusGroup: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -2338,7 +2343,9 @@ const baseStyles = StyleSheet.create({
   topRightActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 6,
+    width: '100%',
+    justifyContent: 'space-between',
   },
   importHeaderBtn: {
     flexDirection: 'row',
@@ -2375,9 +2382,9 @@ const baseStyles = StyleSheet.create({
     borderBottomColor: '#D1FAE5',
   },
   songInfoMain: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 8,
     marginBottom: 10,
   },
   songTitle: {
@@ -2394,7 +2401,7 @@ const baseStyles = StyleSheet.create({
     color: '#10B981',
   },
   songInfoRight: {
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
     gap: 6,
   },
   transposeControls: {

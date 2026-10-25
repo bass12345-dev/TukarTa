@@ -2,7 +2,8 @@ import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { ArrowLeft, MoreVertical, Music, Sparkles, Play, Plus, Video, BookOpen, Radio, WifiOff } from 'lucide-react-native';
+import { ArrowLeft, MoreVertical, Music, Sparkles, Play, Plus, Video, BookOpen, Radio, WifiOff, Share2, Copy, Trash2, Edit3, X, Check, ListMusic } from 'lucide-react-native';
+import { Modal, Alert } from 'react-native';
 import { Orb } from '@/components/ui/Orb';
 import { useGigDetails, useGigSetlists, useSetlistSongs, useToggleLearnStatus, useCreateSetlist } from '@/utils/hooks/useMusician';
 import { SongPickerModal } from '@/components/setlists/SongPickerModal';
@@ -18,6 +19,7 @@ export default function SetlistDetailsScreen() {
   const [showPicker, setShowPicker] = React.useState(false);
   const [showOfflineModal, setShowOfflineModal] = React.useState(false);
   const [activeSetlistIdx, setActiveSetlistIdx] = React.useState(0);
+  const [showMenuModal, setShowMenuModal] = React.useState(false);
 
   // 1. Data Hooks
   const { data: gig, isLoading: loadingGig } = useGigDetails(id as string);
@@ -103,7 +105,11 @@ export default function SetlistDetailsScreen() {
           >
             <ArrowLeft size={20} color={colors.text} />
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.backBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <TouchableOpacity 
+            style={[styles.backBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+            onPress={() => setShowMenuModal(true)}
+            activeOpacity={0.7}
+          >
             <MoreVertical size={18} color={colors.text} />
           </TouchableOpacity>
         </View>
@@ -156,59 +162,67 @@ export default function SetlistDetailsScreen() {
         </ScrollView>
       </View>
 
-      <View style={styles.actionRow}>
-        <TouchableOpacity 
-          style={[styles.agentBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]} 
-          activeOpacity={0.8} 
-          onPress={() => router.push({ pathname: '/ai-agent', params: { gigId: id } })}
+      {/* Scrollable action chips: avoids compressed layout on small phones */}
+      <View style={styles.actionRowContainer}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false} 
+          contentContainerStyle={styles.actionRowScroll}
         >
-          <Sparkles size={16} color="#10B981" style={{ marginRight: 6 }} />
-          <Text style={[styles.btnText, { color: colors.text }]}>AI Agent</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.addManualBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]} 
-          activeOpacity={0.8} 
-          onPress={() => setShowPicker(true)}
-        >
-          <Plus size={16} color="#10B981" style={{ marginRight: 6 }} />
-          <Text style={[styles.btnText, { color: colors.text }]}>Add Song</Text>
-        </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.stageBtnPrimary} 
+            activeOpacity={0.85} 
+            onPress={() => router.push({ 
+              pathname: '/stage-mode', 
+              params: { setlistId: currentSetlist?.id } 
+            })}
+          >
+            <Play size={16} color="#FFF" fill="#FFF" style={{ marginRight: 6 }} />
+            <Text style={styles.stageBtnText}>Start Stage</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={[styles.addManualBtn, { backgroundColor: colors.bgCard, borderColor: '#10B981' }]} 
-          activeOpacity={0.8} 
-          onPress={() => setShowOfflineModal(true)}
-        >
-          <WifiOff size={16} color="#10B981" style={{ marginRight: 6 }} />
-          <Text style={[styles.btnText, { color: colors.text }]}>Offline Prep</Text>
-        </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.actionChip, { backgroundColor: colors.bgCard, borderColor: colors.border }]} 
+            activeOpacity={0.8} 
+            onPress={() => setShowPicker(true)}
+          >
+            <Plus size={16} color="#10B981" style={{ marginRight: 6 }} />
+            <Text style={[styles.btnText, { color: colors.text }]}>Add Song</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={[styles.addManualBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]} 
-          activeOpacity={0.8} 
-          onPress={async () => {
-            await startSession({
-              gigName: gig?.name || 'Live Gig Session',
-              setlistId: currentSetlist?.id,
-            });
-            router.push('/bands');
-          }}
-        >
-          <Radio size={16} color="#10B981" style={{ marginRight: 6 }} />
-          <Text style={[styles.btnText, { color: colors.text }]}>Live Sync</Text>
-        </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.actionChip, { backgroundColor: colors.bgCard, borderColor: colors.border }]} 
+            activeOpacity={0.8} 
+            onPress={() => router.push({ pathname: '/ai-agent', params: { gigId: id } })}
+          >
+            <Sparkles size={16} color="#10B981" style={{ marginRight: 6 }} />
+            <Text style={[styles.btnText, { color: colors.text }]}>AI Agent</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={styles.stageBtn} 
-          activeOpacity={0.85} 
-          onPress={() => router.push({ 
-            pathname: '/stage-mode', 
-            params: { setlistId: currentSetlist?.id } 
-          })}
-        >
-          <Play size={18} color="#FFF" fill="#FFF" />
-        </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.actionChip, { backgroundColor: colors.bgCard, borderColor: '#10B981' }]} 
+            activeOpacity={0.8} 
+            onPress={() => setShowOfflineModal(true)}
+          >
+            <WifiOff size={16} color="#10B981" style={{ marginRight: 6 }} />
+            <Text style={[styles.btnText, { color: colors.text }]}>Offline Prep</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.actionChip, { backgroundColor: colors.bgCard, borderColor: colors.border }]} 
+            activeOpacity={0.8} 
+            onPress={async () => {
+              await startSession({
+                gigName: gig?.name || 'Live Gig Session',
+                setlistId: currentSetlist?.id,
+              });
+              router.push('/bands');
+            }}
+          >
+            <Radio size={16} color="#10B981" style={{ marginRight: 6 }} />
+            <Text style={[styles.btnText, { color: colors.text }]}>Live Sync</Text>
+          </TouchableOpacity>
+        </ScrollView>
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -286,6 +300,84 @@ export default function SetlistDetailsScreen() {
           })
         )}
       </ScrollView>
+
+      {/* ── Gig / Setlist Options Modal ── */}
+      <Modal
+        visible={showMenuModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMenuModal(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalBackdrop} 
+          activeOpacity={1} 
+          onPress={() => setShowMenuModal(false)}
+        >
+          <View style={[styles.menuSheet, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+            <View style={styles.menuHeader}>
+              <Text style={[styles.menuTitle, { color: colors.text }]}>{gig?.name || 'Setlist Options'}</Text>
+              <TouchableOpacity onPress={() => setShowMenuModal(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <X size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity 
+              style={[styles.menuItem, { borderBottomColor: colors.border }]}
+              onPress={() => {
+                setShowMenuModal(false);
+                setShowPicker(true);
+              }}
+            >
+              <Plus size={18} color="#10B981" />
+              <Text style={[styles.menuItemText, { color: colors.text }]}>Add Songs to {currentSetlist?.name || 'Set'}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.menuItem, { borderBottomColor: colors.border }]}
+              onPress={() => {
+                setShowMenuModal(false);
+                handleAddSet();
+              }}
+            >
+              <ListMusic size={18} color="#10B981" />
+              <Text style={[styles.menuItemText, { color: colors.text }]}>Add New Set</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.menuItem, { borderBottomColor: colors.border }]}
+              onPress={() => {
+                setShowMenuModal(false);
+                setShowOfflineModal(true);
+              }}
+            >
+              <WifiOff size={18} color="#10B981" />
+              <Text style={[styles.menuItemText, { color: colors.text }]}>Download Offline Package</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.menuItem, { borderBottomColor: colors.border }]}
+              onPress={() => {
+                setShowMenuModal(false);
+                router.push({ pathname: '/ai-agent', params: { gigId: id } });
+              }}
+            >
+              <Sparkles size={18} color="#10B981" />
+              <Text style={[styles.menuItemText, { color: colors.text }]}>Ask AI Setlist Agent</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => {
+                setShowMenuModal(false);
+                Alert.alert('Gig Details', `Venue: ${gig?.venue || 'None'}\nDate: ${dateStr}\nTotal Sets: ${setlists?.length || 0}\nTotal Songs: ${songs?.length || 0}`);
+              }}
+            >
+              <Copy size={18} color={colors.textSecondary} />
+              <Text style={[styles.menuItemText, { color: colors.text }]}>View Gig Summary</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -396,52 +488,90 @@ const styles = StyleSheet.create({
     fontFamily: 'DM Sans',
     marginLeft: 6,
   },
-  actionRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    gap: 8,
-    marginBottom: 16,
+  actionRowContainer: {
+    paddingVertical: 12,
     maxWidth: 640,
     width: '100%',
     alignSelf: 'center',
   },
-  agentBtn: {
-    flex: 1,
-    height: 46,
-    borderRadius: 14,
-    flexDirection: 'row',
+  actionRowScroll: {
+    paddingHorizontal: 16,
+    gap: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    paddingHorizontal: 4,
   },
-  addManualBtn: {
-    flex: 1,
-    height: 46,
-    borderRadius: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    paddingHorizontal: 4,
-  },
-  stageBtn: {
-    width: 46,
-    height: 46,
+  stageBtnPrimary: {
+    height: 42,
+    paddingHorizontal: 16,
     backgroundColor: '#10B981',
-    borderRadius: 14,
+    borderRadius: 21,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  stageBtnText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+  },
+  actionChip: {
+    height: 42,
+    borderRadius: 21,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    paddingHorizontal: 14,
   },
   btnText: {
-    fontSize: 11.5,
+    fontSize: 12.5,
     fontWeight: '700',
+    fontFamily: 'DM Sans',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+    padding: 16,
+  },
+  menuSheet: {
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 20,
+    maxWidth: 500,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  menuHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(128,128,128,0.15)',
+    marginBottom: 8,
+  },
+  menuTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    fontFamily: 'DM Sans',
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    gap: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  menuItemText: {
+    fontSize: 14.5,
+    fontWeight: '600',
     fontFamily: 'DM Sans',
   },
   emptyState: {

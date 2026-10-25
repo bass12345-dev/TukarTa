@@ -37,8 +37,10 @@ export default function SettingsScreen() {
     const doLogout = async () => {
       try {
         await signOut();
+        router.replace('/login');
       } catch (err) {
         console.error('Error signing out:', err);
+        router.replace('/login');
       }
     };
 
