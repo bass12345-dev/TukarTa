@@ -13,9 +13,10 @@ import React from 'react';
 import { Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Pill } from '../../components/ui/Pill';
-import { 
-  useMusicianProfile, 
-  useMyBands, 
+import {
+  profileOf,
+  useMusicianProfile,
+  useMyBands,
   useSongStats, 
   useMyGigs,
   useMusicianReviews
@@ -42,7 +43,7 @@ export default function ProfileScreen() {
   const { data: songsData } = useInfiniteMySongs(4); // Just get the latest 4
 
   const profile = profileData;
-  const mProfile = profile?.musician_profiles?.[0];
+  const mProfile = profileOf(profile);
   const allSongs = songsData?.pages.flat() || [];
   const recentSongs = allSongs.slice(0, 4);
 

@@ -25,6 +25,7 @@ import {
 import { useAuth } from '@/context/auth';
 import { useAppTheme } from '@/context/theme';
 import {
+  profileOf,
   useMyInvites,
   useMusicianProfile,
   useMyKnownSongs,
@@ -62,7 +63,7 @@ export default function DashboardScreen() {
   const avatarUrl = profile?.avatar_url;
 
   // Real data calculations (0 when empty, no fake mock numbers)
-  const mProfile = profile?.musician_profiles?.[0];
+  const mProfile = profileOf(profile);
   const totalSongs = knownSongs?.length || 0;
   const liveSongs = knownSongs?.filter((s: any) => s.can_perform_live)?.length || 0;
   const liveMastery = totalSongs > 0 ? Math.round((liveSongs / totalSongs) * 100) : 0;

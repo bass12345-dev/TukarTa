@@ -26,14 +26,17 @@ import {
 } from 'lucide-react-native';
 import { Pill } from '../../components/ui/Pill';
 import { Button } from '../../components/ui/Button';
-import { 
-  useMusicianProfile, 
-  useMusicianSongs, 
-  useMyKnownSongs, 
+import {
+  useMusicianProfile,
+  useMusicianSongs,
+  useMyKnownSongs,
   useSongStats,
-  useInviteMusician
+  useInviteMusician,
+  useMyBands
 } from '../../utils/hooks/useMusician';
+import { useStartConversation } from '../../utils/hooks/useMessaging';
 import { useAppTheme } from '../../context/theme';
+import { useAuth } from '@/context/auth';
 
 const { width } = Dimensions.get('window');
 
@@ -49,11 +52,60 @@ export default function MusicianProfileScreen() {
   const { data: musicianSongs, isLoading: isSongsLoading } = useMusicianSongs(musicianId as string);
   const { data: mySongs } = useMyKnownSongs();
   const { data: stats } = useSongStats(musicianId as string);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [showBandPicker, setShowBandPicker] = useState(false);
   const { mutate: inviteMusician, isPending: isInviting } = useInviteMusician();
+  const { data: myBands } = useMyBands();
+  const { user: me } = useAuth();
+
+  // Only bands you lead can send invites (the database enforces the same rule).
+  const leadBands: { id: string; name: string }[] = (myBands || [])
+    .map((m: any) => m.band)
+    .filter((b: any) => b && b.leader_id === me?.id);
+
+  const startChat = useStartConversation();
+
+  // The database only opens chats with musicians you share a band or invite with.
+  const handleMessage = () => {
+    if (!musicianId) return;
+    setInviteError(null);
+    startChat.mutate(musicianId as string, {
+      onSuccess: (conversationId) => router.push(`/chat/${conversationId}`),
+      onError: (err: any) => setInviteError(err?.message || 'Could not open the chat.'),
+    });
+  };
+
+  const sendInvite = (band: { id: string; name: string }) => {
+    if (!musicianId) return;
+    setInviteError(null);
+    inviteMusician(
+      { bandId: band.id, musicianId: musicianId as string, message: `Hey! Join ${band.name} on TukarTa.` },
+      {
+        onSuccess: () => {
+          setInviteSent(true);
+          setShowBandPicker(false);
+        },
+        onError: (err: any) => {
+          setInviteError(
+            /duplicate key/i.test(err?.message || '')
+              ? 'This musician already has a pending invite from that band.'
+              : err?.message || 'Could not send the invite.'
+          );
+        },
+      }
+    );
+  };
 
   const handleInvite = () => {
-    if (!musicianId) return;
-    setInviteSent(true);
+    if (leadBands.length === 0) {
+      setInviteError('Create a band first to invite musicians.');
+      return;
+    }
+    if (leadBands.length === 1) {
+      sendInvite(leadBands[0]);
+      return;
+    }
+    setShowBandPicker(true);
   };
 
   const getInitials = (name: string) => {
@@ -197,11 +249,32 @@ export default function MusicianProfileScreen() {
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.squareActionBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
-              onPress={() => router.push({ pathname: '/(tabs)/discover' })}
+              onPress={handleMessage}
+              disabled={startChat.isPending}
             >
               <MessageCircle size={22} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
+
+          {showBandPicker && !inviteSent && (
+            <View style={{ gap: 8, marginTop: 12 }}>
+              <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>INVITE FROM WHICH BAND?</Text>
+              {leadBands.map((b) => (
+                <TouchableOpacity
+                  key={b.id}
+                  disabled={isInviting}
+                  onPress={() => sendInvite(b)}
+                  style={[styles.squareActionBtn, { width: '100%', height: 44, justifyContent: 'center', paddingHorizontal: 14, backgroundColor: colors.bgCard, borderColor: colors.border }]}
+                >
+                  <Text style={{ color: colors.text, fontWeight: '700' }}>{b.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          {inviteError && (
+            <Text style={{ color: '#EF4444', marginTop: 12, fontSize: 13 }}>{inviteError}</Text>
+          )}
 
           {inviteSent && (
             <View style={[styles.confirmationPill, { backgroundColor: isDark ? '#16382C' : '#D1FAE5', borderColor: '#10B981' }]}>

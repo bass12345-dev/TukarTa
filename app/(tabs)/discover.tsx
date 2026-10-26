@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   View,
+  Image,
   Text,
   ScrollView,
   TouchableOpacity,
@@ -214,7 +215,7 @@ export default function DiscoverScreen() {
             >
               <View style={[styles.avatar, { backgroundColor: avatarColor, borderWidth: 1, borderColor: colors.border }]}>
                 {m.avatar_url ? (
-                   <View style={styles.avatarPlaceholder} />
+                  <Image source={{ uri: m.avatar_url }} style={styles.avatarPlaceholder} />
                 ) : (
                   <Text style={[styles.avatarText, { color: isDark ? '#FFFFFF' : colors.primaryDark }]}>{initials}</Text>
                 )}

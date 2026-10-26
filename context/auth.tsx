@@ -3,6 +3,7 @@ import { Session, User } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import { supabase, extractAndSetSessionFromUrl } from '../utils/supabase';
+import { unregisterPushToken } from '../utils/push';
 
 const OFFLINE_GUEST_KEY = '@tukarta_is_offline_guest';
 const CACHED_USER_KEY = '@tukarta_cached_user';
@@ -181,6 +182,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    // Unregister while the session is still valid, so this phone stops getting this account's pushes.
+    await unregisterPushToken().catch(() => {});
     lastFetchedUserId.current = null;
     setIsOfflineGuest(false);
     setSession(null);

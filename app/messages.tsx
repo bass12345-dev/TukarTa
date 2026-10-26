@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import { Stack, useRouter } from 'expo-router';
 import { ChevronLeft, Info, Check, X, Bell, MailOpen } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMyInvites, useAcceptInvite, useDeclineInvite } from '../utils/hooks/useMusician';
+import { useConversations, useNotifications, useMarkNotificationsRead } from '../utils/hooks/useMessaging';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Pill } from '../components/ui/Pill';
 
@@ -20,6 +21,16 @@ export default function MessagesScreen() {
   const { data: invites, isLoading } = useMyInvites();
   const acceptInvite = useAcceptInvite();
   const declineInvite = useDeclineInvite();
+  const [tab, setTab] = useState<'invites' | 'chats' | 'alerts'>('invites');
+  const { data: conversations, isLoading: chatsLoading } = useConversations();
+  const { data: notifications } = useNotifications();
+  const markRead = useMarkNotificationsRead();
+  const unreadCount = (notifications || []).filter((n) => !n.read_at).length;
+
+  // Opening the Alerts tab marks everything as read.
+  useEffect(() => {
+    if (tab === 'alerts' && unreadCount > 0) markRead.mutate();
+  }, [tab, unreadCount]);
 
   return (
     <View style={styles.container}>
@@ -38,18 +49,22 @@ export default function MessagesScreen() {
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         
         <View style={styles.tabs}>
-           <TouchableOpacity style={[styles.tab, styles.tabActive]}>
-              <Text style={styles.tabTextActive}>Invitations</Text>
-              {invites && invites.length > 0 && (
-                <View style={styles.badge} />
-              )}
-           </TouchableOpacity>
-           <TouchableOpacity style={styles.tab}>
-              <Text style={styles.tabText}>Alerts</Text>
-           </TouchableOpacity>
+          {([
+            { key: 'invites', label: 'Invitations', showDot: !!invites && invites.length > 0 },
+            { key: 'chats', label: 'Chats', showDot: false },
+            { key: 'alerts', label: 'Alerts', showDot: unreadCount > 0 },
+          ] as const).map((t) => {
+            const active = tab === t.key;
+            return (
+              <TouchableOpacity key={t.key} style={[styles.tab, active && styles.tabActive]} onPress={() => setTab(t.key)}>
+                <Text style={active ? styles.tabTextActive : styles.tabText}>{t.label}</Text>
+                {t.showDot && <View style={styles.badge} />}
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
-        {isLoading ? (
+        {tab === 'invites' && (isLoading ? (
           <ActivityIndicator size="large" color="#00D4FF" style={{ marginTop: 40 }} />
         ) : invites && invites.length > 0 ? (
           invites.map((invite: any) => (
@@ -69,7 +84,57 @@ export default function MessagesScreen() {
             <Text style={styles.emptyTitle}>Inboxes are clear!</Text>
             <Text style={styles.emptySub}>When a band invites you, it will appear here.</Text>
           </View>
-        )}
+        ))}
+
+        {tab === 'chats' && (chatsLoading ? (
+          <ActivityIndicator size="large" color="#00D4FF" style={{ marginTop: 40 }} />
+        ) : conversations && conversations.length > 0 ? (
+          conversations.map((c) => (
+            <TouchableOpacity key={c.id} onPress={() => router.push(`/chat/${c.id}`)} activeOpacity={0.8}>
+              <GlassCard style={styles.inviteCard} intensity={15}>
+                <View style={styles.inviteHeader}>
+                  <View style={styles.bandAvatar}>
+                    <Text style={styles.avatarText}>{c.other?.display_name?.[0] || '?'}</Text>
+                  </View>
+                  <View style={styles.inviteMeta}>
+                    <Text style={styles.bandName}>{c.other?.display_name || 'Musician'}</Text>
+                  </View>
+                </View>
+              </GlassCard>
+            </TouchableOpacity>
+          ))
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyTitle}>No chats yet</Text>
+            <Text style={styles.emptySub}>Open a musician's profile to message anyone you share a band or invite with.</Text>
+          </View>
+        ))}
+
+        {tab === 'alerts' && (notifications && notifications.length > 0 ? (
+          notifications.map((n) => (
+            <TouchableOpacity
+              key={n.id}
+              activeOpacity={0.8}
+              onPress={() => {
+                if (n.kind === 'message' && n.data?.conversation_id) router.push(`/chat/${n.data.conversation_id}`);
+                if (n.kind === 'invite') setTab('invites');
+              }}
+            >
+              <GlassCard style={styles.inviteCard} intensity={15}>
+                <View style={styles.inviteMeta}>
+                  <Text style={styles.bandName}>{n.title}</Text>
+                  {!!n.body && <Text style={styles.messageText}>{n.body}</Text>}
+                  <Text style={styles.locationText}>{new Date(n.created_at).toLocaleString()}</Text>
+                </View>
+              </GlassCard>
+            </TouchableOpacity>
+          ))
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyTitle}>No alerts</Text>
+            <Text style={styles.emptySub}>New invitations and messages will show up here.</Text>
+          </View>
+        ))}
 
       </ScrollView>
     </View>

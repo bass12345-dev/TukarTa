@@ -15,7 +15,7 @@ import { X, Search, UserPlus, Music, Check } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import { Button } from '../ui/Button';
 import { supabase } from '../../utils/supabase';
-import { useInviteMusician } from '../../utils/hooks/useMusician';
+import { useInviteMusician, profileOf } from '../../utils/hooks/useMusician';
 
 interface BandInviteModalProps {
   visible: boolean;
@@ -147,7 +147,7 @@ export function BandInviteModal({ visible, onClose, bandId, bandName }: BandInvi
                       <View style={styles.musicianInfo}>
                         <Text style={styles.musicianName}>{m.display_name}</Text>
                         <Text style={styles.musicianRole}>
-                          {m.musician_profiles?.[0]?.roles?.join(', ') || 'Musician'}
+                          {profileOf(m)?.roles?.join(', ') || 'Musician'}
                         </Text>
                       </View>
                       {selectedId === m.id && (

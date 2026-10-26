@@ -1,6 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase, getCurrentUser } from '../supabase';
 
+/**
+ * PostgREST returns a to-one embed as an object when the foreign key is unique
+ * (musician_profiles.user_id is), and as an array otherwise. Accept both.
+ */
+export function profileOf(user: any) {
+  const p = user?.musician_profiles;
+  return Array.isArray(p) ? p[0] : p ?? undefined;
+}
+
 export function useMusicianProfile(userId: string | undefined) {
   return useQuery({
     queryKey: ['musician-profile', userId],
@@ -36,6 +45,7 @@ export function useMyBands() {
             id,
             name,
             genres,
+            leader_id,
             member_count:band_members(count)
           )
         `)
@@ -188,36 +198,9 @@ export function useAcceptInvite() {
 
   return useMutation({
     mutationFn: async (inviteId: string) => {
-      const user = await getCurrentUser();
-      if (!user) throw new Error('Not authenticated');
-
-      // 1. Get invite details
-      const { data: invite, error: fetchError } = await supabase
-        .from('musician_invites')
-        .select('*')
-        .eq('id', inviteId)
-        .single();
-      
-      if (fetchError) throw fetchError;
-
-      // 2. Update invite status
-      const { error: inviteError } = await supabase
-        .from('musician_invites')
-        .update({ status: 'accepted', responded_at: new Date().toISOString() })
-        .eq('id', inviteId);
-
-      if (inviteError) throw inviteError;
-
-      // 3. Add to band members
-      const { error: memberError } = await supabase
-        .from('band_members')
-        .insert({
-          band_id: invite.from_band_id,
-          user_id: user.id,
-          status: 'active'
-        });
-
-      if (memberError) throw memberError;
+      // respond_to_invite checks the caller owns the invite and adds them to the band atomically.
+      const { error } = await supabase.rpc('respond_to_invite', { p_invite_id: inviteId, p_accept: true });
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-invites'] });
@@ -231,11 +214,7 @@ export function useDeclineInvite() {
 
   return useMutation({
     mutationFn: async (inviteId: string) => {
-      const { error } = await supabase
-        .from('musician_invites')
-        .update({ status: 'declined', responded_at: new Date().toISOString() })
-        .eq('id', inviteId);
-      
+      const { error } = await supabase.rpc('respond_to_invite', { p_invite_id: inviteId, p_accept: false });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -902,10 +881,10 @@ export function useDiscoverMusicians() {
 
       // 4. Enrich and Filter
       const enrichedProfiles = profiles
-        .filter(p => p.musician_profiles && p.musician_profiles.length > 0)
+        .filter(p => !!profileOf(p))
         .map(p => ({
           ...p,
-          musician_profile: p.musician_profiles[0],
+          musician_profile: profileOf(p),
           match_score: counts[p.id] || 0
         }));
 

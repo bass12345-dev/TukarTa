@@ -24,6 +24,7 @@ import {
   JetBrainsMono_700Bold 
 } from '@expo-google-fonts/jetbrains-mono';
 import { AuthProvider, useAuth } from '../context/auth';
+import { PushSetup } from '../components/PushSetup';
 import { AppThemeProvider, useAppTheme } from '../context/theme';
 import { BandSessionProvider } from '../context/bandSession';
 import { useRouter, useSegments } from 'expo-router';
@@ -102,6 +103,7 @@ export default function RootLayout() {
         <AppThemeProvider>
           <AuthProvider>
             <BandSessionProvider>
+              <PushSetup />
               <RootLayoutNav />
             </BandSessionProvider>
           </AuthProvider>

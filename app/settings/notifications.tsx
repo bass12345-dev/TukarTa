@@ -1,22 +1,24 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Platform, Switch } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import { ChevronLeft, Bell, MessageSquare, Music, Star, Zap } from 'lucide-react-native';
 import { useAppTheme } from '../../context/theme';
+import {
+  DEFAULT_NOTIFICATION_SETTINGS,
+  NotificationSettings,
+  useNotificationSettings,
+  useUpdateNotificationSettings,
+} from '../../utils/hooks/useMessaging';
 
 export default function NotificationsScreen() {
   const router = useRouter();
   const { colors, isDark } = useAppTheme();
-  const [settings, setSettings] = useState({
-    gigs: true,
-    messages: true,
-    setlists: true,
-    reviews: false,
-    offers: true,
-  });
+  const { data: saved } = useNotificationSettings();
+  const updateSettings = useUpdateNotificationSettings();
+  const settings = saved ?? DEFAULT_NOTIFICATION_SETTINGS;
 
-  const toggle = (key: keyof typeof settings) => {
-    setSettings(prev => ({ ...prev, [key]: !prev[key] }));
+  const toggle = (key: keyof NotificationSettings) => {
+    updateSettings.mutate({ ...settings, [key]: !settings[key] });
   };
 
   return (
