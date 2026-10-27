@@ -148,6 +148,20 @@ async function requireBandMembership(ctx: Ctx, bandId: string) {
   return band
 }
 
+// The model sometimes passes a musician's name instead of the id from search_musicians.
+// Accept a name only when it matches exactly one other user, so the invite never goes to a guess.
+async function resolveMusicianId(ctx: Ctx, value: unknown): Promise<string> {
+  if (typeof value === 'string' && UUID_RE.test(value)) return value.toLowerCase()
+  if (typeof value !== 'string' || !value.trim()) throw new ToolError('musician_id must be an id from search_musicians or a musician name')
+  const name = value.replace(/[%,()*_\\]/g, ' ').trim()
+  const { data, error } = await ctx.db.from('users').select('id, display_name')
+    .ilike('display_name', name).neq('id', ctx.user.id).limit(5)
+  if (error) throw new ToolError(error.message)
+  if (!data || data.length === 0) throw new ToolError(`no musician named "${name}" on TukarTa`)
+  if (data.length > 1) throw new ToolError(`more than one musician is named "${name}" (${data.map((u: any) => u.display_name).join(', ')}). Ask the user which one.`)
+  return data[0].id
+}
+
 async function loadSetlist(ctx: Ctx, gigId: string) {
   const { data: gig } = await ctx.db.from('gigs').select('id, name, band_id, duration_min').eq('id', gigId).maybeSingle()
   if (!gig) throw new ToolError('gig not found or not accessible')
@@ -403,7 +417,7 @@ const VALIDATORS: Record<string, (ctx: Ctx, a: any) => Promise<Validated>> = {
 
   async invite_musician(ctx, a) {
     const bandId = uuid(a.band_id, 'band_id')
-    const musicianId = uuid(a.musician_id, 'musician_id')
+    const musicianId = await resolveMusicianId(ctx, a.musician_id)
     const band = await requireBandMembership(ctx, bandId)
     if (band.leader_id !== ctx.user.id) throw new ToolError('only the band leader can send invites')
     if (musicianId === ctx.user.id) throw new ToolError('cannot invite yourself')
@@ -728,6 +742,7 @@ const TOOLS: ToolDef[] = [
     parameters: {
       type: 'object',
       properties: {
+        name: { type: 'string', description: 'Part of a musician\'s name, e.g. "Mike Portnoy". Ignores city when given.' },
         instrument: { type: 'string', description: 'e.g. drummer, bassist, keyboardist, vocalist' },
         city: { type: 'string' },
         genre: { type: 'string' },
@@ -737,8 +752,10 @@ const TOOLS: ToolDef[] = [
     },
     async run(ctx, a) {
       let q = ctx.db.from('users').select('id, display_name, city, musician_profiles(roles, genres, avg_rating, is_available, years_exp)').neq('id', ctx.user.id)
+      const nameQuery = String(a.name || '').replace(/[%,()*_\\]/g, ' ').trim()
       const city = String(a.city || '').replace(/[%,()]/g, ' ').trim()
-      if (city) q = q.ilike('city', `%${city}%`)
+      if (nameQuery) q = q.ilike('display_name', `%${nameQuery}%`)
+      else if (city) q = q.ilike('city', `%${city}%`)
       const { data, error } = await q.limit(100)
       if (error) throw new ToolError(error.message)
       const inst = String(a.instrument || '').toLowerCase().trim()
@@ -979,7 +996,11 @@ const PROPOSE_TOOLS: { tool: string; kind: string; description: string; paramete
     description: 'Propose inviting a musician to a band the user leads. This messages another person, so the user must approve it individually.',
     parameters: {
       type: 'object',
-      properties: { band_id: { type: 'string' }, musician_id: { type: 'string' }, message: { type: 'string', description: 'Short friendly note, no links' } },
+      properties: {
+        band_id: { type: 'string' },
+        musician_id: { type: 'string', description: 'Id from search_musicians, or the musician\'s exact name' },
+        message: { type: 'string', description: 'Short friendly note, no links' },
+      },
       required: ['band_id', 'musician_id'],
     },
   },
