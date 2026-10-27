@@ -16,7 +16,7 @@ import {
   Users,
   BookOpen,
   Play,
-  Bell,
+  MessageCircle,
   CheckCircle2,
   Star,
   Radio,
@@ -24,6 +24,7 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '@/context/auth';
 import { useAppTheme } from '@/context/theme';
+import { useNotifications } from '../../utils/hooks/useMessaging';
 import {
   profileOf,
   useMyInvites,
@@ -49,6 +50,8 @@ export default function DashboardScreen() {
 
   // Data Hooks
   const { data: invites } = useMyInvites();
+  const { data: notifications } = useNotifications();
+  const unreadCount = (notifications || []).filter((n) => !n.read_at).length;
   const { data: profile, isLoading: isProfileLoading } = useMusicianProfile(user?.id);
   const { data: knownSongs } = useMyKnownSongs();
   const { data: bands } = useMyBands();
@@ -118,22 +121,13 @@ export default function DashboardScreen() {
         </View>
 
         <View style={styles.headerRight}>
-          <TouchableOpacity 
-            style={[styles.stagePill, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}
-            onPress={() => router.push('/setlists')}
+          <TouchableOpacity
+            style={[styles.iconBtn, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}
             activeOpacity={0.7}
+            onPress={() => router.push('/messages')}
           >
-            <View style={styles.greenPulseDot} />
-            <Text style={[styles.stagePillText, { color: colors.primaryDark }]}>Stage Ready</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[styles.iconBtn, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]} 
-            activeOpacity={0.7}
-            onPress={() => router.push('/settings')}
-          >
-            <Bell size={18} color={colors.primary} />
-            {invites && invites.length > 0 && <View style={styles.badgeDot} />}
+            <MessageCircle size={18} color={colors.primary} />
+            {(unreadCount > 0 || (invites && invites.length > 0)) && <View style={styles.badgeDot} />}
           </TouchableOpacity>
 
           <TouchableOpacity 
