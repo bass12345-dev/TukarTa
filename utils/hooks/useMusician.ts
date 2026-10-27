@@ -879,16 +879,44 @@ export function useDiscoverMusicians() {
         }
       }
 
-      // 4. Enrich and Filter
+      // 4. Genres I play, so people who play the same styles rank first
+      const { data: myProfile } = await supabase
+        .from('musician_profiles')
+        .select('genres')
+        .eq('user_id', currentUser.id)
+        .maybeSingle();
+      const myGenres = new Set((myProfile?.genres || []).map((g: string) => g.toLowerCase()));
+
+      // 5. Library size: how many songs each musician knows
+      const { data: libraries, error: librariesError } = await supabase
+        .from('musician_song_knowledge')
+        .select('musician_id');
+      if (librariesError) throw librariesError;
+      const librarySize: Record<string, number> = {};
+      for (const row of libraries || []) {
+        librarySize[row.musician_id] = (librarySize[row.musician_id] || 0) + 1;
+      }
+
+      // 6. Enrich and rank: same genres, then shared songs, then the bigger library
       const enrichedProfiles = profiles
         .filter(p => !!profileOf(p))
-        .map(p => ({
-          ...p,
-          musician_profile: profileOf(p),
-          match_score: counts[p.id] || 0
-        }));
+        .map(p => {
+          const profile = profileOf(p);
+          const genres: string[] = profile?.genres || [];
+          return {
+            ...p,
+            musician_profile: profile,
+            match_score: counts[p.id] || 0,
+            genre_overlap: genres.filter(g => myGenres.has(g.toLowerCase())).length,
+            library_size: librarySize[p.id] || 0,
+          };
+        });
 
-      return enrichedProfiles.sort((a, b) => b.match_score - a.match_score);
+      return enrichedProfiles.sort((a, b) =>
+        b.genre_overlap - a.genre_overlap ||
+        b.match_score - a.match_score ||
+        b.library_size - a.library_size
+      );
     },
     staleTime: 1000 * 60 * 5, // 5 mins
   });

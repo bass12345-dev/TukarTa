@@ -13,8 +13,19 @@ import { ChevronLeft, Info, Check, X, Bell, MailOpen } from 'lucide-react-native
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMyInvites, useAcceptInvite, useDeclineInvite } from '../utils/hooks/useMusician';
 import { useConversations, useNotifications, useMarkNotificationsRead } from '../utils/hooks/useMessaging';
+import { useAuth } from '@/context/auth';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Pill } from '../components/ui/Pill';
+
+// Messenger-style timestamp: clock time today, otherwise a short date.
+function formatChatTime(iso: string) {
+  const date = new Date(iso);
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+  return sameDay
+    ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
 
 export default function MessagesScreen() {
   const router = useRouter();
@@ -27,6 +38,7 @@ export default function MessagesScreen() {
     initialTab === 'chats' || initialTab === 'alerts' ? initialTab : 'invites'
   );
   const { data: conversations, isLoading: chatsLoading } = useConversations();
+  const { user: me } = useAuth();
   const { data: notifications } = useNotifications();
   const markRead = useMarkNotificationsRead();
   const unreadCount = (notifications || []).filter((n) => !n.read_at).length;
@@ -39,7 +51,7 @@ export default function MessagesScreen() {
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
-      <LinearGradient colors={['#071420', '#0a1a2f']} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={['#081A13', '#0F2A1F']} style={StyleSheet.absoluteFill} />
 
       {/* ── Header ── */}
       <View style={styles.header}>
@@ -69,7 +81,7 @@ export default function MessagesScreen() {
         </View>
 
         {tab === 'invites' && (isLoading ? (
-          <ActivityIndicator size="large" color="#00D4FF" style={{ marginTop: 40 }} />
+          <ActivityIndicator size="large" color="#10B981" style={{ marginTop: 40 }} />
         ) : invites && invites.length > 0 ? (
           invites.map((invite: any) => (
             <InviteCard 
@@ -91,22 +103,34 @@ export default function MessagesScreen() {
         ))}
 
         {tab === 'chats' && (chatsLoading ? (
-          <ActivityIndicator size="large" color="#00D4FF" style={{ marginTop: 40 }} />
+          <ActivityIndicator size="large" color="#10B981" style={{ marginTop: 40 }} />
         ) : conversations && conversations.length > 0 ? (
-          conversations.map((c) => (
-            <TouchableOpacity key={c.id} onPress={() => router.push(`/chat/${c.id}`)} activeOpacity={0.8}>
-              <GlassCard style={styles.inviteCard} intensity={15}>
-                <View style={styles.inviteHeader}>
-                  <View style={styles.bandAvatar}>
-                    <Text style={styles.avatarText}>{c.other?.display_name?.[0] || '?'}</Text>
-                  </View>
-                  <View style={styles.inviteMeta}>
-                    <Text style={styles.bandName}>{c.other?.display_name || 'Musician'}</Text>
-                  </View>
+          conversations.map((c) => {
+            const last = c.last_message;
+            const name = c.other?.display_name || 'Musician';
+            const preview = last
+              ? `${last.sender_id === me?.id ? 'You: ' : ''}${last.body}`
+              : 'Say hi 👋';
+            return (
+              <TouchableOpacity
+                key={c.id}
+                onPress={() => router.push(`/chat/${c.id}`)}
+                activeOpacity={0.7}
+                style={styles.chatRow}
+              >
+                <View style={styles.chatAvatar}>
+                  <Text style={styles.avatarText}>{name[0]?.toUpperCase() || '?'}</Text>
                 </View>
-              </GlassCard>
-            </TouchableOpacity>
-          ))
+                <View style={{ flex: 1, gap: 2 }}>
+                  <View style={styles.chatTopRow}>
+                    <Text style={styles.chatName} numberOfLines={1}>{name}</Text>
+                    {last && <Text style={styles.chatTime}>{formatChatTime(last.created_at)}</Text>}
+                  </View>
+                  <Text style={styles.chatPreview} numberOfLines={1}>{preview}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })
         ) : (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyTitle}>No chats yet</Text>
@@ -198,7 +222,7 @@ function InviteCard({ invite, onAccept, onDecline, isProcessing }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#071420' },
+  container: { flex: 1, backgroundColor: '#081A13' },
   header: {
     height: 100,
     flexDirection: 'row',
@@ -215,16 +239,37 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 20, paddingBottom: 60 },
   tabs: { flexDirection: 'row', gap: 24, marginBottom: 24 },
   tab: { paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  tabActive: { borderBottomWidth: 2, borderBottomColor: '#00D4FF' },
+  tabActive: { borderBottomWidth: 2, borderBottomColor: '#10B981' },
   tabText: { fontSize: 15, color: 'rgba(255,255,255,0.3)', fontFamily: 'DM Sans Bold' },
-  tabTextActive: { fontSize: 15, color: '#00D4FF', fontFamily: 'DM Sans Bold' },
-  badge: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#00D4FF' },
+  tabTextActive: { fontSize: 15, color: '#10B981', fontFamily: 'DM Sans Bold' },
+  badge: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10B981' },
+  chatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  chatAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(16,185,129,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chatTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  chatName: { flex: 1, fontSize: 15, fontWeight: '700', color: '#FFFFFF', fontFamily: 'DM Sans Bold' },
+  chatTime: { fontSize: 12, color: 'rgba(255,255,255,0.45)', fontFamily: 'DM Sans' },
+  chatPreview: { fontSize: 13.5, color: 'rgba(255,255,255,0.55)', fontFamily: 'DM Sans' },
   inviteCard: { borderRadius: 24, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
   inviteHeader: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 16 },
   bandAvatar: { width: 48, height: 48, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontSize: 20, fontWeight: '700', color: '#FFF' },
   inviteMeta: { flex: 1 },
-  fromText: { fontSize: 11, fontWeight: '700', color: '#00D4FF', letterSpacing: 1.2, marginBottom: 2 },
+  fromText: { fontSize: 11, fontWeight: '700', color: '#10B981', letterSpacing: 1.2, marginBottom: 2 },
   bandName: { fontSize: 17, fontWeight: '700', color: '#FFF', fontFamily: 'DM Sans Bold' },
   locationRow: { marginTop: 2 },
   locationText: { fontSize: 12, color: 'rgba(255,255,255,0.3)', fontFamily: 'DM Sans' },
@@ -234,7 +279,7 @@ const styles = StyleSheet.create({
   actionBtn: { flex: 1, height: 48, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   declineBtn: { backgroundColor: 'rgba(255,255,255,0.05)' },
   declineText: { fontSize: 14, fontWeight: '700', color: 'rgba(255,255,255,0.6)', fontFamily: 'DM Sans Bold' },
-  acceptBtn: { backgroundColor: '#00D4FF' },
+  acceptBtn: { backgroundColor: '#10B981' },
   acceptText: { fontSize: 14, fontWeight: '700', color: '#071420', fontFamily: 'DM Sans Bold' },
   emptyContainer: { alignItems: 'center', marginTop: 80, paddingHorizontal: 40 },
   emptyIconBox: { width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(255,255,255,0.02)', alignItems: 'center', justifyContent: 'center', marginBottom: 24 },

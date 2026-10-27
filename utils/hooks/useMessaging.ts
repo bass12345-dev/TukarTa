@@ -31,6 +31,7 @@ export type Conversation = {
   id: string;
   last_message_at: string;
   other: { id: string; display_name: string; avatar_url: string | null } | null;
+  last_message: { body: string; sender_id: string; created_at: string } | null;
 };
 
 export type ChatMessage = {
@@ -153,6 +154,28 @@ export function useConversations() {
         : { data: [], error: null };
       if (peopleError) throw peopleError;
 
+      // Newest message per conversation, for the preview line in the chat list.
+      const ids = (data || []).map((c) => c.id);
+      const lastByConversation = new Map<string, { body: string; sender_id: string; created_at: string }>();
+      if (ids.length) {
+        const { data: recent, error: recentError } = await supabase
+          .from('messages')
+          .select('conversation_id, body, sender_id, created_at')
+          .in('conversation_id', ids)
+          .order('created_at', { ascending: false })
+          .limit(ids.length * 30);
+        if (recentError) throw recentError;
+        for (const m of recent || []) {
+          if (!lastByConversation.has(m.conversation_id)) {
+            lastByConversation.set(m.conversation_id, {
+              body: m.body,
+              sender_id: m.sender_id,
+              created_at: m.created_at,
+            });
+          }
+        }
+      }
+
       const byId = new Map((people || []).map((p) => [p.id, p]));
       return (data || []).map((c): Conversation => {
         const otherId = c.user_a === user.id ? c.user_b : c.user_a;
@@ -160,6 +183,7 @@ export function useConversations() {
           id: c.id,
           last_message_at: c.last_message_at,
           other: byId.get(otherId) ?? null,
+          last_message: lastByConversation.get(c.id) ?? null,
         };
       });
     },

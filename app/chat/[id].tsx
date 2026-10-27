@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Send, AlertCircle } from 'lucide-react-native';
 import { useAppTheme } from '../../context/theme';
 import { useAuth } from '@/context/auth';
@@ -22,7 +23,8 @@ export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const conversationId = String(id);
   const router = useRouter();
-  const { colors, isDark } = useAppTheme();
+  const { colors } = useAppTheme();
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const listRef = useRef<FlatList>(null);
@@ -62,11 +64,11 @@ export default function ChatScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.bg }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
     >
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+      <View style={[styles.header, { borderBottomColor: colors.border, paddingTop: insets.top + 8 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <ChevronLeft size={22} color={colors.text} />
         </TouchableOpacity>
@@ -117,7 +119,7 @@ export default function ChatScreen() {
         />
       )}
 
-      <View style={[styles.composer, { borderTopColor: colors.border, backgroundColor: colors.bg }]}>
+      <View style={[styles.composer, { borderTopColor: colors.border, backgroundColor: colors.bg, paddingBottom: Math.max(insets.bottom, 12) }]}>
         <TextInput
           value={text}
           onChangeText={setText}

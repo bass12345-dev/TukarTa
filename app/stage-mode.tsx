@@ -50,6 +50,7 @@ import {
   Maximize2,
   Minimize2,
 } from 'lucide-react-native';
+import { SlidersHorizontal } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
 import { useSetlistSongs, useMyKnownSongs } from '../utils/hooks/useMusician';
@@ -172,7 +173,9 @@ export default function StageModeScreen() {
 
   // Stage View Customization: Lyrics font size & Collapsible Top Section & Collapsible Bottom Player
   const [lyricsFontSize, setLyricsFontSize] = useState<number>(20);
-  const [isHeaderHidden, setIsHeaderHidden] = useState<boolean>(false);
+  // The top section is always shown now; the settings sheet holds the controls that used to crowd it.
+  const isHeaderHidden = false;
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [isBottomPlayerHidden, setIsBottomPlayerHidden] = useState<boolean>(false);
   const [isManualFetching, setIsManualFetching] = useState<boolean>(false);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
@@ -1183,24 +1186,7 @@ export default function StageModeScreen() {
       <View style={{ flex: 1, minWidth: 0 }}>
       {/* ── Top Status Bar ── */}
       <View style={[styles.topStatusBar, { paddingTop: insets.top + 8 }]}>
-        {isHeaderHidden ? (
-          <TouchableOpacity
-            style={styles.compactSongPill}
-            onPress={() => setIsHeaderHidden(false)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.compactSongTitle} numberOfLines={1}>
-              {displayedTitle}
-            </Text>
-            {showKeyLabel && (
-              <View style={styles.compactKeyTag}>
-                <Text style={styles.compactKeyText}>KEY: {activeKey}</Text>
-              </View>
-            )}
-            <ChevronDown size={14} color={ink2} />
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.syncStatusGroup}>
+        <View style={styles.syncStatusGroup}>
             <View
               style={[
                 styles.pulseDot,
@@ -1222,8 +1208,7 @@ export default function StageModeScreen() {
                     : `IN SYNC WITH LEADER • ${sessionCode}`
                 : `OFFLINE STAGE MODE • ${lyricsData?.provider === 'user_import' ? 'CHORDPRO' : 'LRCLIB SYNC'}`}
             </Text>
-          </View>
-        )}
+        </View>
 
         <TouchableOpacity
           style={styles.exitBtn}
@@ -1234,124 +1219,106 @@ export default function StageModeScreen() {
         </TouchableOpacity>
 
         <View style={styles.topRightActions}>
-          {/* ── Customizable Lyrics Font Size (A- / A+) ── */}
-          <View style={styles.fontSizeControls}>
-            <TouchableOpacity
-              style={styles.fontSizeBtn}
-              onPress={() => handleFontSizeChange(-2)}
-              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-            >
-              <Text style={styles.fontSizeBtnText}>A-</Text>
-            </TouchableOpacity>
-            <View style={styles.fontSizeBadge}>
-              <Text style={styles.fontSizeBadgeText}>{lyricsFontSize}</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.fontSizeBtn}
-              onPress={() => handleFontSizeChange(2)}
-              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-            >
-              <Text style={styles.fontSizeBtnText}>A+</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* ── Hide/Show Top Section Toggle ── */}
+          {/* ── Stage settings: import, key, lyrics size, tempo ── */}
           <TouchableOpacity
-            style={[styles.hideTopBtn, isHeaderHidden && styles.hideTopBtnActive]}
-            onPress={() => setIsHeaderHidden((v) => !v)}
+            style={styles.settingsBtn}
+            onPress={() => setSettingsOpen(true)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            {isHeaderHidden ? (
-              <>
-                <ChevronDown size={13} color={ink2} />
-                <Text style={styles.hideTopBtnText}>SHOW TOP</Text>
-              </>
-            ) : (
-              <>
-                <ChevronUp size={13} color={ink2} />
-                <Text style={styles.hideTopBtnText}>HIDE TOP</Text>
-              </>
-            )}
+            <SlidersHorizontal size={18} color={accentText} />
           </TouchableOpacity>
-
-          {!isHeaderHidden && (
-            <TouchableOpacity style={styles.importHeaderBtn} onPress={handleOpenImportChords}>
-              <FileCode2 size={13} color="#10B981" />
-              <Text style={styles.importHeaderBtnText}>IMPORT</Text>
-            </TouchableOpacity>
-          )}
 
         </View>
       </View>
 
-      {/* ── Song Info & Live Key Transposer Section (Collapsible) ── */}
+      {/* ── Stage settings sheet ── */}
+      <Modal visible={settingsOpen} transparent animationType="slide" onRequestClose={() => setSettingsOpen(false)}>
+        <TouchableOpacity style={styles.sheetBackdrop} activeOpacity={1} onPress={() => setSettingsOpen(false)} />
+        <View style={styles.sheetCard}>
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle}>Stage settings</Text>
+
+          <TouchableOpacity
+            style={styles.sheetAction}
+            onPress={() => {
+              setSettingsOpen(false);
+              handleOpenImportChords();
+            }}
+          >
+            <FileCode2 size={16} color="#10B981" />
+            <Text style={styles.sheetActionText}>Import chords</Text>
+          </TouchableOpacity>
+
+          <View style={styles.sheetRow}>
+            <Text style={styles.sheetLabel}>Key</Text>
+            <View style={styles.transposeControls}>
+              <TouchableOpacity style={styles.transposeStepBtn} onPress={() => setTransposeSteps((s) => s - 1)}>
+                <Text style={styles.transposeStepText}>-</Text>
+              </TouchableOpacity>
+              <View style={styles.keyBadge}>
+                <Text style={styles.keyBadgeText}>
+                  {activeKey}
+                  {transposeSteps !== 0 ? ` (${transposeSteps > 0 ? `+${transposeSteps}` : transposeSteps})` : ''}
+                </Text>
+              </View>
+              <TouchableOpacity style={styles.transposeStepBtn} onPress={() => setTransposeSteps((s) => s + 1)}>
+                <Text style={styles.transposeStepText}>+</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.sheetRow}>
+            <Text style={styles.sheetLabel}>Lyrics size</Text>
+            <View style={styles.fontSizeControls}>
+              <TouchableOpacity style={styles.fontSizeBtn} onPress={() => handleFontSizeChange(-2)}>
+                <Text style={styles.fontSizeBtnText}>A-</Text>
+              </TouchableOpacity>
+              <View style={styles.fontSizeBadge}>
+                <Text style={styles.fontSizeBadgeText}>{lyricsFontSize}</Text>
+              </View>
+              <TouchableOpacity style={styles.fontSizeBtn} onPress={() => handleFontSizeChange(2)}>
+                <Text style={styles.fontSizeBtnText}>A+</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.sheetRow}>
+            <Text style={styles.sheetLabel}>Tempo</Text>
+            <View style={styles.bpmGroup}>
+              <TouchableOpacity style={styles.transposeStepBtn} onPress={() => setCurrentBpm((b) => Math.max(45, b - 5))}>
+                <Text style={styles.transposeStepText}>-</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.bpmBadge} onPress={handleTapTempo} activeOpacity={0.75}>
+                <Gauge size={11} color={accentText} />
+                <Text style={styles.bpmBadgeText}>{currentBpm} BPM</Text>
+                <Text style={styles.tapSubText}>TAP</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.transposeStepBtn} onPress={() => setCurrentBpm((b) => Math.min(240, b + 5))}>
+                <Text style={styles.transposeStepText}>+</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <TouchableOpacity style={styles.sheetClose} onPress={() => setSettingsOpen(false)}>
+            <Text style={styles.sheetCloseText}>Done</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
+      {/* ── Song Info (title, artist, next song) and progress bar ── */}
       {!isHeaderHidden && (
         <View style={styles.songInfoSection}>
           <View style={styles.songInfoMain}>
             <View style={{ width: '100%' }}>
-              <Text style={styles.songTitle} numberOfLines={1}>
+              <Text style={[styles.songTitle, { textAlign: 'center' }]} numberOfLines={1}>
                 {displayedTitle}
               </Text>
-              <Text style={styles.songArtist} numberOfLines={1}>
+              <Text style={[styles.songArtist, { textAlign: 'center' }]} numberOfLines={1}>
                 {displayedArtist}
               </Text>
             </View>
 
             <View style={styles.songInfoRight}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-start' }}>
-                {/* ── Key Transposer ── */}
-                <View style={styles.transposeControls}>
-                  <TouchableOpacity
-                    style={styles.transposeStepBtn}
-                    onPress={() => setTransposeSteps((s) => s - 1)}
-                  >
-                    <Text style={styles.transposeStepText}>-</Text>
-                  </TouchableOpacity>
-
-                  {showKeyLabel && (
-                    <View style={styles.keyBadge}>
-                      <Text style={styles.keyBadgeText}>
-                        KEY: {activeKey}
-                        {transposeSteps !== 0 ? ` (${transposeSteps > 0 ? `+${transposeSteps}` : transposeSteps})` : ''}
-                      </Text>
-                    </View>
-                  )}
-
-                  <TouchableOpacity
-                    style={styles.transposeStepBtn}
-                    onPress={() => setTransposeSteps((s) => s + 1)}
-                  >
-                    <Text style={styles.transposeStepText}>+</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* ── Real BPM & Tap Tempo Controls ── */}
-                <View style={styles.bpmGroup}>
-                  <TouchableOpacity
-                    style={styles.transposeStepBtn}
-                    onPress={() => setCurrentBpm((b) => Math.max(45, b - 5))}
-                  >
-                    <Text style={styles.transposeStepText}>-</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.bpmBadge}
-                    onPress={handleTapTempo}
-                    activeOpacity={0.75}
-                  >
-                    <Gauge size={11} color={accentText} />
-                    <Text style={styles.bpmBadgeText}>{currentBpm} BPM</Text>
-                    <Text style={styles.tapSubText}>TAP</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.transposeStepBtn}
-                    onPress={() => setCurrentBpm((b) => Math.min(240, b + 5))}
-                  >
-                    <Text style={styles.transposeStepText}>+</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
               {displayedNextTitle ? (
                 <View style={styles.nextSongBadgeRow}>
                   <Text style={styles.nextSongLabel} numberOfLines={1}>
@@ -2568,6 +2535,57 @@ const baseStyles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: 'JetBrains Mono',
   },
+  settingsBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(16,185,129,0.35)',
+    backgroundColor: 'rgba(16,185,129,0.12)',
+  },
+  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
+  sheetCard: {
+    backgroundColor: '#0B1410',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 32,
+    paddingTop: 10,
+    gap: 14,
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    marginBottom: 4,
+  },
+  sheetTitle: { fontSize: 18, fontWeight: '800', color: '#FFFFFF', fontFamily: 'DM Sans Bold' },
+  sheetAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: 'rgba(16,185,129,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(16,185,129,0.3)',
+  },
+  sheetActionText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF', fontFamily: 'DM Sans Bold' },
+  sheetRow: { gap: 8 },
+  sheetLabel: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.6)', letterSpacing: 1, fontFamily: 'DM Sans Bold' },
+  sheetClose: {
+    marginTop: 4,
+    paddingVertical: 13,
+    borderRadius: 14,
+    alignItems: 'center',
+    backgroundColor: '#10B981',
+  },
+  sheetCloseText: { fontSize: 15, fontWeight: '800', color: '#FFFFFF', fontFamily: 'DM Sans Bold' },
   hideTopBtn: {
     flexDirection: 'row',
     alignItems: 'center',

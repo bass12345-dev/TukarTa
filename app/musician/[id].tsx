@@ -8,7 +8,8 @@ import {
   TouchableOpacity, 
   Dimensions,
   Platform,
-  ActivityIndicator
+  ActivityIndicator,
+  Share
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -46,6 +47,7 @@ export default function MusicianProfileScreen() {
   const router = useRouter();
   const { colors, isDark } = useAppTheme();
   const [inviteSent, setInviteSent] = useState(false);
+  const [showAllSongs, setShowAllSongs] = useState(false);
   const [isFavorited, setIsFavorited] = useState(false);
 
   // Real Data Hooks
@@ -65,6 +67,14 @@ export default function MusicianProfileScreen() {
     .filter((b: any) => b && b.leader_id === me?.id);
 
   const startChat = useStartConversation();
+
+  const shareProfile = () => {
+    const name = musicianData?.display_name || 'a musician';
+    Share.share({
+      title: name,
+      message: `Check out ${name} on TukarTa, the app for gigging musicians.`,
+    }).catch(() => {});
+  };
 
   // The database only opens chats with musicians you share a band or invite with.
   const handleMessage = () => {
@@ -170,6 +180,7 @@ export default function MusicianProfileScreen() {
             
             <TouchableOpacity 
               style={[styles.glassHeaderBtn, { backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.85)', borderColor: colors.border }]}
+              onPress={shareProfile}
             >
               <Share2 size={18} color={colors.text} />
             </TouchableOpacity>
@@ -318,7 +329,7 @@ export default function MusicianProfileScreen() {
               ) : musicianSongs?.length === 0 ? (
                 <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>No songs listed yet.</Text>
               ) : (
-                musicianSongs?.slice(0, 5).map((item, idx) => {
+                musicianSongs?.slice(0, showAllSongs ? undefined : 5).map((item, idx) => {
                   const isShared = (mySongs || []).some(ms => ms.song_id === item.song_id);
                   return (
                     <View key={item.id} style={styles.songRow}>
@@ -347,8 +358,8 @@ export default function MusicianProfileScreen() {
             </View>
 
             {musicianSongs && musicianSongs.length > 5 && (
-              <TouchableOpacity style={styles.viewAllBtn}>
-                <Text style={styles.viewAllText}>View all {musicianSongs.length} songs →</Text>
+              <TouchableOpacity style={styles.viewAllBtn} onPress={() => setShowAllSongs((v) => !v)}>
+                <Text style={styles.viewAllText}>{showAllSongs ? 'Show less' : `View all ${musicianSongs.length} songs`} →</Text>
               </TouchableOpacity>
             )}
           </View>

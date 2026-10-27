@@ -21,6 +21,17 @@ import { useRefresh } from '../../utils/hooks/useRefresh';
 import { useHeaderTopPadding, useTabBarPadding } from '../../utils/hooks/useTabBarPadding';
 const FILTERS = ['All', 'Singer', 'Guitarist', 'Bassist', 'Drummer', 'Keys'];
 
+// Roles are stored as short codes (e.g. 'drum', 'bass'), so each filter matches several codes.
+const ROLE_CODES: Record<string, string[]> = {
+  Singer: ['singer', 'vocal', 'vocals', 'vocalist'],
+  Guitarist: ['guitar', 'guitarist'],
+  Bassist: ['bass', 'bassist'],
+  Drummer: ['drum', 'drums', 'drummer'],
+  Keys: ['keys', 'keyboard', 'keyboardist', 'piano'],
+};
+
+const cap = (s?: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : undefined);
+
 function StarRating({ value }: { value: number }) {
   const rating = value || 0;
   return (
@@ -38,11 +49,9 @@ function StarRating({ value }: { value: number }) {
   );
 }
 
-function MatchBar({ value }: { value: number }) {
-  const cappedValue = Math.min(value, 10);
-  const pct = (cappedValue / 10) * 100;
-  const color =
-    value >= 8 ? '#10B981' : value >= 5 ? '#00D4FF' : 'rgba(255,255,255,0.25)';
+function MatchBar({ value, max }: { value: number; max: number }) {
+  const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
+  const color = pct >= 50 ? '#10B981' : pct > 0 ? '#34D399' : 'rgba(255,255,255,0.25)';
   return (
     <View style={styles.matchBarTrack}>
       <View style={[styles.matchBarFill, { width: `${pct}%` as any, backgroundColor: color }]} />
@@ -62,8 +71,9 @@ export default function DiscoverScreen() {
   const { data: musicians, isLoading, error } = useDiscoverMusicians();
 
   const filtered = (musicians || []).filter((m) => {
-    const roles = m.musician_profile?.roles || [];
-    const matchFilter = activeFilter === 'All' || roles.includes(activeFilter);
+    const roles: string[] = (m.musician_profile?.roles || []).map((r: string) => r.toLowerCase());
+    const matchFilter =
+      activeFilter === 'All' || roles.some((r) => (ROLE_CODES[activeFilter] || [activeFilter.toLowerCase()]).includes(r));
     
     const musicianName = m.display_name || '';
     const genres = m.musician_profile?.genres || [];
@@ -74,6 +84,9 @@ export default function DiscoverScreen() {
       genres.some((g: string) => g.toLowerCase().includes(query.toLowerCase()));
     return matchFilter && matchQuery;
   });
+
+  // Scale the library bars against the largest library in the current list.
+  const maxLibrary = Math.max(1, ...filtered.map((m) => m.library_size || 0));
 
   const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
@@ -160,7 +173,7 @@ export default function DiscoverScreen() {
 
       {!isLoading && !error && (
         <Text style={[styles.sortLabel, { color: colors.textDim }]}>
-          {filtered.length} musicians · sorted by song match
+          {filtered.length} musicians · same genres first, then songs in common
         </Text>
       )}
 
@@ -194,10 +207,10 @@ export default function DiscoverScreen() {
 
         {!isLoading && !error && filtered.map((m) => {
           const profile = m.musician_profile;
-          const matchScore = m.match_score || 0;
+          const libraryCount = m.library_size || 0;
           const initials = getInitials(m.display_name || 'M');
           const avatarColor = getAvatarColor(m.id);
-          const primaryRole = profile?.roles?.[0] || 'Musician';
+          const primaryRole = cap(profile?.roles?.[0]) || 'Musician';
           const genres = profile?.genres || [];
 
           return (
@@ -240,7 +253,7 @@ export default function DiscoverScreen() {
                         { color: colors.primaryDark },
                       ]}
                     >
-                      ♪ {matchScore}
+                      ♪ {m.genre_overlap || 0}
                     </Text>
                   </View>
                 </View>
@@ -262,7 +275,10 @@ export default function DiscoverScreen() {
                   </View>
                 </View>
 
-                <MatchBar value={matchScore} />
+                <Text style={[styles.ratingCount, { color: colors.textDim, marginTop: 2 }]}>
+                  {libraryCount} songs known · {m.genre_overlap || 0} shared genres
+                </Text>
+                <MatchBar value={libraryCount} max={maxLibrary} />
               </View>
             </TouchableOpacity>
           );
