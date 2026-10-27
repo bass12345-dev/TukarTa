@@ -27,6 +27,7 @@ import {
 import { Pill } from '../../components/ui/Pill';
 import { Button } from '../../components/ui/Button';
 import {
+  profileOf,
   useMusicianProfile,
   useMusicianSongs,
   useMyKnownSongs,
@@ -132,7 +133,9 @@ export default function MusicianProfileScreen() {
     );
   }
 
-  const { user, profile } = musicianData;
+  // The hook returns the users row with its profile embedded, not { user, profile }.
+  const user = musicianData;
+  const profile = profileOf(musicianData);
   const initials = getInitials(user.display_name);
 
   // Dynamic shared songs overlap
