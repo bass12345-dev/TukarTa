@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft, Info, Check, X, Bell, MailOpen } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMyInvites, useAcceptInvite, useDeclineInvite } from '../utils/hooks/useMusician';
@@ -21,7 +21,11 @@ export default function MessagesScreen() {
   const { data: invites, isLoading } = useMyInvites();
   const acceptInvite = useAcceptInvite();
   const declineInvite = useDeclineInvite();
-  const [tab, setTab] = useState<'invites' | 'chats' | 'alerts'>('invites');
+  // Callers can open a specific tab: /messages?tab=chats or /messages?tab=alerts
+  const { tab: initialTab } = useLocalSearchParams<{ tab?: string }>();
+  const [tab, setTab] = useState<'invites' | 'chats' | 'alerts'>(
+    initialTab === 'chats' || initialTab === 'alerts' ? initialTab : 'invites'
+  );
   const { data: conversations, isLoading: chatsLoading } = useConversations();
   const { data: notifications } = useNotifications();
   const markRead = useMarkNotificationsRead();

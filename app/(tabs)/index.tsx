@@ -124,7 +124,7 @@ export default function DashboardScreen() {
           <TouchableOpacity
             style={[styles.iconBtn, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}
             activeOpacity={0.7}
-            onPress={() => router.push('/messages')}
+            onPress={() => router.push({ pathname: '/messages', params: { tab: 'chats' } })}
           >
             <MessageCircle size={18} color={colors.primary} />
             {(unreadCount > 0 || (invites && invites.length > 0)) && <View style={styles.badgeDot} />}
