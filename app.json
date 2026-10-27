@@ -19,7 +19,6 @@
     },
     "android": {
       "package": "com.basildev.tukarta",
-      "googleServicesFile": "${GOOGLE_SERVICES_JSON}",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#064E3B"
