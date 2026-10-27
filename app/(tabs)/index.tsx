@@ -16,6 +16,7 @@ import {
   Users,
   BookOpen,
   Play,
+  Bell,
   MessageCircle,
   CheckCircle2,
   Star,
@@ -116,18 +117,29 @@ export default function DashboardScreen() {
       {/* ── Top Header ── */}
       <View style={[styles.header, { backgroundColor: colors.bg, borderBottomColor: colors.border, paddingTop: headerTop }]}>
         <View style={styles.headerLeft}>
-          <Text style={[styles.welcomeGreeting, { color: colors.textDim }]}>Welcome back 👋</Text>
-          <Text style={[styles.profileName, { color: colors.text }]}>{displayName}</Text>
+          <Text style={[styles.welcomeGreeting, { color: colors.textDim }]} numberOfLines={1}>Welcome back 👋</Text>
+          <Text style={[styles.profileName, { color: colors.text }]} numberOfLines={1}>{displayName}</Text>
         </View>
 
         <View style={styles.headerRight}>
           <TouchableOpacity
             style={[styles.iconBtn, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}
             activeOpacity={0.7}
+            accessibilityLabel="Notifications"
+            onPress={() => router.push({ pathname: '/messages', params: { tab: 'alerts' } })}
+          >
+            <Bell size={18} color={colors.primary} />
+            {unreadCount > 0 && <View style={styles.badgeDot} />}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.iconBtn, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}
+            activeOpacity={0.7}
+            accessibilityLabel="Messages"
             onPress={() => router.push({ pathname: '/messages', params: { tab: 'chats' } })}
           >
             <MessageCircle size={18} color={colors.primary} />
-            {(unreadCount > 0 || (invites && invites.length > 0)) && <View style={styles.badgeDot} />}
+            {invites && invites.length > 0 && <View style={styles.badgeDot} />}
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -397,6 +409,8 @@ const styles = StyleSheet.create({
   },
   headerLeft: {
     gap: 2,
+    flex: 1,
+    minWidth: 0,
   },
   welcomeGreeting: {
     fontSize: 12,
@@ -412,7 +426,8 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
+    flexShrink: 0,
   },
   stagePill: {
     flexDirection: 'row',
