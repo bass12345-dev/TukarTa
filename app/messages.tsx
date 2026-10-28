@@ -108,9 +108,12 @@ export default function MessagesScreen() {
           conversations.map((c) => {
             const last = c.last_message;
             const name = c.other?.display_name || 'Musician';
-            const preview = last
-              ? `${last.sender_id === me?.id ? 'You: ' : ''}${last.body}`
-              : 'Say hi 👋';
+            const lastText = !last
+              ? 'Say hi 👋'
+              : last.deleted_at
+                ? 'Message deleted'
+                : last.body || `📎 ${last.attachment_name || 'Attachment'}`;
+            const preview = last && !last.deleted_at && last.sender_id === me?.id ? `You: ${lastText}` : lastText;
             return (
               <TouchableOpacity
                 key={c.id}
