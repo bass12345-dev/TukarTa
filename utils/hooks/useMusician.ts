@@ -318,6 +318,21 @@ export function useUpdateProfile() {
   });
 }
 
+/** Delete a gig. Its setlists are removed with it (the database cascades). Band members may delete. */
+export function useDeleteGig() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (gigId: string) => {
+      const { error } = await supabase.from('gigs').delete().eq('id', gigId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-gigs'] });
+    },
+  });
+}
+
 export function useMyGigs() {
   return useQuery({
     queryKey: ['my-gigs'],

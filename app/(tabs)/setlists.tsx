@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import {
@@ -15,9 +16,10 @@ import {
   Plus,
   MapPin,
   Music2,
+  Trash2,
   Users,
 } from 'lucide-react-native';
-import { useMyGigs } from '@/utils/hooks/useMusician';
+import { useDeleteGig, useMyGigs } from '@/utils/hooks/useMusician';
 import { useAppTheme } from '@/context/theme';
 import { CreateGigModal } from '@/components/gigs/CreateGigModal';
 
@@ -33,6 +35,25 @@ export default function SetlistsScreen() {
   const { colors, isDark } = useAppTheme();
   const [showCreateGigModal, setShowCreateGigModal] = React.useState(false);
   const { data: gigs, isLoading: isGigsLoading } = useMyGigs();
+  const deleteGig = useDeleteGig();
+
+  const confirmDeleteGig = (gig: any) => {
+    Alert.alert(
+      'Delete gig?',
+      `"${gig.name || 'Untitled Gig'}" and its setlists will be removed for everyone in the band.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () =>
+            deleteGig.mutate(gig.id, {
+              onError: () => Alert.alert('Could not delete', 'Check your connection and try again.'),
+            }),
+        },
+      ]
+    );
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
@@ -127,7 +148,17 @@ export default function SetlistsScreen() {
                       <Calendar size={18} color={colors.primary} />
                       <Text style={[styles.calendarBadgeText, { color: colors.primary }]}>{dateStr}</Text>
                     </View>
-                    <ChevronRight size={18} color={colors.textSecondary} />
+                    <View style={styles.cardActions}>
+                      <TouchableOpacity
+                        onPress={() => confirmDeleteGig(gig)}
+                        disabled={deleteGig.isPending}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        accessibilityLabel={`Delete ${name}`}
+                      >
+                        <Trash2 size={18} color="#F87171" />
+                      </TouchableOpacity>
+                      <ChevronRight size={18} color={colors.textSecondary} />
+                    </View>
                   </View>
 
                   <Text style={[styles.gigName, { color: colors.text }]} numberOfLines={1}>{name}</Text>
@@ -272,6 +303,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 10,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
   },
   calendarBadge: {
     flexDirection: 'row',
