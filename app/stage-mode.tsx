@@ -1573,6 +1573,12 @@ export default function StageModeScreen() {
                             fontSize: lyricsFontSize,
                             lineHeight: Math.round(lyricsFontSize * 1.5),
                           },
+                          // Current line bright, the rest dimmed, as in the stage design.
+                          {
+                            color: isHighlighted
+                              ? (isDark ? '#FFFFFF' : '#064E3B')
+                              : (isDark ? 'rgba(255,255,255,0.45)' : '#166534'),
+                          },
                         ]}
                       >
                         {line}
@@ -2846,11 +2852,6 @@ const baseStyles = StyleSheet.create({
     lineHeight: 30,
   },
   lyricLineHighlighted: {
-    backgroundColor: '#D1FAE5',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    color: '#064E3B',
     fontWeight: '800',
   },
   lyricsStageView: {
