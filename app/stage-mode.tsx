@@ -1523,10 +1523,7 @@ export default function StageModeScreen() {
                         key={lIdx}
                         activeOpacity={0.85}
                         onPress={() => handleJumpToLine(pIdx, lIdx)}
-                        style={[
-                          styles.chordLineWrap,
-                          isHighlighted && styles.lyricLineHighlighted,
-                        ]}
+                        style={styles.chordLineWrap}
                       >
                         {parsedLine.segments.map((seg, sIdx) => (
                           <View key={sIdx} style={styles.chordSegmentCol}>
