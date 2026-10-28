@@ -4,11 +4,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../utils/supabase';
 import { useAuth } from './auth';
 import {
-  LocalP2PManager,
   testInternetReachable,
   HOTSPOT_PRESETS,
   HybridSyncMessage,
 } from '../utils/hybridSyncEngine';
+import { LocalP2PManager, isHotspotToken } from '../utils/localTransport';
 
 export type MemberRole = 'leader' | 'vocals' | 'guitar' | 'bass' | 'drums' | 'keys' | 'horns' | 'other';
 export type SyncMode = 'cloud' | 'hotspot' | 'hybrid';
@@ -406,7 +406,7 @@ export function BandSessionProvider({ children }: { children: React.ReactNode })
   ): Promise<boolean> => {
     try {
       const cleanInput = codeOrToken.trim();
-      const isToken = cleanInput.length > 30;
+      const isToken = isHotspotToken(cleanInput);
       const isHotspotMode = !!memberInfo.useHotspot || isToken;
       const cleanCode = isToken ? 'TK-HOT' : cleanInput.toUpperCase();
       const channelName = `band_room_${cleanCode.replace(/[^A-Za-z0-9]/g, '')}`;
