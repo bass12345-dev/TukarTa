@@ -371,6 +371,17 @@ export default function StageModeScreen() {
     })
   ).current;
 
+  // Swipe down on the footer to hide the controls; swipe up to show them again.
+  const footerSwipe = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponderCapture: (_, g) => Math.abs(g.dy) > 12 && Math.abs(g.dy) > Math.abs(g.dx) * 1.5,
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > 40) setIsBottomPlayerHidden(true);
+        else if (g.dy < -40) setIsBottomPlayerHidden(false);
+      },
+    })
+  ).current;
+
   // Load offline gig package fallback if offline or db empty
   useEffect(() => {
     if (setlistId) {
@@ -1608,6 +1619,7 @@ export default function StageModeScreen() {
         onLayout={(e) =>
           setFooterSize({ w: Math.round(e.nativeEvent.layout.width), h: Math.round(e.nativeEvent.layout.height) })
         }
+        {...footerSwipe.panHandlers}
         style={[
           styles.footerControls,
           isLandscape
@@ -1657,25 +1669,6 @@ export default function StageModeScreen() {
           </TouchableOpacity>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            {/* Toggle button to hide/show the below player component UI */}
-            <TouchableOpacity
-              style={styles.footerTogglePlayerBtn}
-              onPress={() => setIsBottomPlayerHidden((v) => !v)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              {isBottomPlayerHidden ? (
-                <>
-                  <ChevronUp size={13} color={ink2} />
-                  <Text style={styles.footerTogglePlayerText}>PLAYER</Text>
-                </>
-              ) : (
-                <>
-                  <ChevronDown size={13} color={ink2} />
-                  <Text style={styles.footerTogglePlayerText}>HIDE</Text>
-                </>
-              )}
-            </TouchableOpacity>
-
             {!isDirectSongMode && (
               <TouchableOpacity
                 style={styles.footerUpNextAction}
@@ -1710,7 +1703,7 @@ export default function StageModeScreen() {
                       disabled={currentIndex === 0}
                       onPress={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
                     >
-                      <SkipBack size={22} color={ink} fill="#166534" />
+                      <SkipBack size={16} color={ink} fill="#166534" />
                     </TouchableOpacity>
                   )}
 
@@ -1725,9 +1718,9 @@ export default function StageModeScreen() {
                     }}
                   >
                     {isPlaying ? (
-                      <Pause size={36} color="#FFFFFF" fill="#FFFFFF" />
+                      <Pause size={24} color="#FFFFFF" fill="#FFFFFF" />
                     ) : (
-                      <Play size={36} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 4 }} />
+                      <Play size={24} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 3 }} />
                     )}
                   </TouchableOpacity>
 
@@ -1739,7 +1732,7 @@ export default function StageModeScreen() {
                         disabled={currentIndex >= songsList.length - 1}
                         onPress={() => setCurrentIndex((prev) => Math.min(songsList.length - 1, prev + 1))}
                       >
-                        <SkipForward size={22} color={ink} fill="#166534" />
+                        <SkipForward size={16} color={ink} fill="#166534" />
                       </TouchableOpacity>
                       {displayedNextTitle ? (
                         <Text style={styles.nextSongBtnSubLabel} numberOfLines={1}>
@@ -3006,9 +2999,9 @@ const baseStyles = StyleSheet.create({
     marginBottom: 16,
   },
   transportBtnSide: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: '#F0FDF4',
     borderWidth: 1,
     borderColor: '#D1FAE5',
@@ -3016,9 +3009,9 @@ const baseStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   transportBtnMain: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: '#166534',
     alignItems: 'center',
     justifyContent: 'center',
@@ -3038,11 +3031,11 @@ const baseStyles = StyleSheet.create({
   subActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 4,
+    gap: 4,
+    paddingVertical: 2,
   },
   subActionText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     color: '#10B981',
     letterSpacing: 0.8,
