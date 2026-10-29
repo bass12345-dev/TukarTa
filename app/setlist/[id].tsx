@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Platform, PanResponder } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { ArrowLeft, MoreVertical, Music, Sparkles, Play, Plus, Video, BookOpen, Radio, WifiOff, Share2, Copy, Trash2, Edit3, X, Check, ListMusic } from 'lucide-react-native';
@@ -24,9 +24,24 @@ export default function SetlistDetailsScreen() {
   const [activeSetlistIdx, setActiveSetlistIdx] = React.useState(0);
   const [showMenuModal, setShowMenuModal] = React.useState(false);
 
+  // Swipe left / right across the body switches between the setlists of this gig.
+  const setlistCountRef = React.useRef(0);
+  const swipeResponder = React.useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponderCapture: (_, g) => Math.abs(g.dx) > 24 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
+      onPanResponderRelease: (_, g) => {
+        const count = setlistCountRef.current;
+        if (count < 2) return;
+        if (g.dx < -60) setActiveSetlistIdx((i) => Math.min(count - 1, i + 1));
+        else if (g.dx > 60) setActiveSetlistIdx((i) => Math.max(0, i - 1));
+      },
+    })
+  ).current;
+
   // 1. Data Hooks
   const { data: gig, isLoading: loadingGig } = useGigDetails(id as string);
   const { data: setlists, isLoading: loadingSetlists } = useGigSetlists(id as string);
+  setlistCountRef.current = setlists?.length || 0; // the swipe handler reads this
   
   const currentSetlist = setlists?.[activeSetlistIdx];
   const { data: songs, isLoading: loadingSongs } = useSetlistSongs(currentSetlist?.id);
@@ -238,7 +253,12 @@ export default function SetlistDetailsScreen() {
         </ScrollView>
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        {...swipeResponder.panHandlers}
+      >
         {loadingSongs ? (
           <ActivityIndicator color="#10B981" style={{ marginTop: 30 }} />
         ) : songs?.length === 0 ? (
