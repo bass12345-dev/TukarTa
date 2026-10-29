@@ -333,6 +333,44 @@ export default function StageModeScreen() {
     });
   };
 
+  // Two-finger pinch on the lyrics changes the font size; the size is saved like the A- / A+ buttons.
+  const setFontSize = (value: number) => {
+    const next = Math.min(36, Math.max(14, Math.round(value)));
+    setLyricsFontSize(next);
+    AsyncStorage.setItem('@stage_lyrics_font_size', String(next)).catch(() => {});
+  };
+  const fontSizeRef = useRef(lyricsFontSize);
+  fontSizeRef.current = lyricsFontSize;
+  const pinchRef = useRef<{ startDistance: number; startSize: number } | null>(null);
+  const pinchResponder = useRef(
+    PanResponder.create({
+      // Take over only when two fingers are down, so a single finger still scrolls the lyrics.
+      onStartShouldSetPanResponderCapture: (e) => e.nativeEvent.touches.length >= 2,
+      onMoveShouldSetPanResponderCapture: (e) => e.nativeEvent.touches.length >= 2,
+      onPanResponderGrant: (e) => {
+        const [a, b] = e.nativeEvent.touches;
+        pinchRef.current = {
+          startDistance: Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY),
+          startSize: fontSizeRef.current,
+        };
+      },
+      onPanResponderMove: (e) => {
+        const start = pinchRef.current;
+        const touches = e.nativeEvent.touches;
+        if (!start || touches.length < 2 || start.startDistance <= 0) return;
+        const [a, b] = touches;
+        const distance = Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
+        setFontSize(start.startSize * (distance / start.startDistance));
+      },
+      onPanResponderRelease: () => {
+        pinchRef.current = null;
+      },
+      onPanResponderTerminate: () => {
+        pinchRef.current = null;
+      },
+    })
+  ).current;
+
   // Load offline gig package fallback if offline or db empty
   useEffect(() => {
     if (setlistId) {
@@ -1351,6 +1389,7 @@ export default function StageModeScreen() {
       <ScrollView
         ref={scrollViewRef}
         style={styles.scroll}
+        {...pinchResponder.panHandlers}
         contentContainerStyle={[
           styles.scrollContent,
           isMinusOneVisible && { paddingBottom: miniPlayerVideoHeight + 72 },
