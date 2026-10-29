@@ -130,7 +130,7 @@ export default function DashboardScreen() {
             style={[styles.iconBtn, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}
             activeOpacity={0.7}
             accessibilityLabel="Notifications"
-            onPress={() => router.push({ pathname: '/messages', params: { tab: 'alerts' } })}
+            onPress={() => router.push('/notifications')}
           >
             <Bell size={18} color={colors.primary} />
             {unreadCount > 0 && <View style={styles.badgeDot} />}

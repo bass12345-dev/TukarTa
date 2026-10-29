@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft, Info, Check, X, Bell, MailOpen } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMyInvites, useAcceptInvite, useDeclineInvite } from '../utils/hooks/useMusician';
-import { useConversations, useNotifications, useMarkNotificationsRead } from '../utils/hooks/useMessaging';
+import { useConversations } from '../utils/hooks/useMessaging';
 import { useAuth } from '@/context/auth';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Pill } from '../components/ui/Pill';
@@ -32,22 +32,11 @@ export default function MessagesScreen() {
   const { data: invites, isLoading } = useMyInvites();
   const acceptInvite = useAcceptInvite();
   const declineInvite = useDeclineInvite();
-  // Callers can open a specific tab: /messages?tab=chats or /messages?tab=alerts
+  // Callers can open a specific tab: /messages?tab=chats
   const { tab: initialTab } = useLocalSearchParams<{ tab?: string }>();
-  const [tab, setTab] = useState<'invites' | 'chats' | 'alerts'>(
-    initialTab === 'chats' || initialTab === 'alerts' ? initialTab : 'invites'
-  );
+  const [tab, setTab] = useState<'invites' | 'chats'>(initialTab === 'chats' ? 'chats' : 'invites');
   const { data: conversations, isLoading: chatsLoading } = useConversations();
   const { user: me } = useAuth();
-  const { data: notifications } = useNotifications();
-  const markRead = useMarkNotificationsRead();
-  const unreadCount = (notifications || []).filter((n) => !n.read_at).length;
-
-  // Opening the Alerts tab marks everything as read.
-  useEffect(() => {
-    if (tab === 'alerts' && unreadCount > 0) markRead.mutate();
-  }, [tab, unreadCount]);
-
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -68,7 +57,6 @@ export default function MessagesScreen() {
           {([
             { key: 'invites', label: 'Invitations', showDot: !!invites && invites.length > 0 },
             { key: 'chats', label: 'Chats', showDot: false },
-            { key: 'alerts', label: 'Alerts', showDot: unreadCount > 0 },
           ] as const).map((t) => {
             const active = tab === t.key;
             return (
@@ -138,32 +126,6 @@ export default function MessagesScreen() {
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyTitle}>No chats yet</Text>
             <Text style={styles.emptySub}>Open a musician's profile to message anyone you share a band or invite with.</Text>
-          </View>
-        ))}
-
-        {tab === 'alerts' && (notifications && notifications.length > 0 ? (
-          notifications.map((n) => (
-            <TouchableOpacity
-              key={n.id}
-              activeOpacity={0.8}
-              onPress={() => {
-                if (n.kind === 'message' && n.data?.conversation_id) router.push(`/chat/${n.data.conversation_id}`);
-                if (n.kind === 'invite') setTab('invites');
-              }}
-            >
-              <GlassCard style={styles.inviteCard} intensity={15}>
-                <View style={styles.inviteMeta}>
-                  <Text style={styles.bandName}>{n.title}</Text>
-                  {!!n.body && <Text style={styles.messageText}>{n.body}</Text>}
-                  <Text style={styles.locationText}>{new Date(n.created_at).toLocaleString()}</Text>
-                </View>
-              </GlassCard>
-            </TouchableOpacity>
-          ))
-        ) : (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyTitle}>No alerts</Text>
-            <Text style={styles.emptySub}>New invitations and messages will show up here.</Text>
           </View>
         ))}
 
