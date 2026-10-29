@@ -131,16 +131,42 @@ export function useCreateBand() {
   });
 }
 
+/** Delete a band. Only its creator (leader) can do this; the database enforces it. */
 export function useDeleteBand() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (bandId: string) => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('bands')
         .delete()
-        .eq('id', bandId);
-      
+        .eq('id', bandId)
+        .select('id');
+
+      if (error) throw error;
+      if (!data?.length) throw new Error('Only the band creator can delete this band.');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-bands'] });
+    },
+  });
+}
+
+/** Leave a band by removing your own membership. The creator cannot leave; they delete the band instead. */
+export function useLeaveBand() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (bandId: string) => {
+      const user = await getCurrentUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { error } = await supabase
+        .from('band_members')
+        .delete()
+        .eq('band_id', bandId)
+        .eq('user_id', user.id);
+
       if (error) throw error;
     },
     onSuccess: () => {

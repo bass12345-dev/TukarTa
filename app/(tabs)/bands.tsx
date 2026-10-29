@@ -29,13 +29,14 @@ import {
   Piano,
   CheckCircle2,
   Share2,
+  Trash2,
 } from 'lucide-react-native';
 import { CreateBandModal } from '../../components/bands/CreateBandModal';
 import { JoinSessionModal } from '../../components/bands/JoinSessionModal';
 import { CreateSessionModal } from '../../components/bands/CreateSessionModal';
 import { QRCodeView } from '../../components/bands/QRCodeView';
 import { useAuth } from '../../context/auth';
-import { useMyBands } from '../../utils/hooks/useMusician';
+import { useMyBands, useDeleteBand, useLeaveBand } from '../../utils/hooks/useMusician';
 import { useAppTheme } from '../../context/theme';
 import { useBandSession, MemberRole } from '../../context/bandSession';
 
@@ -66,6 +67,8 @@ export default function BandSessionScreen() {
   const [showHostModal, setShowHostModal] = useState(false);
 
   const { data: bands, isLoading: loadingBands } = useMyBands();
+  const deleteBand = useDeleteBand();
+  const leaveBand = useLeaveBand();
 
   // Band Session Context
   const {
@@ -98,6 +101,32 @@ export default function BandSessionScreen() {
 
   const handleCountIn = () => {
     broadcastCountIn(120);
+  };
+
+  /** Creators delete the band; members leave it. Both need confirmation. */
+  const handleBandAction = (bandId: string, bandName: string, isCreator: boolean) => {
+    const title = isCreator ? 'Delete band' : 'Leave band';
+    const message = isCreator
+      ? `Delete "${bandName}" for everyone? Its gigs and setlists will be removed too.`
+      : `Leave "${bandName}"? You will need an invite to rejoin.`;
+    const run = () => {
+      const mutation = isCreator ? deleteBand : leaveBand;
+      mutation.mutate(bandId, {
+        onError: (e: any) => {
+          const msg = e?.message || 'Something went wrong. Please try again.';
+          if (Platform.OS === 'web') window.alert(msg);
+          else Alert.alert(title, msg);
+        },
+      });
+    };
+    if (Platform.OS === 'web') {
+      if (window.confirm(`${title}\n\n${message}`)) run();
+    } else {
+      Alert.alert(title, message, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: title, style: 'destructive', onPress: run },
+      ]);
+    }
   };
 
   const handleLeaveSession = async () => {
@@ -491,33 +520,51 @@ export default function BandSessionScreen() {
                 const bRole = (item.role || 'Member').toUpperCase();
                 const memberCount = item.band?.member_count?.[0]?.count || 1;
                 const genresText = item.band?.genres?.slice(0, 2).join(', ') || 'OPM, Rock';
+                const isCreator = item.band?.leader_id === user?.id;
+                const bandId = item.band?.id;
                 return (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={[styles.bandCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
-                    activeOpacity={0.8}
-                    onPress={() => item.band?.id && router.push(`/musician/band/${item.band.id}`)}
-                  >
-                    <View style={[styles.bandAvatar, { backgroundColor: colors.primary }]}>
-                      <Text style={styles.bandAvatarText}>{bInitials}</Text>
-                    </View>
-                    <View style={styles.bandInfo}>
-                      <Text style={[styles.bandName, { color: colors.text }]}>{bName}</Text>
-                      <View style={styles.bandMetaRow}>
-                        <Users size={12} color={colors.primary} />
-                        <Text style={[styles.bandMetaText, { color: colors.textDim }]}>
-                          {memberCount} members
-                        </Text>
-                        <Text style={[styles.bandMetaText, { color: colors.textDim }]}>•</Text>
-                        <Text style={[styles.bandMetaText, { color: colors.textDim }]}>
-                          {genresText}
-                        </Text>
+                  <View key={item.id} style={styles.bandItem}>
+                    <TouchableOpacity
+                      style={[styles.bandCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+                      activeOpacity={0.8}
+                      onPress={() => bandId && router.push(`/musician/band/${bandId}`)}
+                    >
+                      <View style={[styles.bandAvatar, { backgroundColor: colors.primary }]}>
+                        <Text style={styles.bandAvatarText}>{bInitials}</Text>
                       </View>
-                    </View>
-                    <View style={[styles.roleBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}>
-                      <Text style={[styles.roleBadgeText, { color: colors.primary }]}>{bRole}</Text>
-                    </View>
-                  </TouchableOpacity>
+                      <View style={styles.bandInfo}>
+                        <Text style={[styles.bandName, { color: colors.text }]}>{bName}</Text>
+                        <View style={styles.bandMetaRow}>
+                          <Users size={12} color={colors.primary} />
+                          <Text style={[styles.bandMetaText, { color: colors.textDim }]}>
+                            {memberCount} members
+                          </Text>
+                          <Text style={[styles.bandMetaText, { color: colors.textDim }]}>•</Text>
+                          <Text style={[styles.bandMetaText, { color: colors.textDim }]}>
+                            {genresText}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={[styles.roleBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}>
+                        <Text style={[styles.roleBadgeText, { color: colors.primary }]}>{bRole}</Text>
+                      </View>
+                    </TouchableOpacity>
+                    {bandId && (
+                      <TouchableOpacity
+                        style={styles.bandActionBtn}
+                        activeOpacity={0.8}
+                        onPress={() => handleBandAction(bandId, bName, isCreator)}
+                        disabled={deleteBand.isPending || leaveBand.isPending}
+                      >
+                        {isCreator ? (
+                          <Trash2 size={14} color="#EF4444" />
+                        ) : (
+                          <LogOut size={14} color="#EF4444" />
+                        )}
+                        <Text style={styles.bandActionText}>{isCreator ? 'Delete band' : 'Leave band'}</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 );
               })
             ) : (
@@ -962,6 +1009,23 @@ const styles = StyleSheet.create({
   },
   bandsContainer: {
     gap: 12,
+  },
+  bandItem: {
+    gap: 6,
+  },
+  bandActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  bandActionText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#EF4444',
+    fontFamily: 'DM Sans',
   },
   bandCard: {
     flexDirection: 'row',
