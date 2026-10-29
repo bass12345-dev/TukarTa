@@ -31,6 +31,7 @@ import {
   Share2,
   Trash2,
 } from 'lucide-react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { CreateBandModal } from '../../components/bands/CreateBandModal';
 import { JoinSessionModal } from '../../components/bands/JoinSessionModal';
 import { CreateSessionModal } from '../../components/bands/CreateSessionModal';
@@ -523,7 +524,25 @@ export default function BandSessionScreen() {
                 const isCreator = item.band?.leader_id === user?.id;
                 const bandId = item.band?.id;
                 return (
-                  <View key={item.id} style={styles.bandItem}>
+                  <Swipeable
+                    key={item.id}
+                    friction={2}
+                    leftThreshold={40}
+                    overshootLeft={false}
+                    renderLeftActions={() =>
+                      bandId ? (
+                        <TouchableOpacity
+                          style={styles.swipeAction}
+                          activeOpacity={0.8}
+                          onPress={() => handleBandAction(bandId, bName, isCreator)}
+                          disabled={deleteBand.isPending || leaveBand.isPending}
+                        >
+                          {isCreator ? <Trash2 size={18} color="#FFFFFF" /> : <LogOut size={18} color="#FFFFFF" />}
+                          <Text style={styles.swipeActionText}>{isCreator ? 'Delete' : 'Leave'}</Text>
+                        </TouchableOpacity>
+                      ) : null
+                    }
+                  >
                     <TouchableOpacity
                       style={[styles.bandCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
                       activeOpacity={0.8}
@@ -549,22 +568,7 @@ export default function BandSessionScreen() {
                         <Text style={[styles.roleBadgeText, { color: colors.primary }]}>{bRole}</Text>
                       </View>
                     </TouchableOpacity>
-                    {bandId && (
-                      <TouchableOpacity
-                        style={styles.bandActionBtn}
-                        activeOpacity={0.8}
-                        onPress={() => handleBandAction(bandId, bName, isCreator)}
-                        disabled={deleteBand.isPending || leaveBand.isPending}
-                      >
-                        {isCreator ? (
-                          <Trash2 size={14} color="#EF4444" />
-                        ) : (
-                          <LogOut size={14} color="#EF4444" />
-                        )}
-                        <Text style={styles.bandActionText}>{isCreator ? 'Delete band' : 'Leave band'}</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
+                  </Swipeable>
                 );
               })
             ) : (
@@ -1010,21 +1014,19 @@ const styles = StyleSheet.create({
   bandsContainer: {
     gap: 12,
   },
-  bandItem: {
-    gap: 6,
-  },
-  bandActionBtn: {
-    flexDirection: 'row',
+  swipeAction: {
+    width: 92,
+    borderRadius: 18,
+    marginRight: 8,
+    backgroundColor: '#EF4444',
     alignItems: 'center',
-    alignSelf: 'flex-end',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    justifyContent: 'center',
+    gap: 4,
   },
-  bandActionText: {
+  swipeActionText: {
     fontSize: 12,
-    fontWeight: '700',
-    color: '#EF4444',
+    fontWeight: '800',
+    color: '#FFFFFF',
     fontFamily: 'DM Sans',
   },
   bandCard: {
