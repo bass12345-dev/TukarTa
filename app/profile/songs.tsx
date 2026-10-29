@@ -337,7 +337,7 @@ function SongListItem({ item, colors, isDark }: { item: any; colors: any; isDark
     );
   };
 
-  const renderRightActions = () => {
+  const renderLeftActions = () => {
     return (
       <TouchableOpacity
         style={styles.deleteAction}
@@ -359,9 +359,9 @@ function SongListItem({ item, colors, isDark }: { item: any; colors: any; isDark
 
   return (
     <Swipeable
-      renderRightActions={renderRightActions}
+      renderLeftActions={renderLeftActions}
       friction={2}
-      rightThreshold={40}
+      leftThreshold={40}
       containerStyle={styles.swipeContainer}
     >
       <TouchableOpacity
