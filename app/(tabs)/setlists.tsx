@@ -21,6 +21,7 @@ import {
 } from 'lucide-react-native';
 import { useDeleteGig, useMyGigs } from '@/utils/hooks/useMusician';
 import { useAppTheme } from '@/context/theme';
+import { Swipeable } from 'react-native-gesture-handler';
 import { CreateGigModal } from '@/components/gigs/CreateGigModal';
 
 import { RefreshControl } from 'react-native';
@@ -137,8 +138,25 @@ export default function SetlistsScreen() {
                 : 'Date TBA';
 
               return (
-                <TouchableOpacity
+                <Swipeable
                   key={gig.id}
+                  friction={2}
+                  leftThreshold={40}
+                  overshootLeft={false}
+                  renderLeftActions={() => (
+                    <TouchableOpacity
+                      style={styles.swipeAction}
+                      activeOpacity={0.8}
+                      onPress={() => confirmDeleteGig(gig)}
+                      disabled={deleteGig.isPending}
+                      accessibilityLabel={`Delete ${name}`}
+                    >
+                      <Trash2 size={18} color="#FFFFFF" />
+                      <Text style={styles.swipeActionText}>Delete</Text>
+                    </TouchableOpacity>
+                  )}
+                >
+                <TouchableOpacity
                   style={[styles.gigCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
                   activeOpacity={0.8}
                   onPress={() => router.push(`/setlist/${gig.id}`)}
@@ -149,14 +167,6 @@ export default function SetlistsScreen() {
                       <Text style={[styles.calendarBadgeText, { color: colors.primary }]}>{dateStr}</Text>
                     </View>
                     <View style={styles.cardActions}>
-                      <TouchableOpacity
-                        onPress={() => confirmDeleteGig(gig)}
-                        disabled={deleteGig.isPending}
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        accessibilityLabel={`Delete ${name}`}
-                      >
-                        <Trash2 size={18} color="#F87171" />
-                      </TouchableOpacity>
                       <ChevronRight size={18} color={colors.textSecondary} />
                     </View>
                   </View>
@@ -181,6 +191,7 @@ export default function SetlistsScreen() {
                     </View>
                   </View>
                 </TouchableOpacity>
+                </Swipeable>
               );
             })}
           </View>
@@ -287,6 +298,21 @@ const styles = StyleSheet.create({
   },
   gigsList: {
     gap: 14,
+  },
+  swipeAction: {
+    width: 92,
+    borderRadius: 20,
+    marginRight: 8,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  swipeActionText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    fontFamily: 'DM Sans',
   },
   gigCard: {
     borderRadius: 20,
