@@ -1291,7 +1291,7 @@ export default function StageModeScreen() {
       {/* ── Top Status Bar ── */}
       <View style={[styles.topStatusBar, { paddingTop: insets.top + 8 }]}>
         {/* The "Song dictionary" status is hidden for a single song; setlist and offline modes keep it. */}
-        {!isDirectSongMode && (
+        {!isDirectSongMode && !!sessionCode && (
         <View style={styles.syncStatusGroup}>
             <View
               style={[
@@ -1304,15 +1304,13 @@ export default function StageModeScreen() {
             <Text style={styles.syncStatusText} numberOfLines={1}>
               {isDirectSongMode
                 ? `SONG DICTIONARY • ${lyricsData?.provider === 'user_import' ? 'CHORDPRO' : 'LYRICS & PRACTICE'}`
-                : sessionCode
-                ? isLeader
+                : isLeader
                   ? isOfflineHotspot
                     ? `HOTSPOT P2P (${members.length}) • ${sessionCode}`
                     : `BROADCASTING (${members.length}) • ${sessionCode}`
                   : isOfflineHotspot
                     ? `HOTSPOT SYNC WITH LEADER • ${sessionCode}`
-                    : `IN SYNC WITH LEADER • ${sessionCode}`
-                : `OFFLINE STAGE MODE • ${lyricsData?.provider === 'user_import' ? 'CHORDPRO' : 'LRCLIB SYNC'}`}
+                    : `IN SYNC WITH LEADER • ${sessionCode}`}
             </Text>
         </View>
         )}
