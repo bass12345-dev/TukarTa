@@ -1222,6 +1222,28 @@ export default function StageModeScreen() {
         </TouchableOpacity>
 
         <View style={styles.topRightActions}>
+          {/* Auto-Scroll toggle and speed, top right */}
+          <View style={styles.autoScrollPillRow}>
+            <TouchableOpacity
+              style={[styles.autoScrollToggleBtn, isAutoScroll && styles.autoScrollToggleBtnActive]}
+              onPress={() => setIsAutoScroll((v) => !v)}
+            >
+              <ChevronsDown size={11} color={isAutoScroll ? '#FFFFFF' : accentText} />
+              <Text style={[styles.autoScrollToggleText, isAutoScroll && { color: '#FFFFFF' }]}>
+                {isAutoScroll ? 'SCROLL ON' : 'SCROLL OFF'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.speedPill}
+              onPress={() => {
+                setScrollSpeedMultiplier((s) => (s === 1.0 ? 1.25 : s === 1.25 ? 1.5 : s === 1.5 ? 0.75 : 1.0));
+              }}
+            >
+              <Text style={styles.speedPillText}>{scrollSpeedMultiplier}x</Text>
+            </TouchableOpacity>
+          </View>
+
           {/* ── Stage settings: import, key, lyrics size, tempo ── */}
           <TouchableOpacity
             style={styles.settingsBtn}
@@ -1321,27 +1343,6 @@ export default function StageModeScreen() {
               </Text>
             </View>
 
-            {/* Auto-Scroll Toggle & Speed (inline with the title, on the right) */}
-            <View style={styles.autoScrollPillRow}>
-              <TouchableOpacity
-                style={[styles.autoScrollToggleBtn, isAutoScroll && styles.autoScrollToggleBtnActive]}
-                onPress={() => setIsAutoScroll((v) => !v)}
-              >
-                <ChevronsDown size={11} color={isAutoScroll ? '#FFFFFF' : accentText} />
-                <Text style={[styles.autoScrollToggleText, isAutoScroll && { color: '#FFFFFF' }]}>
-                  {isAutoScroll ? 'SCROLL ON' : 'SCROLL OFF'}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.speedPill}
-                onPress={() => {
-                  setScrollSpeedMultiplier((s) => (s === 1.0 ? 1.25 : s === 1.25 ? 1.5 : s === 1.5 ? 0.75 : 1.0));
-                }}
-              >
-                <Text style={styles.speedPillText}>{scrollSpeedMultiplier}x</Text>
-              </TouchableOpacity>
-            </View>
           </View>
         </View>
       )}
