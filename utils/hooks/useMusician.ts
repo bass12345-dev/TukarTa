@@ -586,6 +586,26 @@ export function useSetlistSongs(setlistId: string | undefined) {
   });
 }
 
+/** Remove one song from a setlist. Band members may remove songs (RLS: "Band members can delete setlist songs"). */
+export function useRemoveSetlistSong() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ rowId, setlistId }: { rowId: string; setlistId: string }) => {
+      const { error } = await supabase
+        .from('setlist_songs')
+        .delete()
+        .eq('id', rowId)
+        .eq('setlist_id', setlistId);
+
+      if (error) throw error;
+    },
+    onSuccess: (_data, { setlistId }) => {
+      queryClient.invalidateQueries({ queryKey: ['setlist-songs', setlistId] });
+    },
+  });
+}
+
 export function useMyKnownSongs() {
   return useQuery({
     queryKey: ['my-known-songs'],

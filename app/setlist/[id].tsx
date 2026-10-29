@@ -6,7 +6,8 @@ import * as WebBrowser from 'expo-web-browser';
 import { ArrowLeft, MoreVertical, Music, Sparkles, Play, Plus, Video, BookOpen, Radio, WifiOff, Share2, Copy, Trash2, Edit3, X, Check, ListMusic } from 'lucide-react-native';
 import { Modal, Alert } from 'react-native';
 import { Orb } from '@/components/ui/Orb';
-import { useGigDetails, useGigSetlists, useSetlistSongs, useToggleLearnStatus, useCreateSetlist } from '@/utils/hooks/useMusician';
+import { Swipeable } from 'react-native-gesture-handler';
+import { useGigDetails, useGigSetlists, useSetlistSongs, useToggleLearnStatus, useCreateSetlist, useRemoveSetlistSong } from '@/utils/hooks/useMusician';
 import { songLyricsQuery } from '@/utils/hooks/useSongs';
 import { isValidKey } from '@/utils/musicKey';
 import { SongPickerModal } from '@/components/setlists/SongPickerModal';
@@ -28,7 +29,8 @@ export default function SetlistDetailsScreen() {
   const setlistCountRef = React.useRef(0);
   const swipeResponder = React.useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponderCapture: (_, g) => Math.abs(g.dx) > 24 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
+      // Bubble phase, not capture: song rows (swipe to delete) get the gesture first.
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 24 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
       onPanResponderRelease: (_, g) => {
         const count = setlistCountRef.current;
         if (count < 2) return;
@@ -57,6 +59,25 @@ export default function SetlistDetailsScreen() {
   }, [songs]);
   const toggleLearn = useToggleLearnStatus();
   const createSetlist = useCreateSetlist();
+  const removeSong = useRemoveSetlistSong();
+
+  const confirmRemoveSong = (item: any) => {
+    if (!currentSetlist) return;
+    const title = item.song?.title || 'this song';
+    const run = () =>
+      removeSong.mutate(
+        { rowId: item.id, setlistId: currentSetlist.id },
+        { onError: () => Alert.alert('Could not remove', 'Check your connection and try again.') },
+      );
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Remove "${title}" from this setlist?`)) run();
+      return;
+    }
+    Alert.alert('Remove song?', `"${title}" will be removed from this setlist.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: run },
+    ]);
+  };
 
   const handleYoutubeSearch = async (title: string, artist: string) => {
     const query = encodeURIComponent(`${artist} ${title} minus 1`);
@@ -274,9 +295,27 @@ export default function SetlistDetailsScreen() {
             const needsLearn = item.notes?.includes('[LEARN]');
             
             return (
-              <View key={item.id} style={[styles.songRowContainer, { borderBottomColor: colors.border }]}>
-                <TouchableOpacity 
-                  style={styles.songRow} 
+              <Swipeable
+                key={item.id}
+                friction={2}
+                leftThreshold={40}
+                overshootLeft={false}
+                renderLeftActions={() => (
+                  <TouchableOpacity
+                    style={styles.swipeDelete}
+                    activeOpacity={0.8}
+                    onPress={() => confirmRemoveSong(item)}
+                    disabled={removeSong.isPending}
+                    accessibilityLabel={`Remove ${item.song?.title || 'song'}`}
+                  >
+                    <Trash2 size={18} color="#FFFFFF" />
+                    <Text style={styles.swipeDeleteText}>Remove</Text>
+                  </TouchableOpacity>
+                )}
+              >
+              <View style={[styles.songRowContainer, { borderBottomColor: colors.border, backgroundColor: colors.bg }]}>
+                <TouchableOpacity
+                  style={styles.songRow}
                   activeOpacity={0.7} 
                   onPress={() => router.push({ 
                     pathname: '/stage-mode', 
@@ -323,7 +362,7 @@ export default function SetlistDetailsScreen() {
                     <BookOpen size={18} color={needsLearn ? "#F59E0B" : colors.textSecondary} />
                   </TouchableOpacity>
 
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.youtubeBtn}
                     onPress={() => handleYoutubeSearch(item.song.title, item.song.artist)}
                   >
@@ -331,6 +370,7 @@ export default function SetlistDetailsScreen() {
                   </TouchableOpacity>
                 </View>
               </View>
+              </Swipeable>
             );
           })
         )}
@@ -634,6 +674,21 @@ const styles = StyleSheet.create({
     maxWidth: 640,
     width: '100%',
     alignSelf: 'center',
+  },
+  swipeDelete: {
+    width: 92,
+    marginRight: 8,
+    borderRadius: 14,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  swipeDeleteText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    fontFamily: 'DM Sans',
   },
   songRowContainer: {
     flexDirection: 'row',
