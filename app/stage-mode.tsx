@@ -1305,11 +1305,11 @@ export default function StageModeScreen() {
         </View>
       </Modal>
 
-      {/* ── Song Info (title, artist, next song) and progress bar ── */}
+      {/* ── Song title and artist, with auto-scroll on the right ── */}
       {!isHeaderHidden && (
         <View style={styles.songInfoSection}>
           <View style={styles.songInfoMain}>
-            <View style={{ width: '100%' }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={[styles.songTitle, { textAlign: 'center' }]} numberOfLines={1}>
                 {displayedTitle}
               </Text>
@@ -1318,112 +1318,27 @@ export default function StageModeScreen() {
               </Text>
             </View>
 
-            <View style={styles.songInfoRight}>
-              {displayedNextTitle ? (
-                <View style={styles.nextSongBadgeRow}>
-                  <Text style={styles.nextSongLabel} numberOfLines={1}>
-                    NEXT: {displayedNextTitle} {displayedNextKey ? `(${displayedNextKey})` : ''}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-          </View>
-
-          {/* ── Real Progress Scrub Bar with Dynamic Timers & Auto-Scroll ── */}
-          <View style={styles.progressSection}>
-            <View style={styles.timeRow}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                <Clock size={11} color={accentText} />
-                <Text style={styles.timeText}>{formatSongTime(elapsedSeconds)}</Text>
-              </View>
-
-              <Text style={styles.timeText}>
-                -{formatSongTime(Math.max(0, songDuration - elapsedSeconds))}
-              </Text>
-
-              {/* Auto-Scroll Toggle & Speed Stepper (right side) */}
-              <View style={styles.autoScrollPillRow}>
-                <TouchableOpacity
-                  style={[styles.autoScrollToggleBtn, isAutoScroll && styles.autoScrollToggleBtnActive]}
-                  onPress={() => setIsAutoScroll((v) => !v)}
-                >
-                  <ChevronsDown size={11} color={isAutoScroll ? '#FFFFFF' : accentText} />
-                  <Text style={[styles.autoScrollToggleText, isAutoScroll && { color: '#FFFFFF' }]}>
-                    {isAutoScroll ? 'SCROLL ON' : 'SCROLL OFF'}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.speedPill}
-                  onPress={() => {
-                    setScrollSpeedMultiplier((s) => (s === 1.0 ? 1.25 : s === 1.25 ? 1.5 : s === 1.5 ? 0.75 : 1.0));
-                  }}
-                >
-                  <Text style={styles.speedPillText}>{scrollSpeedMultiplier}x</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* ── Intro sync: where the lyrics start in the recording (saved per song) ── */}
-            <View style={styles.introRow}>
+            {/* Auto-Scroll Toggle & Speed (inline with the title, on the right) */}
+            <View style={styles.autoScrollPillRow}>
               <TouchableOpacity
-                style={[styles.introStartBtn, (!isPlaying || isMemberFollowing) && styles.introStartBtnDisabled]}
-                onPress={() => {
-                  const t = Math.max(0, elapsedRef.current);
-                  setIntroOffset(t);
-                  setRequestNotice(`Lyrics start set to ${formatSongTime(t)}`);
-                  setTimeout(() => setRequestNotice(null), 3000);
-                }}
-                disabled={!isPlaying || isMemberFollowing}
-                accessibilityLabel="Lyrics start here"
+                style={[styles.autoScrollToggleBtn, isAutoScroll && styles.autoScrollToggleBtnActive]}
+                onPress={() => setIsAutoScroll((v) => !v)}
               >
-                <Flag size={12} color="#FFFFFF" />
-                <Text style={styles.introStartText}>Lyrics start here</Text>
+                <ChevronsDown size={11} color={isAutoScroll ? '#FFFFFF' : accentText} />
+                <Text style={[styles.autoScrollToggleText, isAutoScroll && { color: '#FFFFFF' }]}>
+                  {isAutoScroll ? 'SCROLL ON' : 'SCROLL OFF'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.speedPill}
+                onPress={() => {
+                  setScrollSpeedMultiplier((s) => (s === 1.0 ? 1.25 : s === 1.25 ? 1.5 : s === 1.5 ? 0.75 : 1.0));
+                }}
+              >
+                <Text style={styles.speedPillText}>{scrollSpeedMultiplier}x</Text>
               </TouchableOpacity>
             </View>
-
-            {/* Interactive Progress Bar (Tap to Scrub & Sync Lyrics) */}
-            <TouchableOpacity
-              activeOpacity={0.9}
-              style={styles.progressBase}
-              onPress={(e: any) => {
-                const nativeEvt = e.nativeEvent || {};
-                const clickX =
-                  typeof nativeEvt.locationX === 'number' && !isNaN(nativeEvt.locationX)
-                    ? nativeEvt.locationX
-                    : typeof nativeEvt.offsetX === 'number' && !isNaN(nativeEvt.offsetX)
-                    ? nativeEvt.offsetX
-                    : null;
-
-                if (clickX !== null && songDuration > 0) {
-                  const ratio = Math.max(0, Math.min(1, clickX / 300));
-                  const newSec = Math.round(ratio * songDuration);
-                  if (!isNaN(newSec)) {
-                    setElapsedSeconds(newSec);
-                    elapsedRef.current = newSec;
-                    lastTickAtRef.current = Date.now();
-                    sendYoutubeCommand('seekTo', [newSec, true]);
-                    if (contentHeight > containerHeight) {
-                      const targetY = ratio * (contentHeight - containerHeight);
-                      scrollOffsetRef.current = targetY;
-                      scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
-                    }
-                  }
-                }
-              }}
-            >
-              <View
-                style={[
-                  styles.progressFill,
-                  {
-                    width: `${Math.min(
-                      100,
-                      Math.max(1, ((elapsedSeconds || 0) / (songDuration || 1)) * 100)
-                    )}%`,
-                  },
-                ]}
-              />
-            </TouchableOpacity>
           </View>
         </View>
       )}
