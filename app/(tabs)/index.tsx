@@ -8,6 +8,7 @@ import {
   Image,
   ActivityIndicator,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -43,6 +44,9 @@ import { useRefresh } from '../../utils/hooks/useRefresh';
 import { useHeaderTopPadding, useTabBarPadding } from '../../utils/hooks/useTabBarPadding';
 export default function DashboardScreen() {
   const tabBarPadding = useTabBarPadding();
+  // Two tool cards per row on any screen width (capped on wide browser windows).
+  const { width: windowWidth } = useWindowDimensions();
+  const toolCardWidth = Math.floor((Math.min(windowWidth, 520) - 40 - 10) / 2);
   const headerTop = useHeaderTopPadding();
   const { refreshing, onRefresh } = useRefresh();
   const router = useRouter();
@@ -255,7 +259,7 @@ export default function DashboardScreen() {
           <View style={styles.toolsGrid}>
             {/* Tool 1: Stage Mode */}
             <TouchableOpacity 
-              style={[styles.toolCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+              style={[styles.toolCard, { width: toolCardWidth, backgroundColor: colors.bgCard, borderColor: colors.border }]}
               activeOpacity={0.8}
               onPress={() => router.push('/stage-mode')}
             >
@@ -268,7 +272,7 @@ export default function DashboardScreen() {
 
             {/* Tool 2: Setlists */}
             <TouchableOpacity 
-              style={[styles.toolCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+              style={[styles.toolCard, { width: toolCardWidth, backgroundColor: colors.bgCard, borderColor: colors.border }]}
               activeOpacity={0.8}
               onPress={() => router.push('/setlists')}
             >
@@ -281,7 +285,7 @@ export default function DashboardScreen() {
 
             {/* Tool 3: Band Session */}
             <TouchableOpacity 
-              style={[styles.toolCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+              style={[styles.toolCard, { width: toolCardWidth, backgroundColor: colors.bgCard, borderColor: colors.border }]}
               activeOpacity={0.8}
               onPress={() => router.push('/bands')}
             >
@@ -294,7 +298,7 @@ export default function DashboardScreen() {
 
             {/* Tool 4: Song Dictionary */}
             <TouchableOpacity 
-              style={[styles.toolCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+              style={[styles.toolCard, { width: toolCardWidth, backgroundColor: colors.bgCard, borderColor: colors.border }]}
               activeOpacity={0.8}
               onPress={() => router.push('/profile/songs')}
             >
