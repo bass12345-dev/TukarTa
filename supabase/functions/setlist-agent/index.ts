@@ -815,9 +815,11 @@ const TOOLS: ToolDef[] = [
       }
       pool = pool.filter((s) => !existingIds.has(s.song_id))
       const genre = String(a.genre || gigFull?.genre_focus || '').toLowerCase().trim()
+      const genreNote: string[] = []
       if (genre) {
         const filtered = pool.filter((s) => (s.genre || '').toLowerCase().includes(genre))
         if (filtered.length >= 4) pool = filtered
+        else genreNote.push(`Only ${filtered.length} song(s) are tagged "${genre}", so the setlist mixes all genres.`)
       }
       pool.sort((x, y) => (y.live_ready_members - x.live_ready_members) || (y.avg_confidence - x.avg_confidence))
 
@@ -837,7 +839,11 @@ const TOOLS: ToolDef[] = [
       return {
         source, mood, existing_song_count: rows.length,
         approx_new_minutes: Math.round(used / 60),
-        note: picked.length < 4 ? 'Few matching songs — consider adding more songs to the repertoire first.' : undefined,
+        note: [
+          ...genreNote,
+          ...(mood !== 'balanced' && !pool.some((s) => s.bpm) ? [`No tempo (BPM) data in this pool, so the "${mood}" mood was not applied.`] : []),
+          ...(picked.length < 4 ? ['Few matching songs — consider adding more songs to the repertoire first.'] : []),
+        ].join(' ') || undefined,
         suggested_order: ordered.map((s, i) => ({ order: i + 1, song_id: s.song_id, title: s.title, artist: s.artist, bpm: s.bpm, key: s.key })),
       }
     },
@@ -902,11 +908,17 @@ const TOOLS: ToolDef[] = [
       const byMember = new Map<string, string[]>()
       for (const e of ordered) for (const m of lib.missingFor(e.song.id)) byMember.set(m, [...(byMember.get(m) || []), e.song.title])
 
+      const withBpm = picked.filter((e) => e.song.bpm).length
+      const planNotes: string[] = []
+      if (genre && !genreMatched) planNotes.push(`Only ${genreHits.length} song(s) in this band's library are tagged "${genre}", so the setlist mixes all genres.`)
+      if (mood !== 'balanced' && withBpm === 0) planNotes.push(`None of these songs has tempo (BPM) data, so the "${mood}" mood was not applied. Songs were picked by who knows them, not by speed.`)
       return {
         band_name: lib.band.name,
         members: [...lib.names.values()],
         shared_song_count: common.length,
         genre_matched: genre ? genreMatched : undefined,
+        tempo_data: { songs_with_bpm: withBpm, songs_in_setlist: picked.length },
+        notes: planNotes.length ? planNotes : undefined,
         mood, target_minutes: Math.round(targetSec / 60), approx_minutes: Math.round(used / 60),
         setlist: ordered.map((e, i) => ({
           order: i + 1, song_id: e.song.id, title: e.song.title, artist: e.song.artist, genre: e.song.genre ?? null, bpm: e.song.bpm ?? null,
@@ -1116,6 +1128,8 @@ HOW YOU WORK
 - Batch related changes into a single propose_* call. Do not propose the same thing twice.
 - If something required is missing (which band, venue, date, which gig), ask one short question first. If the user has exactly one band or the chat is about one gig, use it.
 - For band setlists prefer songs every member knows (get_band_common_songs / suggest_setlist). Mention when the pool is small.
+- Songs in the library often have no genre or tempo (BPM). Only call a song slow, fast, rock or mellow when the tool data says so. If a result has "notes" or tempo_data with songs_with_bpm of 0, tell the user plainly that the filter could not be applied, and do not describe the songs' speed or style from memory.
+- Only recommend songs that appear in tool results. If the user asks for songs outside the library, say they are not in the library and that you cannot confirm their tempo.
 - When the user asks for a setlist for a band: call plan_band_setlist (pass their genre / mood / duration). Show the songs in order; for any song not everyone knows write "missing for: <names>". Then call propose_band_setlist so they can review it. Say clearly that confirming will also add the missing songs to those members' libraries, and that they can Edit or Cancel. Never add songs to other people's libraries any other way.
 - Resolve relative dates ("next Friday") from today's date and confirm the exact date in your reply.
 
