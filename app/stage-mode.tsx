@@ -1186,6 +1186,8 @@ export default function StageModeScreen() {
       <View style={{ flex: 1, minWidth: 0 }}>
       {/* ── Top Status Bar ── */}
       <View style={[styles.topStatusBar, { paddingTop: insets.top + 8 }]}>
+        {/* The "Song dictionary" status is hidden for a single song; setlist and offline modes keep it. */}
+        {!isDirectSongMode && (
         <View style={styles.syncStatusGroup}>
             <View
               style={[
@@ -1209,6 +1211,7 @@ export default function StageModeScreen() {
                 : `OFFLINE STAGE MODE • ${lyricsData?.provider === 'user_import' ? 'CHORDPRO' : 'LRCLIB SYNC'}`}
             </Text>
         </View>
+        )}
 
         <TouchableOpacity
           style={styles.exitBtn}
