@@ -76,7 +76,8 @@ export function SongUpload({ onBack, onAnalyze, onSearch }: SongUploadProps) {
         const imageUri = images[i];
         
         const fileName = `${Date.now()}-${i}-${Math.random().toString(36).substring(7)}.jpg`;
-        const filePath = `${user.id}/${fileName}`;
+        // The extract-songs function only accepts files under extractions/ (see the ai-agent upload).
+        const filePath = `extractions/${fileName}`;
         
         const arrayBuffer = await readAsArrayBuffer(imageUri);
 
