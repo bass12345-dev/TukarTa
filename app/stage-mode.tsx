@@ -1337,7 +1337,11 @@ export default function StageModeScreen() {
                 <Text style={styles.timeText}>{formatSongTime(elapsedSeconds)}</Text>
               </View>
 
-              {/* Auto-Scroll Toggle & Speed Stepper */}
+              <Text style={styles.timeText}>
+                -{formatSongTime(Math.max(0, songDuration - elapsedSeconds))}
+              </Text>
+
+              {/* Auto-Scroll Toggle & Speed Stepper (right side) */}
               <View style={styles.autoScrollPillRow}>
                 <TouchableOpacity
                   style={[styles.autoScrollToggleBtn, isAutoScroll && styles.autoScrollToggleBtnActive]}
@@ -1358,34 +1362,10 @@ export default function StageModeScreen() {
                   <Text style={styles.speedPillText}>{scrollSpeedMultiplier}x</Text>
                 </TouchableOpacity>
               </View>
-
-              <Text style={styles.timeText}>
-                -{formatSongTime(Math.max(0, songDuration - elapsedSeconds))}
-              </Text>
             </View>
 
             {/* ── Intro sync: where the lyrics start in the recording (saved per song) ── */}
             <View style={styles.introRow}>
-              <TouchableOpacity
-                style={styles.introNudgeBtn}
-                onPress={() => setIntroOffset(introOffset - 0.5)}
-                disabled={isMemberFollowing}
-                accessibilityLabel="Start lyrics 0.5 seconds earlier"
-              >
-                <Text style={styles.introNudgeText}>-0.5s</Text>
-              </TouchableOpacity>
-
-              <Text style={styles.introLabel}>Intro {introOffset.toFixed(1)}s</Text>
-
-              <TouchableOpacity
-                style={styles.introNudgeBtn}
-                onPress={() => setIntroOffset(introOffset + 0.5)}
-                disabled={isMemberFollowing}
-                accessibilityLabel="Start lyrics 0.5 seconds later"
-              >
-                <Text style={styles.introNudgeText}>+0.5s</Text>
-              </TouchableOpacity>
-
               <TouchableOpacity
                 style={[styles.introStartBtn, (!isPlaying || isMemberFollowing) && styles.introStartBtnDisabled]}
                 onPress={() => {
