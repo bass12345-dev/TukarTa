@@ -13,6 +13,7 @@ import { ChevronLeft, Info, Check, X, Bell, MailOpen } from 'lucide-react-native
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMyInvites, useAcceptInvite, useDeclineInvite } from '../utils/hooks/useMusician';
 import { useConversations } from '../utils/hooks/useMessaging';
+import { useAppTheme } from '../context/theme';
 import { useAuth } from '@/context/auth';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Pill } from '../components/ui/Pill';
@@ -35,12 +36,12 @@ export default function MessagesScreen() {
   // Callers can open a specific tab: /messages?tab=chats
   const { tab: initialTab } = useLocalSearchParams<{ tab?: string }>();
   const [tab, setTab] = useState<'invites' | 'chats'>(initialTab === 'chats' ? 'chats' : 'invites');
+  const { colors } = useAppTheme();
   const { data: conversations, isLoading: chatsLoading } = useConversations();
   const { user: me } = useAuth();
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <LinearGradient colors={['#081A13', '#0F2A1F']} style={StyleSheet.absoluteFill} />
 
       {/* ── Header ── */}
       <View style={styles.header}>
@@ -107,17 +108,17 @@ export default function MessagesScreen() {
                 key={c.id}
                 onPress={() => router.push(`/chat/${c.id}`)}
                 activeOpacity={0.7}
-                style={styles.chatRow}
+                style={[styles.chatRow, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
               >
-                <View style={styles.chatAvatar}>
-                  <Text style={styles.avatarText}>{name[0]?.toUpperCase() || '?'}</Text>
+                <View style={[styles.chatAvatar, { backgroundColor: colors.primaryLight }]}>
+                  <Text style={[styles.avatarText, { color: colors.primaryDark }]}>{name[0]?.toUpperCase() || '?'}</Text>
                 </View>
                 <View style={{ flex: 1, gap: 2 }}>
                   <View style={styles.chatTopRow}>
-                    <Text style={styles.chatName} numberOfLines={1}>{name}</Text>
-                    {last && <Text style={styles.chatTime}>{formatChatTime(last.created_at)}</Text>}
+                    <Text style={[styles.chatName, { color: colors.text }]} numberOfLines={1}>{name}</Text>
+                    {last && <Text style={[styles.chatTime, { color: colors.textDim }]}>{formatChatTime(last.created_at)}</Text>}
                   </View>
-                  <Text style={styles.chatPreview} numberOfLines={1}>{preview}</Text>
+                  <Text style={[styles.chatPreview, { color: colors.textDim }]} numberOfLines={1}>{preview}</Text>
                 </View>
               </TouchableOpacity>
             );
@@ -187,7 +188,7 @@ function InviteCard({ invite, onAccept, onDecline, isProcessing }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#081A13' },
+  container: { flex: 1 },
   header: {
     height: 100,
     flexDirection: 'row',
@@ -214,8 +215,9 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 12,
     paddingHorizontal: 14,
+    marginBottom: 10,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
   },
   chatAvatar: {
     width: 48,
