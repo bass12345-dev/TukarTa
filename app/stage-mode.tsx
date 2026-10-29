@@ -99,14 +99,29 @@ export default function StageModeScreen() {
   const ink2 = isDark ? '#A7F3D0' : '#065F46';
   const accentText = isDark ? '#34D399' : '#059669';
 
-  // Stage Mode may rotate (the rest of the app is locked to portrait)
+  // Stage Mode may rotate (the rest of the app is locked to portrait). Full mode is always landscape.
+  const [fullMode, setFullMode] = useState(false);
+  useEffect(() => {
+    AsyncStorage.getItem('@stage_full_mode').then((v) => {
+      if (v === '1') setFullMode(true);
+    }).catch(() => {});
+  }, []);
   useEffect(() => {
     if (Platform.OS === 'web') return;
     ScreenOrientation.unlockAsync().catch(() => {});
+    if (fullMode) ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {});
     return () => {
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
     };
-  }, []);
+  }, [fullMode]);
+
+  const toggleFullMode = () => {
+    setFullMode((v) => {
+      const next = !v;
+      AsyncStorage.setItem('@stage_full_mode', next ? '1' : '0').catch(() => {});
+      return next;
+    });
+  };
   const {
     setlistId: setlistIdParam,
     initialSongId,
@@ -1206,6 +1221,46 @@ export default function StageModeScreen() {
 
   const isNextRequest = !isMemberFollowing && !!nextSetlistSong?.isRequest;
 
+  // Full mode: landscape, only the title, artist and next song, large for a bassist, guitarist or drummer.
+  if (fullMode) {
+    return (
+      <View style={[styles.fullContainer, { paddingLeft: insets.left + 28, paddingRight: insets.right + 28 }]}>
+        <TouchableOpacity
+          style={[styles.fullExit, { top: insets.top + 8, right: insets.right + 12 }]}
+          onPress={toggleFullMode}
+          accessibilityLabel="Exit full mode"
+        >
+          <Text style={styles.fullExitText}>EXIT FULL</Text>
+        </TouchableOpacity>
+
+        <Text style={styles.fullTitle} numberOfLines={2} adjustsFontSizeToFit>
+          {displayedTitle}
+        </Text>
+        <Text style={styles.fullArtist} numberOfLines={1}>
+          {displayedArtist}
+        </Text>
+
+        <View style={styles.fullDivider} />
+
+        <Text style={styles.fullNextLabel}>NEXT</Text>
+        {displayedNextTitle ? (
+          <>
+            <Text style={styles.fullNextTitle} numberOfLines={2} adjustsFontSizeToFit>
+              {displayedNextTitle}
+            </Text>
+            {!!displayedNextArtist && (
+              <Text style={styles.fullNextArtist} numberOfLines={1}>
+                {displayedNextArtist}
+              </Text>
+            )}
+          </>
+        ) : (
+          <Text style={styles.fullNextArtist}>End of setlist</Text>
+        )}
+      </View>
+    );
+  }
+
   return (
     <View
       style={[
@@ -1372,6 +1427,18 @@ export default function StageModeScreen() {
               </TouchableOpacity>
             </View>
           </View>
+
+          <TouchableOpacity
+            style={styles.sheetAction}
+            onPress={() => {
+              setSettingsOpen(false);
+              toggleFullMode();
+            }}
+          >
+            <Text style={styles.sheetActionText}>
+              {fullMode ? 'Turn off full mode' : 'Full mode (title and next song, landscape)'}
+            </Text>
+          </TouchableOpacity>
 
           <TouchableOpacity style={styles.sheetClose} onPress={() => setSettingsOpen(false)}>
             <Text style={styles.sheetCloseText}>Done</Text>
@@ -2469,6 +2536,28 @@ const baseStyles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: 'JetBrains Mono',
   },
+  fullContainer: {
+    flex: 1,
+    backgroundColor: '#0B1410',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  fullExit: {
+    position: 'absolute',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    zIndex: 10,
+  },
+  fullExitText: { fontSize: 12, fontWeight: '800', color: 'rgba(255,255,255,0.8)', letterSpacing: 0.8 },
+  fullTitle: { fontSize: 72, fontWeight: '800', color: '#FFFFFF', lineHeight: 80 },
+  fullArtist: { fontSize: 30, fontWeight: '600', color: '#34D399' },
+  fullDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginVertical: 14 },
+  fullNextLabel: { fontSize: 14, fontWeight: '800', letterSpacing: 2, color: '#10B981' },
+  fullNextTitle: { fontSize: 48, fontWeight: '700', color: '#FFFFFF', lineHeight: 56 },
+  fullNextArtist: { fontSize: 24, fontWeight: '500', color: 'rgba(255,255,255,0.6)' },
   settingsBtn: {
     width: 38,
     height: 38,
