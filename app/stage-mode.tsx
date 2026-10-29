@@ -2532,9 +2532,8 @@ const baseStyles = StyleSheet.create({
   topRightActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    width: '100%',
-    justifyContent: 'space-between',
+    gap: 8,
+    flexShrink: 0,
   },
   importHeaderBtn: {
     flexDirection: 'row',
