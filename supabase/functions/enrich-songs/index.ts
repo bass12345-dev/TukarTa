@@ -1,5 +1,5 @@
 // Edge function: fill in missing genre and BPM for songs in the shared library.
-// Admin only: call with the service-role key as the Bearer token.
+// Admin only: call with the BACKFILL_ADMIN_TOKEN secret (or the service-role key) as the Bearer token.
 // POST { limit?: number (1-50, default 20), after?: song id, dryRun?: boolean }
 //   -> { processed, genre_filled, bpm_filled, skipped, dry_run, next_after }
 // Page by id: pass next_after back as `after` until next_after is null.
@@ -12,6 +12,9 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+// Admin token set as a function secret (BACKFILL_ADMIN_TOKEN). Lets the backfill run even when
+// the platform's copy of the service key does not match the key shown in the dashboard.
+const BACKFILL_ADMIN_TOKEN = Deno.env.get('BACKFILL_ADMIN_TOKEN') || '';
 const SERPER_API_KEY = Deno.env.get('SERPER_API_KEY') || '';
 
 const corsHeaders = {
@@ -97,7 +100,10 @@ serve(async (req: Request) => {
 
   try {
     const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
-    if (!SERVICE_ROLE_KEY || token !== SERVICE_ROLE_KEY) return json({ error: 'forbidden' }, 403);
+    const isAdmin =
+      (!!BACKFILL_ADMIN_TOKEN && token === BACKFILL_ADMIN_TOKEN) ||
+      (!!SERVICE_ROLE_KEY && token === SERVICE_ROLE_KEY);
+    if (!isAdmin) return json({ error: 'forbidden' }, 403);
 
     const body = await req.json().catch(() => ({}));
     const limit = Math.min(50, Math.max(1, Number(body.limit) || 20));
