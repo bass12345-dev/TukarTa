@@ -82,14 +82,14 @@ serve(async (req) => {
       - IGNORE all UI elements: Battery percentage, Time/Clock, Network icons, "Play", "Shuffle", "Download", "Repeat", "Library", "Search" buttons.
       - IGNORE navigation text: "Playlist", "Album", "Followers", "Artist Info", "Lyrics".
       - IGNORE handwritten "noise": "Set 1", "Break", "Don't forget", "Check mic", or page numbers.
-      - SPELL CHECK: Use your internal knowledge to CORRECT any obvious misspellings or OCR errors in song titles and artist names.
-      - IDENTIFY ARTISTS: If the artist is NOT explicitly mentioned in the image but the song title is well-known, you MUST provide the most likely original artist name instead of "Unknown Artist".
+      - SPELL CHECK: Correct obvious OCR errors in song TITLES only. Never change the spelling of an artist name that is shown in the image.
+      - ARTIST AS SHOWN: If the artist is written in the image, copy it EXACTLY as shown and set "artist_source" to "image".
+      - ARTIST GUESS: Only if no artist is shown for a song, and the title is well-known, give the most likely artist and set "artist_source" to "guessed". If you are not sure, use "Unknown Artist" with "artist_source" "unknown". Never replace an artist that is shown in the image.
       - GENRE DETECTION: You MUST provide an accurate genre for every song. If the genre is not in the image, use your musical knowledge to assign the most appropriate one.
       - GENRE CATEGORIES: Prioritize these categories: OPM (for any Filipino songs), Rock, Pop, Acoustic, Worship, Ballad, Hip-Hop, R&B, Electronic, Country, Jazz, Classical, Blues, Folk, Metal, Punk, Reggae, Soul, or Latin. If it doesn't fit these, provide a concise 1-word genre.
-      - ARTIST ACCURACY: For well-known covers, prefer the most popular or original artist.
 
-      Return the results STRICTLY as a JSON object with a "songs" key containing an array of objects with "title", "artist", and "genre" keys.
-      Example format: {"songs": [{"title": "With or Without You", "artist": "U2", "genre": "Rock"}, {"title": "Ang Huling El Bimbo", "artist": "Eraserheads", "genre": "OPM"}]}
+      Return the results STRICTLY as a JSON object with a "songs" key containing an array of objects with "title", "artist", "artist_source" ("image", "guessed" or "unknown"), and "genre" keys.
+      Example format: {"songs": [{"title": "With or Without You", "artist": "U2", "artist_source": "guessed", "genre": "Rock"}, {"title": "Ang Huling El Bimbo", "artist": "Eraserheads", "artist_source": "image", "genre": "OPM"}]}
       Only return the JSON, no other text.
     `
 

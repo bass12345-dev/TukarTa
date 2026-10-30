@@ -38,6 +38,7 @@ import { CreateSessionModal } from '../../components/bands/CreateSessionModal';
 import { QRCodeView } from '../../components/bands/QRCodeView';
 import { useAuth } from '../../context/auth';
 import { useMyBands, useDeleteBand, useLeaveBand } from '../../utils/hooks/useMusician';
+import { useMySubRehearsals } from '../../utils/hooks/useRehearsals';
 import { useAppTheme } from '../../context/theme';
 import { useBandSession, MemberRole } from '../../context/bandSession';
 
@@ -68,6 +69,7 @@ export default function BandSessionScreen() {
   const [showHostModal, setShowHostModal] = useState(false);
 
   const { data: bands, isLoading: loadingBands } = useMyBands();
+  const { data: subRehearsals } = useMySubRehearsals();
   const deleteBand = useDeleteBand();
   const leaveBand = useLeaveBand();
 
@@ -512,6 +514,25 @@ export default function BandSessionScreen() {
         ) : (
           /* ── Tab 2: My Bands List ── */
           <View style={styles.bandsContainer}>
+            {subRehearsals && subRehearsals.length > 0 && (
+              <View style={{ gap: 10, marginBottom: 16 }}>
+                <Text style={{ color: colors.textDim, fontWeight: '800', fontSize: 11, letterSpacing: 1.2 }}>
+                  SUBSTITUTING ({subRehearsals.length})
+                </Text>
+                {subRehearsals.map((s) => (
+                  <TouchableOpacity
+                    key={s.substituteId}
+                    onPress={() => router.push(`/band-practice/rehearsal/${s.rehearsalId}?bandId=${s.bandId}`)}
+                    style={{ backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1, borderRadius: 16, padding: 14, gap: 4 }}
+                  >
+                    <Text style={{ color: colors.text, fontWeight: '700' }}>{s.title}</Text>
+                    <Text style={{ color: colors.textDim, fontSize: 12 }}>
+                      {s.bandName} • {s.role} • {s.startsAt ? new Date(s.startsAt).toLocaleString() : ''}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
             {loadingBands ? (
               <Text style={[styles.emptyText, { color: colors.textDim }]}>Loading bands...</Text>
             ) : bands && bands.length > 0 ? (

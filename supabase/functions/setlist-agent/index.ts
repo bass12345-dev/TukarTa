@@ -593,8 +593,16 @@ interface ToolDef {
   run: (ctx: Ctx, args: any) => Promise<any>
 }
 
+// Plain tempo label from BPM, so the model never has to judge speed from a song title or genre.
+function tempoLabel(bpm: number | null | undefined): 'slow' | 'mid' | 'fast' | 'unknown' {
+  if (!bpm) return 'unknown'
+  if (bpm < 90) return 'slow'
+  if (bpm <= 120) return 'mid'
+  return 'fast'
+}
+
 function songRow(s: any) {
-  return { song_id: s.id, title: s.title, artist: s.artist, genre: s.genre ?? null, key: s.original_key ?? null, bpm: s.bpm ?? null, duration_sec: s.duration_sec ?? null }
+  return { song_id: s.id, title: s.title, artist: s.artist, genre: s.genre ?? null, key: s.original_key ?? null, bpm: s.bpm ?? null, tempo: tempoLabel(s.bpm), duration_sec: s.duration_sec ?? null }
 }
 
 async function myRepertoire(ctx: Ctx) {
@@ -921,7 +929,7 @@ const TOOLS: ToolDef[] = [
         notes: planNotes.length ? planNotes : undefined,
         mood, target_minutes: Math.round(targetSec / 60), approx_minutes: Math.round(used / 60),
         setlist: ordered.map((e, i) => ({
-          order: i + 1, song_id: e.song.id, title: e.song.title, artist: e.song.artist, genre: e.song.genre ?? null, bpm: e.song.bpm ?? null,
+          order: i + 1, song_id: e.song.id, title: e.song.title, artist: e.song.artist, genre: e.song.genre ?? null, bpm: e.song.bpm ?? null, tempo: tempoLabel(e.song.bpm),
           known_by_all: e.knownBy.size === n, missing_for: missingNames(e),
         })),
         missing_by_member: [...byMember].map(([m, songs]) => ({ member: lib.names.get(m), songs })),

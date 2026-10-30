@@ -526,7 +526,7 @@ export function useAnalyzeScreenshot() {
       });
 
       if (error) throw error;
-      return data.songs as Array<{ title: string; artist: string; genre: string }>;
+      return data.songs as Array<{ title: string; artist: string; artist_source?: 'image' | 'guessed' | 'unknown'; genre: string }>;
     },
   });
 }

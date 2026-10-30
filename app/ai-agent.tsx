@@ -780,7 +780,11 @@ export default function AIAgentScreen() {
         const clean = (v: any, max: number) => String(v ?? '').replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, max);
         const songList = data.songs
           .slice(0, 30)
-          .map((s: any) => `- ${clean(s.title, 100)} by ${clean(s.artist, 100)} (${clean(s.genre || 'Music', 30)})`)
+          .map((s: any) => {
+            // Artists the model guessed (not shown in the screenshot) must be confirmed before they're saved
+            const check = s.artist_source === 'image' ? '' : ', artist not shown in image - please confirm';
+            return `- ${clean(s.title, 100)} by ${clean(s.artist, 100)} (${clean(s.genre || 'Music', 30)}${check})`;
+          })
           .join('\n');
         handleSend(`I've uploaded a screenshot. Please help me add these extracted songs to my music dictionary:\n${songList}`);
       } else {

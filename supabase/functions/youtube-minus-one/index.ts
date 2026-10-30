@@ -78,10 +78,20 @@ async function fetchRealBpmAndMeta(cleanTitle: string, cleanArtist: string): Pro
   return { bpm, duration, artist: resolvedArtist };
 }
 
-async function fetchYoutubeKaraokeIds(cleanTitle: string, cleanArtist: string): Promise<string[]> {
+// Search phrase per practice role (Practice Mode). Unknown or missing role keeps the karaoke search.
+const INSTRUMENT_SEARCH: Record<string, string> = {
+  bass: 'bass cover tabs',
+  guitar: 'guitar cover tabs',
+  singer: 'karaoke minus one',
+  drums: 'drum cover',
+  keys: 'piano cover',
+  session: 'minus one',
+};
+
+async function fetchYoutubeKaraokeIds(cleanTitle: string, cleanArtist: string, suffix = 'karaoke minus 1'): Promise<string[]> {
   const query = cleanArtist
-    ? `${cleanTitle} ${cleanArtist} karaoke minus 1`
-    : `${cleanTitle} karaoke minus 1`;
+    ? `${cleanTitle} ${cleanArtist} ${suffix}`
+    : `${cleanTitle} ${suffix}`;
 
   const res = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, {
     headers: {
@@ -124,16 +134,19 @@ serve(async (req: Request) => {
     let title = '';
     let artist = '';
     let mode = 'all';
+    let instrument = '';
     if (req.method === 'GET') {
       const u = new URL(req.url);
       title = u.searchParams.get('title') || '';
       artist = u.searchParams.get('artist') || '';
       mode = u.searchParams.get('mode') || 'all';
+      instrument = u.searchParams.get('instrument') || '';
     } else {
       const body = await req.json().catch(() => ({}));
       title = body.title || '';
       artist = body.artist || '';
       mode = body.mode || 'all';
+      instrument = body.instrument || '';
     }
 
     const cleanTitle = title.trim();
@@ -152,7 +165,11 @@ serve(async (req: Request) => {
     }
 
     const [ids, meta] = await Promise.all([
-      fetchYoutubeKaraokeIds(cleanTitle, cleanArtist).catch(() => []),
+      fetchYoutubeKaraokeIds(
+        cleanTitle,
+        cleanArtist,
+        Object.prototype.hasOwnProperty.call(INSTRUMENT_SEARCH, instrument) ? INSTRUMENT_SEARCH[instrument] : 'karaoke minus 1',
+      ).catch(() => []),
       fetchRealBpmAndMeta(cleanTitle, cleanArtist).catch(() => ({ bpm: null, duration: null, artist: null })),
     ]);
 

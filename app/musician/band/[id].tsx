@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import {
@@ -19,9 +20,11 @@ import {
   Crown,
   Radio,
   ChevronRight,
+  BookOpen,
 } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useBandDetails, useBandMembers, useMyGigs } from '../../../utils/hooks/useMusician';
+import { useTransferLeadership } from '../../../utils/hooks/useRehearsals';
 import { useAuth } from '../../../context/auth';
 import { useAppTheme } from '../../../context/theme';
 import { supabase } from '../../../utils/supabase';
@@ -35,6 +38,26 @@ export default function BandHubScreen() {
   const { data: band, isLoading: loadingBand } = useBandDetails(id);
   const { data: members, isLoading: loadingMembers } = useBandMembers(id);
   const { data: allGigs } = useMyGigs();
+  const transferLeadership = useTransferLeadership(id!);
+
+  const confirmTransfer = (memberUserId: string, name: string) => {
+    const doTransfer = () =>
+      transferLeadership.mutate(memberUserId, {
+        onError: (e: any) => {
+          if (Platform.OS === 'web' && typeof window !== 'undefined') window.alert(e.message);
+          else Alert.alert('Could not pass leadership', e.message);
+        },
+      });
+    const message = `${name} will become the band leader. You stay in the band as a member.`;
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      if (window.confirm(message)) doTransfer();
+    } else {
+      Alert.alert('Make band leader?', message, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Make leader', onPress: doTransfer },
+      ]);
+    }
+  };
 
   const bandGigs = (allGigs || []).filter((g: any) => g.band_id === id);
 
@@ -152,6 +175,14 @@ export default function BandHubScreen() {
         <View style={styles.actionsCol}>
           <TouchableOpacity
             style={[styles.actionRow, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+            onPress={() => router.push(`/band-practice/${id}`)}
+          >
+            <BookOpen size={18} color="#10B981" />
+            <Text style={[styles.actionText, { color: colors.text }]}>Band Practice & Dictionary</Text>
+            <ChevronRight size={18} color={colors.textDim} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionRow, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
             onPress={() => router.push('/(tabs)/setlists')}
           >
             <Calendar size={18} color="#10B981" />
@@ -220,6 +251,16 @@ export default function BandHubScreen() {
                       {isActive ? 'JOINED' : 'PENDING'}
                     </Text>
                   </View>
+                  {isLeader && isActive && !memberIsLeader && (
+                    <TouchableOpacity
+                      onPress={() => confirmTransfer(member.user_id, member.user?.display_name || 'This member')}
+                      style={[styles.leaderBtn, { backgroundColor: isDark ? '#064E3B' : '#ECFDF5' }]}
+                      accessibilityLabel={`Make ${member.user?.display_name || 'this member'} the band leader`}
+                    >
+                      <Crown size={13} color="#10B981" />
+                      <Text style={styles.inviteText}>Make leader</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               );
             })}
@@ -301,4 +342,5 @@ const styles = StyleSheet.create({
   memberAvatar: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   memberName: { fontSize: 15, fontWeight: '700' },
   statusPill: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8 },
+  leaderBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 10 },
 });

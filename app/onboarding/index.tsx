@@ -10,6 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { ArrowLeft, Check } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth';
 import { supabase } from '../../utils/supabase';
 import { useAppTheme } from '../../context/theme';
@@ -37,6 +38,7 @@ export default function OnboardingScreen() {
   const router = useRouter();
   const { user, refreshProfile } = useAuth();
   const { colors, isDark } = useAppTheme();
+  const insets = useSafeAreaInsets();
   
   // State Management
   const [currentStep, setCurrentStep] = useState<OnboardingStep>('role');
@@ -236,6 +238,8 @@ export default function OnboardingScreen() {
             {
               backgroundColor: isDark ? 'rgba(10, 22, 18, 0.95)' : 'rgba(255, 255, 255, 0.95)',
               borderTopColor: colors.border,
+              // Keep the buttons above the Android navigation bar (edge-to-edge)
+              paddingBottom: Math.max(insets.bottom, Platform.OS === 'ios' ? 36 : 18),
             },
           ]}
         >
