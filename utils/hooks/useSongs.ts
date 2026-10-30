@@ -190,22 +190,37 @@ export function useAddSong() {
       const user = await getCurrentUser();
       if (!user) throw new Error('User not authenticated');
 
-      // 1. Try to find the song or insert it
-      const { data: songData, error: songError } = await supabase
+      // 1. Find the song, or insert it. An existing song is never overwritten: a plain upsert
+      // would reset its genre (and added_by) to our defaults.
+      const title = song.title.trim();
+      const artist = (song.artist || 'Unknown Artist').trim();
+      let { data: songData, error: findError } = await supabase
         .from('songs')
-        .upsert(
-          {
-            title: song.title.trim(),
-            artist: (song.artist || 'Unknown Artist').trim(),
-            genre: song.genre || 'OPM',
-            added_by: user.id,
-          },
-          { onConflict: 'title, artist' }
-        )
-        .select()
-        .single();
+        .select('*')
+        .eq('title', title)
+        .eq('artist', artist)
+        .maybeSingle();
 
-      if (songError) throw songError;
+      if (findError) throw findError;
+
+      if (!songData) {
+        // Genre stays null when unknown, so the backfill and tempo rules can fill it in later.
+        const { data: created, error: insertError } = await supabase
+          .from('songs')
+          .insert({ title, artist, genre: song.genre || null, added_by: user.id })
+          .select()
+          .single();
+        if (insertError) throw insertError;
+        songData = created;
+      } else if (!songData.genre && song.genre) {
+        const { data: filled } = await supabase
+          .from('songs')
+          .update({ genre: song.genre })
+          .eq('id', songData.id)
+          .select()
+          .single();
+        if (filled) songData = filled;
+      }
 
       // 2. Add to user's knowledge
       const { error: knowledgeError } = await supabase
@@ -217,14 +232,17 @@ export function useAddSong() {
             confidence_level: 3,
             can_perform_live: true,
             source: 'manual',
-            genre: song.genre || 'OPM',
+            genre: songData.genre ?? null,
           },
           { onConflict: 'musician_id, song_id' }
         );
 
       if (knowledgeError) throw knowledgeError;
 
-      // 3. If LRCLIB already returned lyrics during search, cache them immediately!
+      // 3. Fill in a missing genre and BPM in the background. Never blocks the add, and never overwrites.
+      supabase.functions.invoke('enrich-song', { body: { songId: songData.id } }).catch(() => {});
+
+      // 4. If LRCLIB already returned lyrics during search, cache them immediately!
       if (song.plainLyrics || song.syncedLyrics) {
         const cachePayload = {
           song_id: songData.id,
