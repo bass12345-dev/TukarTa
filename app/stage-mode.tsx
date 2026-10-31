@@ -182,6 +182,8 @@ export default function StageModeScreen() {
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
   const [currentBpm, setCurrentBpm] = useState<number>(120);
   const [isAutoScroll, setIsAutoScroll] = useState<boolean>(true);
+  // Last line tapped by the user; highlighted while SCROLL OFF
+  const [pinnedLine, setPinnedLine] = useState<{ pIdx: number; lIdx: number } | null>(null);
   const [scrollSpeedMultiplier, setScrollSpeedMultiplier] = useState<number>(1.0);
   const [contentHeight, setContentHeight] = useState<number>(0);
   const [containerHeight, setContainerHeight] = useState<number>(0);
@@ -893,6 +895,7 @@ export default function StageModeScreen() {
   // Reset playback timer & auto-scroll on song change or manual reset
   useEffect(() => {
     setElapsedSeconds(0);
+    setPinnedLine(null);
     setMinusOneVideoId(null);
     setMinusOneCandidates([]);
     setMinusOneCandidateIdx(0);
@@ -1127,6 +1130,7 @@ export default function StageModeScreen() {
   // Jump to specific line when tapped
   const handleJumpToLine = (pIdx: number, lIdx: number) => {
     const targetLineIdx = playableLines.findIndex((pl) => pl.pIdx === pIdx && pl.lIdx === lIdx);
+    setPinnedLine({ pIdx, lIdx });
     if (targetLineIdx !== -1) {
       const targetSec = Math.floor(introOffset + (targetLineIdx / totalPlayableLines) * lyricsDuration);
       setElapsedSeconds(targetSec);
@@ -1525,10 +1529,12 @@ export default function StageModeScreen() {
                     );
                   }
 
-                  const isHighlighted =
-                    isPlaying &&
-                    playableLines[activePlayableLineIndex]?.pIdx === pIdx &&
-                    playableLines[activePlayableLineIndex]?.lIdx === lIdx;
+                  // With SCROLL OFF the highlight stops following playback and stays on the last tapped line
+                  const isHighlighted = isAutoScroll
+                    ? isPlaying &&
+                      playableLines[activePlayableLineIndex]?.pIdx === pIdx &&
+                      playableLines[activePlayableLineIndex]?.lIdx === lIdx
+                    : pinnedLine?.pIdx === pIdx && pinnedLine?.lIdx === lIdx;
 
                   const hasInlineChords = parsedLine.segments.some((s) => !!s.chord);
                   if (hasInlineChords) {
