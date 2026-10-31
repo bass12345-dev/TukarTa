@@ -137,6 +137,11 @@ export function useDeleteBand() {
 
   return useMutation({
     mutationFn: async (bandId: string) => {
+      // Setlists point at the band directly (setlists.band_id has no cascade), so remove them first.
+      // Their songs go with them (setlist_songs cascades), and gigs cascade as usual.
+      const { error: setlistError } = await supabase.from('setlists').delete().eq('band_id', bandId);
+      if (setlistError) throw setlistError;
+
       const { data, error } = await supabase
         .from('bands')
         .delete()
