@@ -1104,7 +1104,7 @@ const styles = StyleSheet.create({
   proposalKind: { fontSize: 10, fontWeight: '800', letterSpacing: 0.6, marginBottom: 2 },
   statusChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, borderWidth: 1, alignSelf: 'flex-start' },
   statusChipText: { fontSize: 11, fontWeight: '800' },
-  proposalLines: { borderTopWidth: 1, paddingTop: 8, marginTop: 10, gap: 3 },
+  proposalLines: { borderTopWidth: 1, paddingTop: 8, marginTop: 10, paddingHorizontal: 16, gap: 3 },
   proposalLine: { fontSize: 12.5, lineHeight: 17 },
   setlistEditRow: { borderWidth: 1, borderRadius: 12, padding: 10, gap: 8 },
   setlistEditSong: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -1127,6 +1127,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     paddingTop: 10,
     marginTop: 10,
+    paddingHorizontal: 16,
   },
   proposalBtn: {
     flexDirection: 'row',
@@ -1333,7 +1334,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   proposalCard: {
-    height: 70,
+    // Grows with its song list and buttons; a fixed height clipped them
+    paddingTop: 14,
+    paddingBottom: 14,
     borderRadius: 20,
     borderWidth: 1,
     overflow: 'hidden',
