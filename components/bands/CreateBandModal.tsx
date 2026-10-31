@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { X, Music, MapPin, Tag, ChevronRight } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../ui/Button';
 import { LocationPicker } from '../ui/LocationPicker';
 import { useCreateBand } from '../../utils/hooks/useMusician';
@@ -31,6 +32,7 @@ export function CreateBandModal({ visible, onClose }: CreateBandModalProps) {
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   
   const createBand = useCreateBand();
+  const insets = useSafeAreaInsets();
 
   const toggleGenre = (genre: string) => {
     setSelectedGenres(prev => 
@@ -140,7 +142,7 @@ export function CreateBandModal({ visible, onClose }: CreateBandModalProps) {
             </View>
           </ScrollView>
 
-          <View style={styles.footer}>
+          <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, Platform.OS === 'ios' ? 40 : 24) }]}>
             <Button
               title="Create Band"
               variant="cyan"
