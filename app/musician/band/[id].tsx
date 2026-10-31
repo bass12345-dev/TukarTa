@@ -21,9 +21,10 @@ import {
   Radio,
   ChevronRight,
   BookOpen,
+  Trash2,
 } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
-import { useBandDetails, useBandMembers, useMyGigs } from '../../../utils/hooks/useMusician';
+import { useBandDetails, useBandMembers, useMyGigs, useDeleteBand } from '../../../utils/hooks/useMusician';
 import { useTransferLeadership } from '../../../utils/hooks/useRehearsals';
 import { useAuth } from '../../../context/auth';
 import { useAppTheme } from '../../../context/theme';
@@ -39,6 +40,28 @@ export default function BandHubScreen() {
   const { data: members, isLoading: loadingMembers } = useBandMembers(id);
   const { data: allGigs } = useMyGigs();
   const transferLeadership = useTransferLeadership(id!);
+  const deleteBand = useDeleteBand();
+
+  const confirmDeleteBand = (bandName: string) => {
+    const message = `Delete "${bandName}" for everyone? Its gigs and setlists will be removed too.`;
+    const doDelete = () =>
+      deleteBand.mutate(id!, {
+        onSuccess: () => router.replace('/(tabs)/bands'),
+        onError: (e: any) => {
+          const msg = e?.message || 'Could not delete the band. Please try again.';
+          if (Platform.OS === 'web' && typeof window !== 'undefined') window.alert(msg);
+          else Alert.alert('Delete band', msg);
+        },
+      });
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      if (window.confirm(`Delete band\n\n${message}`)) doDelete();
+    } else {
+      Alert.alert('Delete band', message, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete band', style: 'destructive', onPress: doDelete },
+      ]);
+    }
+  };
 
   const confirmTransfer = (memberUserId: string, name: string) => {
     const doTransfer = () =>
@@ -267,6 +290,23 @@ export default function BandHubScreen() {
             {loadingMembers && <ActivityIndicator size="small" color="#10B981" />}
           </View>
         </View>
+
+        {/* Leader only: deleting the band removes its gigs and setlists for everyone */}
+        {isLeader && (
+          <View style={styles.section}>
+            <TouchableOpacity
+              style={styles.deleteBandBtn}
+              onPress={() => confirmDeleteBand(band.name || 'this band')}
+              disabled={deleteBand.isPending}
+              accessibilityLabel="Delete this band"
+            >
+              <Trash2 size={16} color="#FFFFFF" />
+              <Text style={styles.deleteBandText}>
+                {deleteBand.isPending ? 'Deleting…' : 'Delete band'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -343,4 +383,6 @@ const styles = StyleSheet.create({
   memberName: { fontSize: 15, fontWeight: '700' },
   statusPill: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8 },
   leaderBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 10 },
+  deleteBandBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 16, backgroundColor: '#EF4444' },
+  deleteBandText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
 });
