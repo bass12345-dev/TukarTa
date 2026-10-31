@@ -2,8 +2,7 @@ import React, { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Platform, PanResponder } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
-import { ArrowLeft, MoreVertical, Music, Sparkles, Play, Plus, Video, BookOpen, Radio, WifiOff, Share2, Copy, Trash2, Edit3, X, Check, ListMusic } from 'lucide-react-native';
+import { ArrowLeft, MoreVertical, Music, Sparkles, Play, Plus, BookOpen, Radio, WifiOff, Share2, Copy, Trash2, Edit3, X, Check, ListMusic } from 'lucide-react-native';
 import { Modal, Alert } from 'react-native';
 import { Orb } from '@/components/ui/Orb';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -77,12 +76,6 @@ export default function SetlistDetailsScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: run },
     ]);
-  };
-
-  const handleYoutubeSearch = async (title: string, artist: string) => {
-    const query = encodeURIComponent(`${artist} ${title} minus 1`);
-    const url = `https://www.youtube.com/results?search_query=${query}`;
-    await WebBrowser.openBrowserAsync(url);
   };
 
   const handleToggleLearn = (songId: string, currentNotes: string | null) => {
@@ -360,13 +353,6 @@ export default function SetlistDetailsScreen() {
                     onPress={() => handleToggleLearn(item.song.id, item.notes)}
                   >
                     <BookOpen size={18} color={needsLearn ? "#F59E0B" : colors.textSecondary} />
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.youtubeBtn}
-                    onPress={() => handleYoutubeSearch(item.song.title, item.song.artist)}
-                  >
-                    <Video size={18} color="#EF4444" />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -773,11 +759,6 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   actionBtn: {
-    paddingHorizontal: 8,
-    height: 44,
-    justifyContent: 'center',
-  },
-  youtubeBtn: {
     paddingHorizontal: 8,
     height: 44,
     justifyContent: 'center',
