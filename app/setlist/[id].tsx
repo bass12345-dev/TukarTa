@@ -2,11 +2,11 @@ import React, { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Platform, PanResponder } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, MoreVertical, Music, Sparkles, Play, Plus, BookOpen, Radio, WifiOff, Share2, Copy, Trash2, Edit3, X, Check, ListMusic } from 'lucide-react-native';
+import { ArrowLeft, MoreVertical, Music, Sparkles, Play, Plus, BookOpen, ChevronUp, ChevronDown, Radio, WifiOff, Share2, Copy, Trash2, Edit3, X, Check, ListMusic } from 'lucide-react-native';
 import { Modal, Alert } from 'react-native';
 import { Orb } from '@/components/ui/Orb';
 import { Swipeable } from 'react-native-gesture-handler';
-import { useGigDetails, useGigSetlists, useSetlistSongs, useToggleLearnStatus, useCreateSetlist, useRemoveSetlistSong } from '@/utils/hooks/useMusician';
+import { useGigDetails, useGigSetlists, useSetlistSongs, useToggleLearnStatus, useCreateSetlist, useRemoveSetlistSong, useReorderSetlistSongs } from '@/utils/hooks/useMusician';
 import { songLyricsQuery } from '@/utils/hooks/useSongs';
 import { isValidKey } from '@/utils/musicKey';
 import { SongPickerModal } from '@/components/setlists/SongPickerModal';
@@ -59,6 +59,20 @@ export default function SetlistDetailsScreen() {
   const toggleLearn = useToggleLearnStatus();
   const createSetlist = useCreateSetlist();
   const removeSong = useRemoveSetlistSong();
+  const reorderSongs = useReorderSetlistSongs();
+
+  // Move one song up or down the running order and save the new order
+  const moveSong = (fromIndex: number, toIndex: number) => {
+    if (!songs || !currentSetlist?.id) return;
+    if (toIndex < 0 || toIndex >= songs.length || fromIndex === toIndex) return;
+    const rowIds = songs.map((s: any) => s.id as string);
+    const [moved] = rowIds.splice(fromIndex, 1);
+    rowIds.splice(toIndex, 0, moved);
+    reorderSongs.mutate(
+      { rowIds, setlistId: currentSetlist.id },
+      { onError: () => Alert.alert('Could not reorder', 'Check your connection and try again.') },
+    );
+  };
 
   const confirmRemoveSong = (item: any) => {
     if (!currentSetlist) return;
@@ -348,7 +362,24 @@ export default function SetlistDetailsScreen() {
                 </TouchableOpacity>
                 
                 <View style={styles.rowActions}>
-                  <TouchableOpacity 
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={() => moveSong(index, index - 1)}
+                    disabled={index === 0 || reorderSongs.isPending}
+                    accessibilityLabel={`Move ${item.song?.title || 'song'} up`}
+                  >
+                    <ChevronUp size={18} color={index === 0 ? colors.border : colors.textSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={() => moveSong(index, index + 1)}
+                    disabled={index === (songs?.length ?? 0) - 1 || reorderSongs.isPending}
+                    accessibilityLabel={`Move ${item.song?.title || 'song'} down`}
+                  >
+                    <ChevronDown size={18} color={index === (songs?.length ?? 0) - 1 ? colors.border : colors.textSecondary} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
                     style={styles.actionBtn}
                     onPress={() => handleToggleLearn(item.song.id, item.notes)}
                   >

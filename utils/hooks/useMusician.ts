@@ -611,6 +611,26 @@ export function useRemoveSetlistSong() {
   });
 }
 
+/** Save a new running order: rowIds in performance order, stored as positions 1..n. */
+export function useReorderSetlistSongs() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ rowIds, setlistId }: { rowIds: string[]; setlistId: string }) => {
+      const results = await Promise.all(
+        rowIds.map((rowId, i) =>
+          supabase.from('setlist_songs').update({ position: i + 1 }).eq('id', rowId).eq('setlist_id', setlistId)
+        )
+      );
+      const failed = results.find((r) => r.error);
+      if (failed?.error) throw failed.error;
+    },
+    onSuccess: (_data, { setlistId }) => {
+      queryClient.invalidateQueries({ queryKey: ['setlist-songs', setlistId] });
+    },
+  });
+}
+
 export function useMyKnownSongs() {
   return useQuery({
     queryKey: ['my-known-songs'],
