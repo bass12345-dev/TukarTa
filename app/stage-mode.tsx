@@ -75,6 +75,7 @@ import {
   transposeChordProText,
 } from '../utils/chordParser';
 import YoutubePlayer, { type YoutubeIframeRef } from '../components/ui/YoutubePlayer';
+import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../context/theme';
 
@@ -1883,6 +1884,8 @@ export default function StageModeScreen() {
         animationType="slide"
         onRequestClose={() => setIsQueueVisible(false)}
       >
+        {/* A Modal opens outside the app's gesture root, so the queue's swipe rows need their own */}
+        <GestureHandlerRootView style={{ flex: 1 }}>
         <View style={styles.queueOverlay}>
           <View style={[styles.queueSheet, { paddingBottom: insets.bottom + 20 }]}>
             {/* Header */}
@@ -1945,7 +1948,7 @@ export default function StageModeScreen() {
               </View>
             )}
 
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <ScrollView style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               {/* Search Results Dropdown when searching */}
               {requestSearchQuery.trim().length > 0 && (
                 <View style={styles.searchResultsBox}>
@@ -2079,6 +2082,7 @@ export default function StageModeScreen() {
                   const isReq = !!item.isRequest;
                   const isDraggable = !isPast && !isCurrent && !isMemberFollowing;
 
+                  const canSwipeDelete = !isPast && !isCurrent && !isMemberFollowing;
                   return (
                     <View
                       key={item.id || idx}
@@ -2112,6 +2116,24 @@ export default function StageModeScreen() {
                             },
                           }
                         : {})}
+                    >
+                    <Swipeable
+                      enabled={canSwipeDelete}
+                      friction={2}
+                      rightThreshold={40}
+                      overshootRight={false}
+                      renderRightActions={() => (
+                        <TouchableOpacity
+                          style={styles.queueDeleteAction}
+                          activeOpacity={0.8}
+                          onPress={() => removeQueueSong(idx)}
+                          accessibilityLabel={`Delete ${item.song?.title || 'this song'} from the queue`}
+                        >
+                          <Text style={styles.queueDeleteText}>Delete</Text>
+                        </TouchableOpacity>
+                      )}
+                    >
+                    <View
                       style={[
                         styles.queueRow,
                         isCurrent && styles.queueRowCurrent,
@@ -2218,18 +2240,12 @@ export default function StageModeScreen() {
                                 </TouchableOpacity>
                               </View>
 
-                              {/* Remove / Skip button */}
-                              <TouchableOpacity
-                                onPress={() => removeQueueSong(idx)}
-                                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                                style={styles.queueRemoveBtn}
-                              >
-                                <Trash2 size={13} color="#94A3B8" />
-                              </TouchableOpacity>
                             </>
                           )}
                         </View>
                       )}
+                    </View>
+                    </Swipeable>
                     </View>
                   );
                 })}
@@ -2237,6 +2253,7 @@ export default function StageModeScreen() {
             </ScrollView>
           </View>
         </View>
+        </GestureHandlerRootView>
       </Modal>
 
       {/* ── Minus 1 player: floats over the screen. Drag the title bar to move it; expand for a large view. ── */}
@@ -3513,6 +3530,15 @@ const baseStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   queueMoveText: { color: '#10B981', fontSize: 11, fontWeight: '900' },
+  queueDeleteAction: {
+    width: 92,
+    marginBottom: 8,
+    borderRadius: 16,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  queueDeleteText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
   queueRemoveBtn: {
     width: 28,
     height: 28,
