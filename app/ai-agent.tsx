@@ -114,6 +114,13 @@ const KIND_LABEL: Record<AiProposal['kind'], string> = {
   add_to_dictionary: 'Add to repertoire',
   invite_musician: 'Invite musician',
   band_setlist: 'Band setlist',
+  update_song: 'Edit song',
+  remove_from_library: 'Remove from repertoire',
+  add_to_band_dictionary: 'Band Dictionary',
+  remove_from_band_dictionary: 'Band Dictionary',
+  create_rehearsal: 'New rehearsal',
+  mark_absence: 'Absence',
+  assign_substitute: 'Substitute',
 };
 
 const EDITABLE_KINDS: AiProposal['kind'][] = ['create_gig', 'update_gig', 'invite_musician', 'band_setlist'];

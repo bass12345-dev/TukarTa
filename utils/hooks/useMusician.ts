@@ -740,7 +740,14 @@ export interface AiProposal {
     | 'reorder_setlist'
     | 'add_to_dictionary'
     | 'invite_musician'
-    | 'band_setlist';
+    | 'band_setlist'
+    | 'update_song'
+    | 'remove_from_library'
+    | 'add_to_band_dictionary'
+    | 'remove_from_band_dictionary'
+    | 'create_rehearsal'
+    | 'mark_absence'
+    | 'assign_substitute';
   risk: 'low' | 'medium' | 'high';
   payload: Record<string, any>;
   preview: {

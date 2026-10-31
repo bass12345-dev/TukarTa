@@ -330,6 +330,10 @@ const VALIDATORS: Record<string, (ctx: Ctx, a: any) => Promise<Validated>> = {
     for (const s of a.songs) {
       const title = text(s?.title, 'title', 120)
       const artist = text(s?.artist, 'artist', 120)
+      // Never save a placeholder artist. The user must give the real one first.
+      if (/^(unknown|unknown artist|n\/a|none|-)$/i.test(artist)) {
+        throw new ToolError(`Ask the user for the artist of "${title}" first. Do not propose "Unknown Artist".`)
+      }
       const key = `${title.toLowerCase()}|${artist.toLowerCase()}`
       if (seen.has(key)) continue
       seen.add(key)
@@ -411,6 +415,150 @@ const VALIDATORS: Record<string, (ctx: Ctx, a: any) => Promise<Validated>> = {
           songs: fresh.map((id) => ({ song_id: id, title: songMap.get(id).title, artist: songMap.get(id).artist, missing_for: lib.missingFor(id) })),
           members: Object.fromEntries(lib.names),
         },
+      },
+    }
+  },
+
+  async update_song(ctx, a) {
+    const songId = uuid(a.song_id, 'song_id')
+    const { data: song } = await ctx.db.from('songs').select('id, title, artist, genre, bpm, original_key').eq('id', songId).maybeSingle()
+    if (!song) throw new ToolError('song not found')
+    const changes: Record<string, unknown> = {}
+    const lines: string[] = []
+    if (a.artist !== undefined) {
+      const artist = text(a.artist, 'artist', 120)
+      if (/^(unknown|unknown artist|n\/a|none|-)$/i.test(artist)) throw new ToolError('ask the user for the real artist first')
+      changes.artist = artist; lines.push(`Artist: ${song.artist} → ${artist}`)
+    }
+    if (a.genre !== undefined) { const genre = text(a.genre, 'genre', 40); changes.genre = genre; lines.push(`Genre: ${song.genre ?? '—'} → ${genre}`) }
+    if (a.bpm !== undefined) {
+      const bpm = Math.round(Number(a.bpm))
+      if (!(bpm >= 40 && bpm <= 240)) throw new ToolError('bpm must be between 40 and 240')
+      changes.bpm = bpm; lines.push(`BPM: ${song.bpm ?? '—'} → ${bpm}`)
+    }
+    if (a.key !== undefined) { const key = text(a.key, 'key', 8); changes.original_key = key; lines.push(`Key: ${song.original_key ?? '—'} → ${key}`) }
+    if (!lines.length) throw new ToolError('nothing to change: give artist, genre, bpm or key')
+    return {
+      risk: 'medium',
+      payload: { song_id: songId, changes },
+      preview: {
+        title: `Edit “${song.title}”`,
+        subtitle: 'This song is shared with every musician in the library',
+        lines,
+      },
+    }
+  },
+
+  async remove_from_library(ctx, a) {
+    const songId = uuid(a.song_id, 'song_id')
+    const { data: row } = await ctx.db.from('musician_song_knowledge').select('song:songs(title, artist)')
+      .eq('musician_id', ctx.user.id).eq('song_id', songId).maybeSingle()
+    if (!row) throw new ToolError('that song is not in your repertoire')
+    const song = Array.isArray(row.song) ? row.song[0] : row.song
+    return {
+      risk: 'low',
+      payload: { song_id: songId },
+      preview: {
+        title: `Remove “${song?.title}” from your repertoire`,
+        subtitle: 'Only your own list. The song stays in the shared library.',
+        lines: [`${song?.title} — ${song?.artist}`],
+      },
+    }
+  },
+
+  async add_to_band_dictionary(ctx, a) {
+    const bandId = uuid(a.band_id, 'band_id')
+    const songId = uuid(a.song_id, 'song_id')
+    const band = await requireBandMembership(ctx, bandId)
+    if (band.leader_id !== ctx.user.id) throw new ToolError('only the band leader can add songs to the Band Dictionary')
+    const { data: song } = await ctx.db.from('songs').select('title, artist').eq('id', songId).maybeSingle()
+    if (!song) throw new ToolError('song not found')
+    return {
+      risk: 'medium',
+      payload: { band_id: bandId, song_id: songId },
+      preview: {
+        title: `Add “${song.title}” to ${band.name}’s Band Dictionary`,
+        subtitle: 'Every member gets it in their personal list. Stays until you remove it.',
+        lines: [`${song.title} — ${song.artist}`],
+      },
+    }
+  },
+
+  async remove_from_band_dictionary(ctx, a) {
+    const bandId = uuid(a.band_id, 'band_id')
+    const songId = uuid(a.song_id, 'song_id')
+    const band = await requireBandMembership(ctx, bandId)
+    if (band.leader_id !== ctx.user.id) throw new ToolError('only the band leader can remove songs from the Band Dictionary')
+    const { data: song } = await ctx.db.from('songs').select('title, artist').eq('id', songId).maybeSingle()
+    return {
+      risk: 'medium',
+      payload: { band_id: bandId, song_id: songId },
+      preview: {
+        title: `Remove “${song?.title ?? 'song'}” from ${band.name}’s Band Dictionary`,
+        subtitle: 'Members keep it only if it is in their own repertoire',
+        lines: song ? [`${song.title} — ${song.artist}`] : [],
+      },
+    }
+  },
+
+  async create_rehearsal(ctx, a) {
+    const bandId = uuid(a.band_id, 'band_id')
+    const band = await requireBandMembership(ctx, bandId)
+    const when = new Date(String(a.starts_at || ''))
+    if (isNaN(when.getTime()) || when.getTime() <= Date.now()) throw new ToolError('starts_at must be a future date and time')
+    const title = text(a.title || 'Rehearsal', 'title', 80)
+    const songIds = Array.isArray(a.song_ids) ? [...new Set(a.song_ids.map((id: any) => uuid(id, 'song_id')))] as string[] : []
+    if (songIds.length > 30) throw new ToolError('at most 30 songs per rehearsal')
+    const { data: songs } = songIds.length
+      ? await ctx.db.from('songs').select('id, title, artist').in('id', songIds)
+      : { data: [] as any[] }
+    const byId = new Map<string, any>((songs || []).map((s: any) => [s.id, s]))
+    const lines = songIds.map((id) => byId.get(id) ? `${byId.get(id).title} — ${byId.get(id).artist}` : `(unknown song ${id.slice(0, 8)})`)
+    return {
+      risk: 'low',
+      payload: { band_id: bandId, title, starts_at: when.toISOString(), song_ids: songIds },
+      preview: {
+        title: `New rehearsal for ${band.name}: ${title}`,
+        subtitle: `${when.toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' })} • ${songIds.length} song${songIds.length === 1 ? '' : 's'}`,
+        lines,
+      },
+    }
+  },
+
+  async mark_absence(ctx, a) {
+    const rehearsalId = uuid(a.rehearsal_id, 'rehearsal_id')
+    const { data: rehearsal } = await ctx.db.from('rehearsals').select('id, band_id, title, starts_at').eq('id', rehearsalId).maybeSingle()
+    if (!rehearsal) throw new ToolError('rehearsal not found')
+    const band = await requireBandMembership(ctx, rehearsal.band_id)
+    const memberId = a.member_id ? uuid(a.member_id, 'member_id') : ctx.user.id
+    if (memberId !== ctx.user.id && band.leader_id !== ctx.user.id) throw new ToolError('only the leader can mark someone else absent')
+    return {
+      risk: 'low',
+      payload: { rehearsal_id: rehearsalId, member_id: memberId },
+      preview: {
+        title: `Mark absent for “${rehearsal.title}”`,
+        subtitle: `${band.name} • ${new Date(rehearsal.starts_at).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium' })}`,
+        lines: [memberId === ctx.user.id ? 'You can’t make it' : 'This member can’t make it'],
+      },
+    }
+  },
+
+  async assign_substitute(ctx, a) {
+    const rehearsalId = uuid(a.rehearsal_id, 'rehearsal_id')
+    const absentId = uuid(a.absent_member_id, 'absent_member_id')
+    const { data: rehearsal } = await ctx.db.from('rehearsals').select('id, band_id, title').eq('id', rehearsalId).maybeSingle()
+    if (!rehearsal) throw new ToolError('rehearsal not found')
+    const band = await requireBandMembership(ctx, rehearsal.band_id)
+    if (band.leader_id !== ctx.user.id) throw new ToolError('only the band leader can assign a substitute')
+    const subName = text(a.sub_name, 'sub_name', 60)
+    const role = text(a.role || 'session', 'role', 20)
+    return {
+      risk: 'medium',
+      payload: { rehearsal_id: rehearsalId, absent_member_id: absentId, sub_name: subName, role },
+      preview: {
+        title: `Substitute for “${rehearsal.title}”`,
+        subtitle: `${subName} (${role}) covers this member’s slot`,
+        lines: [`Sub: ${subName} — ${role}`],
       },
     }
   },
@@ -545,6 +693,61 @@ const EXECUTORS: Record<string, (ctx: Ctx, p: any, meta: { proposalId: string })
       added++
     }
     return { added }
+  },
+
+  async update_song(ctx, p) {
+    const { error } = await ctx.db.from('songs').update(p.changes).eq('id', p.song_id)
+    if (error) throw new Error(error.message)
+    return { updated: p.song_id }
+  },
+
+  async remove_from_library(ctx, p) {
+    const { error } = await ctx.db.from('musician_song_knowledge').delete()
+      .eq('musician_id', ctx.user.id).eq('song_id', p.song_id)
+    if (error) throw new Error(error.message)
+    return { removed: p.song_id }
+  },
+
+  async add_to_band_dictionary(ctx, p) {
+    const { error } = await ctx.db.rpc('leader_add_to_dictionary', { p_band: p.band_id, p_song: p.song_id, p_rehearsal: null })
+    if (error) throw new Error(error.message)
+    return { added: p.song_id }
+  },
+
+  async remove_from_band_dictionary(ctx, p) {
+    const { error } = await ctx.db.from('band_dictionary').delete().eq('band_id', p.band_id).eq('song_id', p.song_id)
+    if (error) throw new Error(error.message)
+    return { removed: p.song_id }
+  },
+
+  async create_rehearsal(ctx, p) {
+    const { data, error } = await ctx.db.from('rehearsals')
+      .insert({ band_id: p.band_id, title: p.title, starts_at: p.starts_at, created_by: ctx.user.id })
+      .select('id').single()
+    if (error) throw new Error(error.message)
+    if (p.song_ids.length) {
+      const { error: sErr } = await ctx.db.from('rehearsal_songs')
+        .insert(p.song_ids.map((song_id: string) => ({ rehearsal_id: data.id, song_id, added_by: ctx.user.id })))
+      if (sErr) throw new Error(sErr.message)
+    }
+    return { rehearsal_id: data.id, songs: p.song_ids.length }
+  },
+
+  async mark_absence(ctx, p) {
+    const { error } = await ctx.db.from('rehearsal_absences').insert({ rehearsal_id: p.rehearsal_id, member_id: p.member_id })
+    if (error && !/duplicate key/i.test(error.message)) throw new Error(error.message)
+    return { absent: p.member_id }
+  },
+
+  async assign_substitute(ctx, p) {
+    // The absence row must exist first (substitutes reference it).
+    const { error: aErr } = await ctx.db.from('rehearsal_absences').insert({ rehearsal_id: p.rehearsal_id, member_id: p.absent_member_id })
+    if (aErr && !/duplicate key/i.test(aErr.message)) throw new Error(aErr.message)
+    const { error } = await ctx.db.from('rehearsal_substitutes').insert({
+      rehearsal_id: p.rehearsal_id, absent_member_id: p.absent_member_id, sub_name: p.sub_name, role: p.role,
+    })
+    if (error) throw new Error(error.message)
+    return { substitute: p.sub_name }
   },
 
   async band_setlist(ctx, p, meta) {
@@ -1012,6 +1215,85 @@ const PROPOSE_TOOLS: { tool: string; kind: string; description: string; paramete
     },
   },
   {
+    tool: 'propose_update_song', kind: 'update_song',
+    description: 'Propose correcting a shared library song: artist, genre, BPM or key. Ask the user for the real artist before proposing an artist change.',
+    parameters: {
+      type: 'object',
+      properties: {
+        song_id: { type: 'string', description: 'Song id from search_song_catalog or search_my_repertoire' },
+        artist: { type: 'string', description: 'The real artist name, never "Unknown Artist"' },
+        genre: { type: 'string' },
+        bpm: { type: 'integer' },
+        key: { type: 'string', description: 'e.g. C, Am, F#' },
+      },
+      required: ['song_id'],
+    },
+  },
+  {
+    tool: 'propose_remove_from_library', kind: 'remove_from_library',
+    description: 'Propose removing a song from the user\'s own repertoire. The shared library keeps the song.',
+    parameters: {
+      type: 'object',
+      properties: { song_id: { type: 'string' } },
+      required: ['song_id'],
+    },
+  },
+  {
+    tool: 'propose_add_to_band_dictionary', kind: 'add_to_band_dictionary',
+    description: 'Propose adding a song to a band\'s Band Dictionary (the songs the whole band can play). Only the band leader can do this.',
+    parameters: {
+      type: 'object',
+      properties: { band_id: { type: 'string' }, song_id: { type: 'string' } },
+      required: ['band_id', 'song_id'],
+    },
+  },
+  {
+    tool: 'propose_remove_from_band_dictionary', kind: 'remove_from_band_dictionary',
+    description: 'Propose removing a song from a band\'s Band Dictionary. Only the band leader can do this.',
+    parameters: {
+      type: 'object',
+      properties: { band_id: { type: 'string' }, song_id: { type: 'string' } },
+      required: ['band_id', 'song_id'],
+    },
+  },
+  {
+    tool: 'propose_create_rehearsal', kind: 'create_rehearsal',
+    description: 'Propose a rehearsal for a band with a title, a future date and time (ISO 8601, Manila time), and songs from the library.',
+    parameters: {
+      type: 'object',
+      properties: {
+        band_id: { type: 'string' },
+        title: { type: 'string' },
+        starts_at: { type: 'string', description: 'ISO 8601 date and time, e.g. 2026-11-07T18:00:00+08:00' },
+        song_ids: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['band_id', 'starts_at'],
+    },
+  },
+  {
+    tool: 'propose_mark_absence', kind: 'mark_absence',
+    description: 'Propose marking a member as unable to make a rehearsal. Members can mark themselves; the leader can mark anyone.',
+    parameters: {
+      type: 'object',
+      properties: { rehearsal_id: { type: 'string' }, member_id: { type: 'string', description: 'Omit to mark yourself' } },
+      required: ['rehearsal_id'],
+    },
+  },
+  {
+    tool: 'propose_assign_substitute', kind: 'assign_substitute',
+    description: 'Propose a substitute (sessionist) for an absent member at a rehearsal. Only the band leader can do this. Use a name; linking to an app account is done in the app.',
+    parameters: {
+      type: 'object',
+      properties: {
+        rehearsal_id: { type: 'string' },
+        absent_member_id: { type: 'string' },
+        sub_name: { type: 'string' },
+        role: { type: 'string', description: 'singer, guitar, bass, drums, keys or session' },
+      },
+      required: ['rehearsal_id', 'absent_member_id', 'sub_name', 'role'],
+    },
+  },
+  {
     tool: 'propose_invite_musician', kind: 'invite_musician',
     description: 'Propose inviting a musician to a band the user leads. This messages another person, so the user must approve it individually.',
     parameters: {
@@ -1136,6 +1418,7 @@ HOW YOU WORK
 - Batch related changes into a single propose_* call. Do not propose the same thing twice.
 - If something required is missing (which band, venue, date, which gig), ask one short question first. If the user has exactly one band or the chat is about one gig, use it.
 - For band setlists prefer songs every member knows (get_band_common_songs / suggest_setlist). Mention when the pool is small.
+- If a song's artist is missing or marked as guessed (for example "please confirm"), ask the user for the artist before you propose adding or editing it. Never propose "Unknown Artist".
 - Songs in the library often have no genre or tempo (BPM). Only call a song slow, fast, rock or mellow when the tool data says so. If a result has "notes" or tempo_data with songs_with_bpm of 0, tell the user plainly that the filter could not be applied, and do not describe the songs' speed or style from memory.
 - Only recommend songs that appear in tool results. If the user asks for songs outside the library, say they are not in the library and that you cannot confirm their tempo.
 - When the user asks for a setlist for a band: call plan_band_setlist (pass their genre / mood / duration). Show the songs in order; for any song not everyone knows write "missing for: <names>". Then call propose_band_setlist so they can review it. Say clearly that confirming will also add the missing songs to those members' libraries, and that they can Edit or Cancel. Never add songs to other people's libraries any other way.
