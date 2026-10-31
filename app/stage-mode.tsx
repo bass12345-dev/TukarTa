@@ -2154,11 +2154,13 @@ export default function StageModeScreen() {
                         {isPast ? '✓' : String(idx + 1).padStart(2, '0')}
                       </Text>
 
+                      {/* Title and controls stack in one column so the title always has the full width */}
+                      <View style={{ flex: 1, minWidth: 0 }}>
                       <TouchableOpacity
                         activeOpacity={0.75}
                         disabled={isMemberFollowing || isCurrent}
                         onPress={() => jumpToSong(idx)}
-                        style={{ flex: 1, paddingVertical: 2 }}
+                        style={{ paddingVertical: 2 }}
                       >
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                           <Text
@@ -2244,6 +2246,7 @@ export default function StageModeScreen() {
                           )}
                         </View>
                       )}
+                      </View>
                     </View>
                     </Swipeable>
                     </View>
