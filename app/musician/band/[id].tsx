@@ -8,6 +8,7 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import {
@@ -22,10 +23,12 @@ import {
   ChevronRight,
   BookOpen,
   Trash2,
+  Camera,
 } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useBandDetails, useBandMembers, useMyGigs, useDeleteBand } from '../../../utils/hooks/useMusician';
 import { useTransferLeadership } from '../../../utils/hooks/useRehearsals';
+import { useChangeBandImage } from '../../../utils/hooks/useBandImages';
 import { useAuth } from '../../../context/auth';
 import { useAppTheme } from '../../../context/theme';
 import { supabase } from '../../../utils/supabase';
@@ -41,6 +44,13 @@ export default function BandHubScreen() {
   const { data: allGigs } = useMyGigs();
   const transferLeadership = useTransferLeadership(id!);
   const deleteBand = useDeleteBand();
+  const changeImage = useChangeBandImage(id!);
+
+  const notifyImageError = (e: any) => {
+    const msg = e?.message || 'Could not change the picture. Please try again.';
+    if (Platform.OS === 'web' && typeof window !== 'undefined') window.alert(msg);
+    else Alert.alert('Band picture', msg);
+  };
 
   const confirmDeleteBand = (bandName: string) => {
     const message = `Delete "${bandName}" for everyone? Its gigs and setlists will be removed too.`;
@@ -144,11 +154,49 @@ export default function BandHubScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* Cover photo (leader can change it) */}
+        <View style={styles.coverWrap}>
+          {band.cover_url ? (
+            <Image source={{ uri: band.cover_url }} style={styles.cover} resizeMode="cover" />
+          ) : (
+            <View style={[styles.cover, { backgroundColor: colors.bgSecondary }]} />
+          )}
+          {isLeader && (
+            <TouchableOpacity
+              style={styles.coverBtn}
+              onPress={() => changeImage.mutate({ kind: 'cover' }, { onError: (e: any) => notifyImageError(e) })}
+              disabled={changeImage.isPending}
+              accessibilityLabel="Change the band cover photo"
+            >
+              <Camera size={14} color="#FFFFFF" />
+              <Text style={styles.coverBtnText}>{changeImage.isPending ? 'Uploading…' : 'Change cover'}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
         {/* Profile */}
         <View style={styles.profileSection}>
-          <View style={[styles.avatar, { backgroundColor: '#10B981' }]}>
-            <Text style={styles.avatarText}>{initials}</Text>
-          </View>
+          {isLeader ? (
+            <TouchableOpacity
+              onPress={() => changeImage.mutate({ kind: 'avatar' }, { onError: (e: any) => notifyImageError(e) })}
+              disabled={changeImage.isPending}
+              accessibilityLabel="Change the band photo"
+            >
+              {band.avatar_url ? (
+                <Image source={{ uri: band.avatar_url }} style={[styles.avatar, { backgroundColor: colors.bgSecondary }]} />
+              ) : (
+                <View style={[styles.avatar, { backgroundColor: '#10B981' }]}>
+                  <Text style={styles.avatarText}>{initials}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ) : band.avatar_url ? (
+            <Image source={{ uri: band.avatar_url }} style={[styles.avatar, { backgroundColor: colors.bgSecondary }]} />
+          ) : (
+            <View style={[styles.avatar, { backgroundColor: '#10B981' }]}>
+              <Text style={styles.avatarText}>{initials}</Text>
+            </View>
+          )}
           <Text style={[styles.bandName, { color: colors.text }]}>{band.name}</Text>
           <View style={styles.locationRow}>
             <MapPin size={14} color="#10B981" />
@@ -383,6 +431,21 @@ const styles = StyleSheet.create({
   memberName: { fontSize: 15, fontWeight: '700' },
   statusPill: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8 },
   leaderBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 10 },
+  coverWrap: { width: '100%', height: 160, position: 'relative', marginBottom: -46 },
+  cover: { width: '100%', height: 160 },
+  coverBtn: {
+    position: 'absolute',
+    right: 12,
+    bottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  coverBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
   deleteBandBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 16, backgroundColor: '#EF4444' },
   deleteBandText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
 });
