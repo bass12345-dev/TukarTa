@@ -15,6 +15,7 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { X, Calendar, MapPin, Clock, Users } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../ui/Button';
 import { useMyBands, useCreateGig, useCreateBand } from '../../utils/hooks/useMusician';
 import { useAppTheme } from '../../context/theme';
@@ -26,6 +27,7 @@ interface CreateGigModalProps {
 
 export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
   const { colors, isDark } = useAppTheme();
+  const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
   const [venue, setVenue] = useState('');
   const [dateObj, setDateObj] = useState(new Date());
@@ -117,7 +119,7 @@ export function CreateGigModal({ visible, onClose }: CreateGigModalProps) {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.keyboardView}
         >
-          <View style={[styles.modalContent, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <View style={[styles.modalContent, { backgroundColor: colors.bgCard, borderColor: colors.border, paddingBottom: Math.max(insets.bottom, Platform.OS === 'ios' ? 40 : 24) }]}>
             <View style={styles.header}>
               <View>
                 <Text style={[styles.eyebrow, { color: colors.primary }]}>SCHEDULE PERFORMANCE</Text>
