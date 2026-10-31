@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Platform, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { ChevronLeft, BookOpen, CalendarDays, Plus, Trash2, Crown } from 'lucide-react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { ChevronLeft, BookOpen, CalendarDays, Clock, Plus, Trash2, Crown } from 'lucide-react-native';
 import { useAuth } from '../../context/auth';
 import { useAppTheme } from '../../context/theme';
 import { useBandDetails } from '../../utils/hooks/useMusician';
@@ -28,7 +29,14 @@ export default function BandPracticeScreen() {
   const isLeader = !!band && band.leader_id === user?.id;
 
   const [title, setTitle] = useState('');
-  const [when, setWhen] = useState(''); // "2026-11-07 18:00"
+  // Default: tomorrow at 18:00, so the picker opens on a sensible time
+  const [startsAt, setStartsAt] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    d.setHours(18, 0, 0, 0);
+    return d;
+  });
+  const [pickerMode, setPickerMode] = useState<null | 'date' | 'time'>(null);
   const [songQuery, setSongQuery] = useState('');
   const { data: songResults } = useSearchSongs(songQuery);
 
@@ -37,23 +45,48 @@ export default function BandPracticeScreen() {
     else Alert.alert('Band Practice', msg);
   };
 
+  // Date and time are picked, never typed. Android opens the date picker, then the time picker.
+  const onPickerChange = (event: any, picked?: Date) => {
+    if (Platform.OS === 'android') setPickerMode(null);
+    if (event?.type === 'dismissed' || !picked) return;
+    // Keep the date part from the date picker and the time part from the time picker
+    const next = new Date(startsAt);
+    if (pickerMode === 'date') {
+      next.setFullYear(picked.getFullYear(), picked.getMonth(), picked.getDate());
+    } else {
+      next.setHours(picked.getHours(), picked.getMinutes(), 0, 0);
+    }
+    setStartsAt(next);
+  };
+
   const onCreateRehearsal = () => {
-    const parsed = new Date(when.trim().replace(' ', 'T'));
-    if (!when.trim() || isNaN(parsed.getTime())) {
-      notify('Enter the date and time as YYYY-MM-DD HH:MM, for example 2026-11-07 18:00.');
+    if (startsAt.getTime() < Date.now()) {
+      notify('Pick a date and time in the future.');
       return;
     }
     createRehearsal.mutate(
-      { title, startsAt: parsed.toISOString() },
+      { title, startsAt: startsAt.toISOString() },
       {
         onSuccess: (r) => {
           setTitle('');
-          setWhen('');
           router.push(`/band-practice/rehearsal/${r.id}?bandId=${bandId}`);
         },
         onError: (e: any) => notify(e.message || 'Could not create the rehearsal.'),
       },
     );
+  };
+
+  const confirmAddToDictionary = (songId: string, songTitle: string) => {
+    const message = `Add "${songTitle}" to the Band Dictionary? Every member gets it in their personal list.`;
+    const doAdd = () => addToDictionary.mutate({ songId }, { onError: (e: any) => notify(e.message) });
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      if (window.confirm(message)) doAdd();
+    } else {
+      Alert.alert('Add to Band Dictionary', message, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Add', onPress: doAdd },
+      ]);
+    }
   };
 
   const confirmRemove = (songId: string, songTitle: string) => {
@@ -97,7 +130,8 @@ export default function BandPracticeScreen() {
               </Text>
             </View>
             <Text style={[styles.hint, { color: colors.textDim }]}>
-              Songs the band has fully learned. Added automatically when every rehearsal rule passes, or by the leader.
+              Songs the whole band can play. A song gets here automatically when everyone at a rehearsal gives the
+              thumbs-up, or when the leader adds it.
             </Text>
 
             {(practice?.dictionary || []).map((d: any) => (
@@ -130,26 +164,36 @@ export default function BandPracticeScreen() {
               <View style={[styles.leaderBox, card]}>
                 <View style={styles.leaderTitleRow}>
                   <Crown size={14} color="#10B981" />
-                  <Text style={[styles.leaderTitle, { color: colors.text }]}>Add to Band Dictionary (leader)</Text>
+                  <Text style={[styles.leaderTitle, { color: colors.text }]}>Leader: add a song to the band</Text>
                 </View>
+                <Text style={[styles.hint, { color: colors.textDim }]}>
+                  Search for a song, then tap Add. Use this when the band can play it without a rehearsal check.
+                </Text>
                 <TextInput
                   value={songQuery}
                   onChangeText={setSongQuery}
-                  placeholder="Search your library"
+                  placeholder="Type a song title"
                   placeholderTextColor={colors.textDim}
                   style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.bg }]}
                 />
+                {songQuery.trim().length > 2 && (songResults || []).length === 0 && (
+                  <Text style={[styles.hint, { color: colors.textDim }]}>No songs found. Add it to your library first.</Text>
+                )}
                 {(songResults || []).slice(0, 6).map((s: any) => (
-                  <TouchableOpacity
-                    key={s.id}
-                    onPress={() => addToDictionary.mutate({ songId: s.id }, { onError: (e: any) => notify(e.message) })}
-                    style={[styles.resultRow, { borderColor: colors.border }]}
-                  >
-                    <Text style={{ color: colors.text, flex: 1 }} numberOfLines={1}>
-                      {s.title} <Text style={{ color: colors.textDim }}>— {s.artist}</Text>
-                    </Text>
-                    <Plus size={16} color="#10B981" />
-                  </TouchableOpacity>
+                  <View key={s.id} style={[styles.resultRow, { borderColor: colors.border }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: colors.text, fontWeight: '700' }} numberOfLines={1}>{s.title}</Text>
+                      <Text style={{ color: colors.textDim, fontSize: 12 }} numberOfLines={1}>{s.artist}</Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => confirmAddToDictionary(s.id, s.title)}
+                      style={styles.addBtn}
+                      accessibilityLabel={`Add ${s.title} to the Band Dictionary`}
+                    >
+                      <Plus size={14} color="#FFFFFF" />
+                      <Text style={styles.addBtnText}>Add</Text>
+                    </TouchableOpacity>
+                  </View>
                 ))}
               </View>
             )}
@@ -190,13 +234,42 @@ export default function BandPracticeScreen() {
                 placeholderTextColor={colors.textDim}
                 style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.bg }]}
               />
-              <TextInput
-                value={when}
-                onChangeText={setWhen}
-                placeholder="YYYY-MM-DD HH:MM"
-                placeholderTextColor={colors.textDim}
-                style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.bg }]}
-              />
+              <View style={styles.dateRow}>
+                <TouchableOpacity
+                  onPress={() => setPickerMode('date')}
+                  style={[styles.dateBtn, { borderColor: colors.border, backgroundColor: colors.bg }]}
+                  accessibilityLabel="Pick the rehearsal date"
+                >
+                  <CalendarDays size={16} color="#10B981" />
+                  <Text style={[styles.dateBtnText, { color: colors.text }]}>
+                    {startsAt.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setPickerMode('time')}
+                  style={[styles.dateBtn, { borderColor: colors.border, backgroundColor: colors.bg }]}
+                  accessibilityLabel="Pick the rehearsal time"
+                >
+                  <Clock size={16} color="#10B981" />
+                  <Text style={[styles.dateBtnText, { color: colors.text }]}>
+                    {startsAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              {pickerMode && (
+                <DateTimePicker
+                  value={startsAt}
+                  mode={pickerMode}
+                  minimumDate={pickerMode === 'date' ? new Date() : undefined}
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={onPickerChange}
+                />
+              )}
+              {Platform.OS === 'ios' && pickerMode && (
+                <TouchableOpacity onPress={() => setPickerMode(null)} style={styles.secondaryBtn}>
+                  <Text style={styles.secondaryBtnText}>Done</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 onPress={onCreateRehearsal}
                 disabled={createRehearsal.isPending}
@@ -245,4 +318,11 @@ const styles = StyleSheet.create({
   resultRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderBottomWidth: 1 },
   primaryBtn: { backgroundColor: '#10B981', borderRadius: 14, paddingVertical: 12, alignItems: 'center' },
   primaryBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 14 },
+  addBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#10B981', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
+  addBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
+  dateRow: { flexDirection: 'row', gap: 10 },
+  dateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12 },
+  dateBtnText: { fontSize: 14, fontWeight: '700' },
+  secondaryBtn: { alignSelf: 'flex-end', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12, backgroundColor: 'rgba(16,185,129,0.12)' },
+  secondaryBtnText: { color: '#10B981', fontWeight: '800', fontSize: 13 },
 });
